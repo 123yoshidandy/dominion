@@ -179,36 +179,100 @@ class UIController {
     // サプライパイルを更新
     updateSupplyPiles(gameState) {
         const supply = gameState.supply;
-        let html = '';
         
-        // 基本カード
-        const basicCards = ['copper', 'silver', 'gold', 'estate', 'duchy', 'province', 'curse'];
-        basicCards.forEach(cardId => {
+        // サプライパイルのDOMをクリア
+        this.elements.supplyPiles.innerHTML = `
+            <div id="victory-cards" class="supply-area">
+                <div class="supply-card-grid"></div>
+            </div>
+            <div id="action-cards-top" class="supply-area">
+                <div class="supply-card-grid"></div>
+            </div>
+            <div id="treasure-cards" class="supply-area">
+                <div class="supply-card-grid"></div>
+            </div>
+            <div id="action-cards-bottom" class="supply-area">
+                <div class="supply-card-grid"></div>
+            </div>
+        `;
+        
+        // 勝利点カード (左上) - 呪いを屋敷の左側に配置
+        const victoryCardsContainer = document.querySelector('#victory-cards .supply-card-grid');
+        
+        // まず呪いカードを配置
+        if (supply['curse'] !== undefined) {
+            const curseCard = ALL_CARDS['CURSE'];
+            victoryCardsContainer.innerHTML += this.createSupplyCardHtml(curseCard, supply['curse']);
+        }
+        
+        // 次に勝利点カードを配置
+        const victoryCards = ['estate', 'duchy', 'province'];
+        victoryCards.forEach(cardId => {
             if (supply[cardId] !== undefined) {
                 const card = ALL_CARDS[cardId.toUpperCase()];
-                html += this.createSupplyCardHtml(card, supply[cardId]);
+                victoryCardsContainer.innerHTML += this.createSupplyCardHtml(card, supply[cardId]);
             }
         });
         
-        // 王国カード
-        if (gameState.game && gameState.game.selectedKingdomCards) {
-            gameState.game.selectedKingdomCards.forEach(cardId => {
+        // 財宝カード (左下)
+        const treasureCards = ['copper', 'silver', 'gold'];
+        const treasureCardsContainer = document.querySelector('#treasure-cards .supply-card-grid');
+        treasureCards.forEach(cardId => {
+            if (supply[cardId] !== undefined) {
                 const card = ALL_CARDS[cardId.toUpperCase()];
-                html += this.createSupplyCardHtml(card, supply[cardId]);
+                treasureCardsContainer.innerHTML += this.createSupplyCardHtml(card, supply[cardId]);
+            }
+        });
+        
+        // アクションカード (右側上下)
+        let actionCards = [];
+        
+        // 王国カードのリストを取得
+        if (gameState.game && gameState.game.selectedKingdomCards) {
+            actionCards = gameState.game.selectedKingdomCards.filter(cardId => {
+                const card = ALL_CARDS[cardId.toUpperCase()];
+                return card && card.types.includes(CARD_TYPES.ACTION);
             });
         } else {
             // 王国カードIDがない場合は、サプライオブジェクトのキーから取得
-            Object.keys(supply).forEach(cardId => {
-                if (!basicCards.includes(cardId)) {
-                    const cardKey = cardId.toUpperCase();
-                    if (ALL_CARDS[cardKey]) {
-                        html += this.createSupplyCardHtml(ALL_CARDS[cardKey], supply[cardId]);
-                    }
+            actionCards = Object.keys(supply).filter(cardId => {
+                if (treasureCards.includes(cardId) || victoryCards.includes(cardId) || cardId === 'curse') {
+                    return false;
                 }
+                const cardKey = cardId.toUpperCase();
+                return ALL_CARDS[cardKey] && ALL_CARDS[cardKey].types.includes(CARD_TYPES.ACTION);
             });
         }
         
-        this.elements.supplyPiles.innerHTML = html;
+        // アクションカードをコスト順にソート（低いものから順に）
+        actionCards.sort((a, b) => {
+            const cardA = ALL_CARDS[a.toUpperCase()];
+            const cardB = ALL_CARDS[b.toUpperCase()];
+            return cardA.cost - cardB.cost; // 低いコストが先に来るようにソート
+        });
+        
+        // アクションカードを左下→右下→左上→右上の順に配置
+        const actionCardsTopContainer = document.querySelector('#action-cards-top .supply-card-grid');
+        const actionCardsBottomContainer = document.querySelector('#action-cards-bottom .supply-card-grid');
+        
+        // 半分のインデックスを計算（奇数個の場合は下段に多く配置）
+        const halfIndex = Math.ceil(actionCards.length / 2);
+        
+        // 各カードにグリッド位置を割り当てる
+        actionCards.forEach((cardId, index) => {
+            if (supply[cardId] !== undefined) {
+                const card = ALL_CARDS[cardId.toUpperCase()];
+                
+                // 下段（低コスト）と上段（高コスト）に分ける
+                if (index < halfIndex) {
+                    // 下段：左から右へ（低コスト→中コスト）
+                    actionCardsBottomContainer.innerHTML += this.createSupplyCardHtml(card, supply[cardId]);
+                } else {
+                    // 上段：左から右へ（中コスト→高コスト）
+                    actionCardsTopContainer.innerHTML += this.createSupplyCardHtml(card, supply[cardId]);
+                }
+            }
+        });
         
         // カードクリックイベントを追加
         const supplyCards = this.elements.supplyPiles.querySelectorAll('.card');
