@@ -82,7 +82,13 @@ class GameController {
     // カードを購入
     buyCard(cardId) {
         if (!this.game) return false;
-        return this.game.buyCard(cardId);
+        
+        // カードIDの大文字小文字を統一するため、まず大文字に変換してALL_CARDSから情報を取得
+        const upperCardId = cardId.toUpperCase();
+        // 購入には小文字のIDを使用
+        const lowerCardId = cardId.toLowerCase();
+        
+        return this.game.buyCard(upperCardId);
     }
     
     // ターン終了

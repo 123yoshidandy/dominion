@@ -286,8 +286,17 @@ class Game {
         
         // 選んだ王国カードをサプライに追加
         this.selectedKingdomCards.forEach(cardId => {
-            this.supply[cardId] = ALL_CARDS[cardId].count;
+            // 小文字のIDでサプライに追加し、大文字のIDでカードデータを参照
+            const upperCardId = cardId.toUpperCase();
+            if (ALL_CARDS[upperCardId]) {
+                this.supply[cardId] = ALL_CARDS[upperCardId].count;
+                console.log(`サプライに追加: ${cardId}, 枚数: ${ALL_CARDS[upperCardId].count}`);
+            } else {
+                console.error(`カードデータが見つかりません: ${upperCardId}`);
+            }
         });
+        
+        console.log('初期化されたサプライ:', this.supply);
     }
     
     // 王国カードをランダムに選ぶ
@@ -300,9 +309,11 @@ class Game {
             
             const randomIndex = Math.floor(Math.random() * kingdomCardIds.length);
             const cardId = kingdomCardIds.splice(randomIndex, 1)[0];
-            selectedCards.push(cardId);
+            // 小文字に変換して返す
+            selectedCards.push(cardId.toLowerCase());
         }
         
+        console.log('選択された王国カード:', selectedCards);
         return selectedCards;
     }
     
@@ -403,20 +414,30 @@ class Game {
             return false;
         }
         
-        // カードIDを小文字に変換してサプライチェック
+        // デバッグ情報
+        console.log('購入リクエスト:', cardId);
+        console.log('サプライの状態:', this.supply);
+        
+        // カードIDを統一して処理する
+        const upperCardId = cardId.toUpperCase();
         const lowerCardId = cardId.toLowerCase();
+        
+        console.log('変換後のID - 大文字:', upperCardId, '小文字:', lowerCardId);
+        console.log('サプライにあるか:', this.supply[lowerCardId] !== undefined);
+        console.log('カードデータ存在確認:', ALL_CARDS[upperCardId] !== undefined);
         
         if (!this.supply[lowerCardId] || this.supply[lowerCardId] <= 0) {
             this.log('選択されたカードはサプライにありません');
-            console.log('サプライに存在しないカードID:', lowerCardId, 'サプライ:', this.supply);
+            console.log('存在しないカードID:', lowerCardId, '全サプライ:', this.supply);
             return false;
         }
         
-        // カードIDを大文字に変換してALL_CARDSから取得
-        const card = ALL_CARDS[cardId.toUpperCase()];
+        // ALL_CARDSには大文字のIDで参照
+        const card = ALL_CARDS[upperCardId];
         
         if (!card) {
             this.log(`カードID ${cardId} は定義されていません`);
+            console.log('定義されていないカードID:', upperCardId);
             return false;
         }
         
@@ -426,7 +447,7 @@ class Game {
         }
         
         // カードを購入
-        player.gainCard(cardId.toUpperCase());
+        player.gainCard(upperCardId);
         player.buys--;
         player.coins -= card.cost;
         this.supply[lowerCardId]--;
