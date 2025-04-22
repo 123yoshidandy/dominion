@@ -457,17 +457,53 @@ class UIController {
         
         // アクションフェーズでアクションカードの場合
         if (gameState.phase === 'action' && card.isType(CARD_TYPES.ACTION)) {
-            this.gameController.playActionCard(cardIndex);
+            // カード要素を取得
+            const cardElement = this.elements.handCards.querySelectorAll('.card')[cardIndex];
+            const playArea = this.elements.playedCards;
+            
+            // アニメーションで移動させてからプレイする
+            window.cardAnimator.playCard(cardElement, playArea, () => {
+                this.gameController.playActionCard(cardIndex);
+            });
         }
-        // 購入フェーズで財宝カードの場合（自動プレイされるので不要）
-        // else if (gameState.phase === 'buy' && card.isType(CARD_TYPES.TREASURE)) {
-        //     // 財宝カードは購入フェーズで自動的にプレイされる
-        // }
     }
     
     // 購入フェーズへの移行処理
     handleEnterBuyPhase() {
-        this.gameController.enterBuyPhase();
+        // 財宝カードをアニメーションするためのカード要素を取得
+        const treasureCards = Array.from(this.elements.handCards.querySelectorAll('.card'))
+            .filter((card, index) => {
+                const gameState = this.gameController.getGameState();
+                if (!gameState) return false;
+                
+                const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+                const cardData = currentPlayer.hand[index];
+                return cardData && cardData.isType(CARD_TYPES.TREASURE);
+            });
+        
+        if (treasureCards.length > 0) {
+            // 連続してアニメーションする
+            const playArea = this.elements.playedCards;
+            let cardIndex = 0;
+            
+            const playNextCard = () => {
+                if (cardIndex < treasureCards.length) {
+                    const card = treasureCards[cardIndex];
+                    cardIndex++;
+                    
+                    window.cardAnimator.playCard(card, playArea, playNextCard);
+                } else {
+                    // すべてのカードをプレイした後に購入フェーズに移行
+                    this.gameController.enterBuyPhase();
+                }
+            };
+            
+            // 最初のカードからアニメーション開始
+            playNextCard();
+        } else {
+            // 財宝カードがない場合は直接購入フェーズに移行
+            this.gameController.enterBuyPhase();
+        }
     }
     
     // カード購入処理
@@ -475,12 +511,76 @@ class UIController {
         const gameState = this.gameController.getGameState();
         if (!gameState || gameState.phase !== 'buy') return;
         
-        this.gameController.buyCard(cardId);
+        const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+        
+        // カード情報を取得して購入可能かチェック
+        const upperCardId = cardId.toUpperCase();
+        const card = ALL_CARDS[upperCardId];
+        
+        if (!card || currentPlayer.coins < card.cost) {
+            // 購入できない場合（コスト不足）はアニメーションしない
+            this.gameController.buyCard(cardId);
+            return;
+        }
+        
+        // 購入するカード要素を取得
+        const cardElement = Array.from(this.elements.supplyPiles.querySelectorAll('.card'))
+            .find(card => card.getAttribute('data-card-id') === cardId);
+        
+        // 捨て札エリアを取得
+        const discardArea = this.elements.discardCards;
+        
+        if (cardElement && discardArea) {
+            // アニメーションで移動させてから購入処理
+            window.cardAnimator.purchaseCard(cardElement, discardArea, () => {
+                this.gameController.buyCard(cardId);
+            });
+        } else {
+            // 要素が見つからない場合は直接購入処理
+            this.gameController.buyCard(cardId);
+        }
     }
     
     // ターン終了処理
     handleEndTurn() {
-        this.gameController.endTurn();
+        const gameState = this.gameController.getGameState();
+        if (!gameState) return;
+        
+        const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+        
+        // 手札と場のカードを捨て札にアニメーションする
+        const handCards = Array.from(this.elements.handCards.querySelectorAll('.card'));
+        const playedCards = Array.from(this.elements.playedCards.querySelectorAll('.card'));
+        const discardArea = this.elements.discardCards;
+        
+        // アニメーションする総カード数
+        const totalCards = handCards.length + playedCards.length;
+        
+        if (totalCards > 0) {
+            let processedCards = 0;
+            
+            // アニメーション完了後の処理
+            const onAnimationComplete = () => {
+                processedCards++;
+                if (processedCards >= totalCards) {
+                    // すべてのアニメーションが完了したらターン終了
+                    this.gameController.endTurn();
+                }
+            };
+            
+            // 手札のカードをアニメーション
+            handCards.forEach(card => {
+                window.cardAnimator.discardCard(card, discardArea, onAnimationComplete);
+            });
+            
+            // 場のカードをアニメーション
+            playedCards.forEach(card => {
+                window.cardAnimator.discardCard(card, discardArea, onAnimationComplete);
+            });
+        } else {
+            // カードがない場合は直接ターン終了
+            this.gameController.endTurn();
+        }
     }
     
     // ログエントリ追加
@@ -548,34 +648,6 @@ class UIController {
             
             this.elements.scrollToBottomBtn.style.display = isScrolledUp ? 'block' : 'none';
         }
-    }
-    
-    // ログエントリ追加
-    addLogEntry(logEntry) {
-        const logElement = document.createElement('div');
-        logElement.className = 'log-entry';
-        logElement.textContent = logEntry.message;
-        
-        // 最新のログを強調表示するクラスを追加
-        logElement.classList.add('new-log');
-        
-        // 既存のログから 'new-log' クラスを削除
-        const existingLogs = this.elements.logEntries.querySelectorAll('.new-log');
-        existingLogs.forEach(log => log.classList.remove('new-log'));
-        
-        this.elements.logEntries.appendChild(logElement);
-        
-        // アニメーション効果のためのクラスを追加して少し遅れて削除
-        logElement.classList.add('log-entry-animation');
-        setTimeout(() => {
-            logElement.classList.remove('log-entry-animation');
-        }, 1000);
-        
-        // 自動スクロール
-        this.elements.logEntries.scrollTop = this.elements.logEntries.scrollHeight;
-        
-        // スクロールボタンの表示状態を更新
-        this.updateScrollToBottomButton();
     }
     
     // カード捨て選択モーダル表示

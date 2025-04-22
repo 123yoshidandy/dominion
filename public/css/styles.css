@@ -372,7 +372,7 @@ h3 {
     background-color: white;
     box-shadow: 0 1px 3px rgba(0,0,0,0.2);
     position: relative;
-    transition: transform 0.2s;
+    transition: transform 0.2s, box-shadow 0.2s;
     overflow: hidden;
     font-size: 0.9rem;
 }
@@ -543,6 +543,51 @@ h3 {
 #modal-body {
     max-height: 400px;
     overflow-y: auto;
+}
+
+/* カードアニメーション用のクラス */
+.card-animating {
+    position: absolute;
+    z-index: 100;
+    pointer-events: none; /* アニメーション中はクリックできないように */
+    transition: all 0.5s ease-in-out;
+}
+
+/* カードの軌道アニメーション */
+@keyframes cardPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+}
+
+.card-pulse {
+    animation: cardPulse 0.5s ease-in-out;
+}
+
+/* カードがプレイされる時のアニメーション */
+.card-played {
+    animation: cardPulse 0.5s ease-in-out;
+}
+
+/* カードが捨て札になる時のアニメーション */
+.card-discarded {
+    animation: cardPulse 0.5s ease-in-out;
+}
+
+/* カードが購入される時のアニメーション */
+.card-purchased {
+    animation: cardPulse 0.5s ease-in-out;
+}
+
+/* カードアニメーションのオーバーレイ */
+#animation-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 999;
 }
 
 /* レスポンシブデザイン */
