@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ドミニオン - カードゲーム</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <header>
+        <h1>ドミニオン</h1>
+        <div id="game-status">ゲームの準備をしています...</div>
+    </header>
+
+    <main>
+        <section id="game-board">
+            <div id="supply-piles" class="card-area">
+                <!-- サプライパイルはJavaScriptで動的に生成されます -->
+            </div>
+
+            <div id="game-info-panel">
+                <div id="players-info">
+                    <!-- プレイヤー情報はJavaScriptで動的に生成されます -->
+                </div>
+                <div id="game-log">
+                    <h3>ゲームログ</h3>
+                    <div id="log-entries"></div>
+                </div>
+            </div>
+
+            <div id="player-area">
+                <div id="hand" class="card-area">
+                    <h3>手札</h3>
+                    <div id="hand-cards"></div>
+                </div>
+                <div id="play-area" class="card-area">
+                    <h3>場札</h3>
+                    <div id="played-cards"></div>
+                </div>
+                <div id="deck-discard">
+                    <div id="deck" class="card-pile">
+                        <h3>山札</h3>
+                        <div id="deck-count">0</div>
+                    </div>
+                    <div id="discard" class="card-pile">
+                        <h3>捨て札</h3>
+                        <div id="discard-cards"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="game-controls">
+            <button id="end-turn-btn" disabled>ターン終了</button>
+            <div id="action-buttons">
+                <!-- アクションボタンはJavaScriptで動的に生成されます -->
+            </div>
+        </section>
+
+        <div id="game-modal" class="modal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <div id="modal-title"></div>
+                <div id="modal-body"></div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>ドミニオン ウェブアプリ - 2025年</p>
+    </footer>
+
+    <!-- JavaScriptファイル -->
+    <script src="js/card-data.js"></script>
+    <script src="js/game-models.js"></script>
+    <script src="js/game-controller.js"></script>
+    <script src="js/ui-controller.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
