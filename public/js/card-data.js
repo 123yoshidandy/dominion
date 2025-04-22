@@ -3,7 +3,7 @@
  */
 
 // カードタイプの定義
-const CARD_TYPES = {
+export const CARD_TYPES = {
     TREASURE: 'treasure',
     VICTORY: 'victory',
     ACTION: 'action',
@@ -11,7 +11,7 @@ const CARD_TYPES = {
 };
 
 // 基本カードデータ
-const BASIC_CARDS = {
+export const BASIC_CARDS = {
     // 財宝カード
     COPPER: {
         id: 'copper',
@@ -83,7 +83,7 @@ const BASIC_CARDS = {
 };
 
 // 王国カードデータ (初期セット)
-const KINGDOM_CARDS = {
+export const KINGDOM_CARDS = {
     // アクションカード
     VILLAGE: {
         id: 'village',
@@ -237,9 +237,9 @@ const KINGDOM_CARDS = {
 };
 
 // 全カードデータの結合
-const ALL_CARDS = { ...BASIC_CARDS, ...KINGDOM_CARDS };
+export const ALL_CARDS = { ...BASIC_CARDS, ...KINGDOM_CARDS };
 
 // カードIDの配列を生成
-const ALL_CARD_IDS = Object.keys(ALL_CARDS);
-const BASIC_CARD_IDS = Object.keys(BASIC_CARDS);
-const KINGDOM_CARD_IDS = Object.keys(KINGDOM_CARDS);
+export const ALL_CARD_IDS = Object.keys(ALL_CARDS);
+export const BASIC_CARD_IDS = Object.keys(BASIC_CARDS);
+export const KINGDOM_CARD_IDS = Object.keys(KINGDOM_CARDS);

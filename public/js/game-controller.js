@@ -3,10 +3,14 @@
  * ゲームロジックとUIの橋渡しをします
  */
 
+import Game from './game.js';
+import GameActionHandler from './game-action-handler.js';
+
 class GameController {
     constructor() {
         this.game = null;
         this.uiController = null;
+        this.actionHandler = new GameActionHandler(this);
     }
     
     // ゲームを初期化
@@ -69,32 +73,22 @@ class GameController {
     
     // アクションカードをプレイ
     playActionCard(cardIndex) {
-        if (!this.game) return false;
-        return this.game.playActionCard(cardIndex);
+        return this.actionHandler.playActionCard(cardIndex);
     }
     
     // 購入フェーズに移行
     enterBuyPhase() {
-        if (!this.game) return false;
-        return this.game.enterBuyPhase();
+        return this.actionHandler.enterBuyPhase();
     }
     
     // カードを購入
     buyCard(cardId) {
-        if (!this.game) return false;
-        
-        // カードIDの大文字小文字を統一するため、まず大文字に変換してALL_CARDSから情報を取得
-        const upperCardId = cardId.toUpperCase();
-        // 購入には小文字のIDを使用
-        const lowerCardId = cardId.toLowerCase();
-        
-        return this.game.buyCard(upperCardId);
+        return this.actionHandler.buyCard(cardId);
     }
     
     // ターン終了
     endTurn() {
-        if (!this.game) return false;
-        return this.game.endTurn();
+        return this.actionHandler.endTurn();
     }
     
     // ゲームの状態を取得
@@ -119,50 +113,13 @@ class GameController {
     
     // カード捨て選択の結果を処理
     handleDiscardSelection(player, selectedIndices) {
-        if (!this.game || !this.game.callbacks.onDiscardPrompt) return;
-        
-        const discardPrompt = this.game.callbacks.onDiscardPrompt;
-        
-        // 選択されたカードを捨てる（インデックスの大きい順に処理）
-        selectedIndices.sort((a, b) => b - a).forEach(index => {
-            player.discardCard(index);
-        });
-        
-        // コールバック関数を呼び出す
-        discardPrompt.callback(selectedIndices.length);
-        
-        // コールバックをクリア
-        this.game.callbacks.onDiscardPrompt = null;
-        
-        // UIを更新
-        if (this.uiController) {
-            this.uiController.updateGameView();
-        }
+        this.actionHandler.handleDiscardSelection(player, selectedIndices);
     }
     
     // カード廃棄選択の結果を処理
     handleTrashSelection(player, selectedIndices) {
-        if (!this.game || !this.game.callbacks.onTrashPrompt) return;
-        
-        const trashPrompt = this.game.callbacks.onTrashPrompt;
-        
-        // 選択されたカードを廃棄（インデックスの大きい順に処理）
-        selectedIndices.sort((a, b) => b - a).forEach(index => {
-            const trashedCard = player.trashCard(index);
-            if (trashedCard) {
-                this.game.trash.push(trashedCard);
-            }
-        });
-        
-        // コールバック関数を呼び出す
-        trashPrompt.callback();
-        
-        // コールバックをクリア
-        this.game.callbacks.onTrashPrompt = null;
-        
-        // UIを更新
-        if (this.uiController) {
-            this.uiController.updateGameView();
-        }
+        this.actionHandler.handleTrashSelection(player, selectedIndices);
     }
 }
+
+export default GameController;

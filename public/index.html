@@ -73,12 +73,10 @@
         <p>ドミニオン ウェブアプリ - 2025年</p>
     </footer>
 
-    <!-- JavaScriptファイル -->
-    <script src="js/card-data.js"></script>
-    <script src="js/game-models.js"></script>
-    <script src="js/card-animations.js"></script>
-    <script src="js/game-controller.js"></script>
-    <script src="js/ui-controller.js"></script>
-    <script src="js/main.js"></script>
+    <!-- JavaScriptファイル - ES Modulesとして読み込み -->
+    <script type="module" src="js/main.js"></script>
+    
+    <!-- 後方互換性のために残しているファイル -->
+    <script type="module" src="js/game-models.js"></script>
 </body>
 </html>

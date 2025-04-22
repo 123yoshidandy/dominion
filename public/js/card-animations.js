@@ -163,5 +163,11 @@ class CardAnimator {
     }
 }
 
-// グローバルにCardAnimatorインスタンスを作成
-window.cardAnimator = new CardAnimator();
+// グローバルにCardAnimatorインスタンスを作成して公開
+const cardAnimator = new CardAnimator();
+
+// 後方互換性のために公開（古い方法）
+window.cardAnimator = cardAnimator;
+
+// モジュールとしてエクスポート（新しい方法）
+export default cardAnimator;
