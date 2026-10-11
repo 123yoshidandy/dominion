@@ -314,41 +314,47 @@ button.primary {
 
 /* ===== サプライ ===== */
 
-/* 左から勝利点の列・財宝の列・アクション。左2列はタイル1枚分の幅に固定し、残りをアクションに使う */
+/* 横7列：勝利点の列・財宝の列・アクション5列×2行。外側と内側の間隔をそろえて全タイルを同じ幅にする */
 #supply-piles {
-    --tile-w: 78px;
+    --supply-gap: 4px;
     display: grid;
-    grid-template-columns: var(--tile-w) var(--tile-w) minmax(0, 1fr);
-    gap: 6px;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: var(--supply-gap);
     align-items: start;
 }
 
+.supply-kingdom {
+    grid-column: span 5;
+}
+
 .supply-group h3 {
-    margin: 0 0 6px;
+    margin: 0 0 4px;
     font-size: 11px;
     font-weight: 600;
+    white-space: nowrap;
     color: var(--on-felt-muted);
 }
 
 .supply-grid {
     display: grid;
-    grid-template-columns: 1fr;
-    gap: 6px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--supply-gap);
 }
 
 .supply-kingdom .supply-grid {
-    grid-template-columns: repeat(auto-fill, minmax(var(--tile-w), 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+/* 縦画面のスマホではタイル幅が約44pxしかないので、中身を小さくする（640px以上で大きくする） */
 .supply-tile {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2px;
-    min-height: 58px;
-    padding: 18px 4px 6px;
-    border-top: 5px solid var(--type);
+    gap: 1px;
+    min-height: 52px;
+    padding: 17px 2px 4px;
+    border-top: 4px solid var(--type);
 }
 
 .tile-art {
@@ -356,27 +362,33 @@ button.primary {
 }
 
 .tile-art svg {
-    width: 34px;
-    height: 23px;
+    width: 28px;
+    height: 19px;
 }
 
 .supply-tile .card-cost {
     position: absolute;
-    top: 4px;
-    left: 4px;
+    top: 3px;
+    left: 3px;
+    width: 15px;
+    height: 15px;
+    font-size: 9.5px;
 }
 
 .supply-tile .card-title {
-    font-size: 13px;
+    max-width: 100%;
+    overflow: hidden;
+    font-size: 10.5px;
     font-weight: 700;
     text-align: center;
+    white-space: nowrap;
 }
 
 .supply-tile .card-count {
     position: absolute;
-    top: 5px;
-    right: 7px;
-    font-size: 11px;
+    top: 3px;
+    right: 4px;
+    font-size: 9.5px;
     font-weight: 700;
     color: var(--ink-muted);
 }
@@ -914,7 +926,37 @@ button.primary {
     }
 
     #supply-piles {
-        --tile-w: 96px;
+        --supply-gap: 6px;
+    }
+
+    .supply-tile {
+        gap: 2px;
+        min-height: 64px;
+        padding: 20px 4px 6px;
+        border-top-width: 5px;
+    }
+
+    .tile-art svg {
+        width: 34px;
+        height: 23px;
+    }
+
+    .supply-tile .card-cost {
+        top: 4px;
+        left: 4px;
+        width: 20px;
+        height: 20px;
+        font-size: 12px;
+    }
+
+    .supply-tile .card-count {
+        top: 5px;
+        right: 7px;
+        font-size: 11px;
+    }
+
+    .supply-tile .card-title {
+        font-size: 13px;
     }
 }
 
@@ -1055,40 +1097,39 @@ button.primary {
     }
 
     #supply-piles {
-        --tile-w: 66px;
-        gap: 5px;
+        --supply-gap: 4px;
     }
 
-    .supply-grid {
-        gap: 5px;
-    }
-
+    /* イラストは名前の左に置き、高さを抑える（iPhone SE ではタイル幅が約54px） */
     .supply-tile {
         flex-direction: row;
+        gap: 1px;
         min-height: 42px;
-        padding: 19px 3px 3px;
+        padding: 18px 2px 3px;
+        border-top-width: 4px;
     }
 
     .tile-art svg {
-        width: 20px;
-        height: 14px;
+        width: 16px;
+        height: 11px;
     }
 
-    /* 狭いタイルでもコストの丸とカード名が重ならないよう小さくする */
     .supply-tile .card-cost {
-        width: 16px;
-        height: 16px;
-        font-size: 10px;
+        top: 3px;
+        left: 3px;
+        width: 15px;
+        height: 15px;
+        font-size: 9.5px;
     }
 
     .supply-tile .card-count {
         top: 3px;
-        right: 5px;
-        font-size: 10px;
+        right: 4px;
+        font-size: 9.5px;
     }
 
     .supply-tile .card-title {
-        font-size: 12px;
+        font-size: 11px;
     }
 
     /* ドックは「山札・捨て札｜手札｜ボタン」の1行にする */
