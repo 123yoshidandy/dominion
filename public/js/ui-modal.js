@@ -32,6 +32,8 @@ class UIModal {
 
                 <div id="player-names"></div>
 
+                ${this.createStackHandToggleHtml('setup-stack-hand')}
+
                 <button id="start-game-btn" class="primary">ゲーム開始</button>
             </div>
         `;
@@ -46,6 +48,8 @@ class UIModal {
             this.updatePlayerNameInputs(count);
         });
 
+        this.setupStackHandToggle('setup-stack-hand');
+        
         // ゲーム開始ボタンのイベント
         const startGameBtn = document.getElementById('start-game-btn');
         startGameBtn.addEventListener('click', () => {
@@ -76,6 +80,31 @@ class UIModal {
         playerNamesDiv.innerHTML = html;
     }
 
+    // 「手札の同じカードを重ねる」設定のチェックボックス
+    createStackHandToggleHtml(id) {
+        return `
+            <label class="setting-toggle" for="${id}">
+                <span>手札の同じカードを重ねる</span>
+                <input type="checkbox" id="${id}" ${this.uiController.settings.stackHand ? 'checked' : ''}>
+            </label>
+        `;
+    }
+    
+    // チェックボックスの変更をすぐに設定へ反映する
+    setupStackHandToggle(id) {
+        document.getElementById(id).addEventListener('change', (event) => {
+            this.uiController.updateSettings({ stackHand: event.target.checked });
+        });
+    }
+    
+    // 設定画面（ゲーム中でも変更できる）
+    showSettings() {
+        this.elements.modalTitle.textContent = '設定';
+        this.elements.modalBody.innerHTML = this.createStackHandToggleHtml('settings-stack-hand');
+        this.setupStackHandToggle('settings-stack-hand');
+        this.openModal();
+    }
+    
     // モーダルを開く
     openModal() {
         this.elements.gameModal.style.display = 'flex';
@@ -105,8 +134,9 @@ class UIModal {
     
     // 手札からカードを選ぶ画面のHTML（カード自体をタップして選択する）
     createCardSelectionHtml(player) {
-        const cardsHtml = player.hand.map((card, index) =>
-            this.view.createCardHtml(card, `data-index="${index}"`, 'selectable')
+        // 手札と同じ順に並べる（1枚ずつ選ぶので重ねる設定は使わない）
+        const cardsHtml = this.view.getSortedHandIndices(player.hand).map(index =>
+            this.view.createCardHtml(player.hand[index], `data-index="${index}"`, 'selectable')
         ).join('');
 
         return `<div class="card-selection">${cardsHtml}</div>`;

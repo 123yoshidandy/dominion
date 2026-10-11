@@ -12,6 +12,9 @@ const VICTORY_SUPPLY_ORDER = ['estate', 'duchy', 'province', 'curse'];
 const TREASURE_SUPPLY_ORDER = ['copper', 'silver', 'gold'];
 const BASIC_SUPPLY_ORDER = [...VICTORY_SUPPLY_ORDER, ...TREASURE_SUPPLY_ORDER];
 
+// 手札の表示順（種類）。同じ種類の中ではコストの高い順に並べる
+const HAND_TYPE_ORDER = [CARD_TYPES.ACTION, CARD_TYPES.TREASURE, CARD_TYPES.VICTORY, CARD_TYPES.CURSE];
+
 class UIView {
     constructor(uiController) {
         this.uiController = uiController;
@@ -142,10 +145,12 @@ class UIView {
         `;
     }
 
-    // 手札・場札などに使う通常サイズのカードのHTML生成
-    createCardHtml(card, attributes = '', extraClass = '') {
+    // 手札・場札などに使う通常サイズのカードのHTML生成（stackCount が2以上なら重ねて枚数を表示する）
+    createCardHtml(card, attributes = '', extraClass = '', stackCount = 1) {
+        const stacked = stackCount > 1;
         return `
-            <div class="card ${this.getCardTypeClass(card)} ${extraClass}" ${attributes}>
+            <div class="card ${this.getCardTypeClass(card)} ${extraClass} ${stacked ? 'stacked' : ''}" ${attributes}>
+                ${stacked ? `<span class="stack-count">×${stackCount}</span>` : ''}
                 <div class="card-head">
                     <span class="card-cost">${card.cost}</span>
                     <span class="card-title">${card.name}</span>
@@ -197,6 +202,39 @@ class UIView {
         this.elements.playersInfo.innerHTML = html;
     }
 
+    // 手札を表示する順に並べた、手札のインデックスの配列（手札そのものは並び替えない）
+    getSortedHandIndices(hand) {
+        const typeRank = (card) => {
+            const rank = HAND_TYPE_ORDER.findIndex(type => card.isType(type));
+            return rank < 0 ? HAND_TYPE_ORDER.length : rank;
+        };
+        
+        return hand
+            .map((card, index) => index)
+            .sort((a, b) =>
+                typeRank(hand[a]) - typeRank(hand[b]) ||
+                hand[b].cost - hand[a].cost ||
+                hand[a].name.localeCompare(hand[b].name, 'ja') ||
+                a - b
+            );
+    }
+    
+    // 手札を表示単位にまとめる。重ねる設定なら同じカードを1つにまとめる
+    getHandGroups(hand, stack) {
+        const groups = [];
+        
+        this.getSortedHandIndices(hand).forEach(index => {
+            const last = groups[groups.length - 1];
+            if (stack && last && last.card.id === hand[index].id) {
+                last.indices.push(index);
+            } else {
+                groups.push({ card: hand[index], indices: [index] });
+            }
+        });
+        
+        return groups;
+    }
+    
     // 現在のプレイヤーの手札と場を更新
     updateCurrentPlayerArea(gameState) {
         const currentPlayer = gameState.players[gameState.currentPlayerIndex];
@@ -204,16 +242,18 @@ class UIView {
         // 今プレイできるアクションカードを強調する
         const canPlayActions = gameState.phase === 'action' && !currentPlayer.isCPU && currentPlayer.actions > 0;
 
-        // 手札を更新
-        this.elements.handCards.innerHTML = currentPlayer.hand.map((card, index) => {
+        // 手札を種類・コスト順に並べて表示する。重ねたカードは先頭の1枚の番号を持たせ、タップでその1枚をプレイする
+        const groups = this.getHandGroups(currentPlayer.hand, this.uiController.settings.stackHand);
+        
+        this.elements.handCards.innerHTML = groups.map(({ card, indices }) => {
             const playable = canPlayActions && card.isType(CARD_TYPES.ACTION);
-            return this.createCardHtml(card, `data-card-index="${index}"`, playable ? 'playable' : '');
+            return this.createCardHtml(card, `data-card-index="${indices[0]}"`, playable ? 'playable' : '', indices.length);
         }).join('');
 
         // 手札はタップでプレイ、長押しで説明を表示する
-        const handCards = this.elements.handCards.querySelectorAll('.card');
-        handCards.forEach((card, index) => {
-            onPress(card, {
+        this.elements.handCards.querySelectorAll('.card').forEach(element => {
+            const index = parseInt(element.getAttribute('data-card-index'));
+            onPress(element, {
                 onTap: () => this.uiController.handleCardPlay(index),
                 onLongPress: () => this.uiController.showCardDetail(currentPlayer.hand[index])
             });

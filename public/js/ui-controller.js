@@ -8,6 +8,12 @@ import UIModal from './ui-modal.js';
 import UIEventHandler from './ui-event-handler.js';
 import { ALL_CARDS } from './card-data.js';
 
+// 表示設定はブラウザに保存し、次回以降も引き継ぐ
+const SETTINGS_KEY = 'dominion.settings';
+const DEFAULT_SETTINGS = {
+    stackHand: false // 手札の同じカードを重ねて表示する
+};
+
 class UIController {
     // CPUが1手進めるまでの待ち時間（ミリ秒）
     static CPU_STEP_DELAY_MS = 700;
@@ -15,6 +21,7 @@ class UIController {
     constructor(gameController) {
         this.gameController = gameController;
         this.gameController.setUIController(this);
+        this.settings = this.loadSettings();
         
         // DOM要素の参照を保持
         this.elements = {
@@ -34,7 +41,8 @@ class UIController {
             gameModal: document.getElementById('game-modal'),
             modalTitle: document.getElementById('modal-title'),
             modalBody: document.getElementById('modal-body'),
-            modalClose: document.querySelector('.close')
+            modalClose: document.querySelector('.close'),
+            settingsBtn: document.getElementById('settings-btn')
         };
         
         // サブコンポーネントを初期化
@@ -58,6 +66,11 @@ class UIController {
             }
         });
         
+        // 設定ボタンのイベントを設定
+        this.elements.settingsBtn.addEventListener('click', () => {
+            this.modal.showSettings();
+        });
+        
         // ゲーム終了ボタンのイベントを設定
         this.elements.endTurnBtn.addEventListener('click', () => {
             this.eventHandler.handleEndTurn();
@@ -69,6 +82,30 @@ class UIController {
         // 広い画面ではログを最初から開いておく（スマホでは折りたたむ）
         if (window.matchMedia('(min-width: 900px)').matches) {
             this.elements.gameLog.open = true;
+        }
+    }
+    
+    // 保存された設定を読み込む（保存できない環境では初期値を使う）
+    loadSettings() {
+        try {
+            return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') };
+        } catch {
+            return { ...DEFAULT_SETTINGS };
+        }
+    }
+    
+    // 設定を変更して保存し、ゲーム中なら画面に反映する
+    updateSettings(changes) {
+        this.settings = { ...this.settings, ...changes };
+        
+        try {
+            localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings));
+        } catch {
+            // 保存できなくても、このセッション中は設定が有効
+        }
+        
+        if (this.gameController.game) {
+            this.updateGameView();
         }
     }
     

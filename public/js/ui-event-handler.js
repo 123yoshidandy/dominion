@@ -30,8 +30,8 @@ class UIEventHandler {
         // 今プレイできないカードはタップしても何もしない（説明は長押しで表示する）
         if (!canPlay) return;
 
-        // カード要素を取得
-        const cardElement = this.elements.handCards.querySelectorAll('.card')[cardIndex];
+        // カード要素を取得（手札は並び替えて表示しているので、画面上の位置ではなく手札の番号で探す）
+        const cardElement = this.elements.handCards.querySelector(`[data-card-index="${cardIndex}"]`);
         const playArea = this.elements.playedCards;
 
         // アニメーションで移動させてからプレイする
@@ -44,14 +44,14 @@ class UIEventHandler {
     handleEnterBuyPhase() {
         if (this.gameController.isCpuTurn()) return;
         
-        // 財宝カードをアニメーションするためのカード要素を取得
+        // 財宝カードをアニメーションするためのカード要素を取得（要素の data-card-index で手札と対応させる）
+        const gameState = this.gameController.getGameState();
+        if (!gameState) return;
+        const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+        
         const treasureCards = Array.from(this.elements.handCards.querySelectorAll('.card'))
-            .filter((card, index) => {
-                const gameState = this.gameController.getGameState();
-                if (!gameState) return false;
-                
-                const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-                const cardData = currentPlayer.hand[index];
+            .filter(card => {
+                const cardData = currentPlayer.hand[parseInt(card.getAttribute('data-card-index'))];
                 return cardData && cardData.isType(CARD_TYPES.TREASURE);
             });
         

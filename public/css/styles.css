@@ -103,6 +103,26 @@ button.primary {
     gap: 8px;
 }
 
+.brand {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    font-size: 15px;
+    font-weight: 400;
+    color: var(--on-felt-muted);
+    background: var(--panel);
+}
+
 #topbar h1 {
     margin: 0;
     font-size: 15px;
@@ -476,6 +496,29 @@ button.primary {
     box-shadow: 0 0 0 2px var(--gold), 0 6px 16px rgba(0, 0, 0, 0.45);
 }
 
+/* 重ねたカード：後ろに2枚ずれて重なっているように見せる（overflow で切れないよう影で描く） */
+.card.stacked {
+    --stack-shadow: 3px -3px 0 -1px #e6dcc3, 6px -6px 0 -2px #d3c6a6;
+    box-shadow: var(--stack-shadow), 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.card.stacked.playable {
+    box-shadow: var(--stack-shadow), 0 0 0 2px var(--gold), 0 6px 16px rgba(0, 0, 0, 0.45);
+}
+
+.stack-count {
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    z-index: 1;
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+    color: #fff;
+    background: var(--ink);
+}
+
 /* 場札は名前だけの小さな表示にする */
 .card.mini {
     width: 76px;
@@ -521,13 +564,45 @@ button.primary {
     }
 }
 
-/* ===== 場札 ===== */
+/* ===== 場札（サプライと手札のあいだの帯） ===== */
 
-#played-cards {
+#play-area {
+    flex: none;
     display: flex;
-    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px;
+    background: rgba(20, 45, 34, 0.9);
+    border-top: 1px solid var(--panel-border);
+    z-index: 20;
+}
+
+#play-area h2 {
+    flex: none;
+    margin: 0;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--on-felt-muted);
+}
+
+/* 枚数が多いときは帯の高さを変えずに横スクロールする */
+#played-cards {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
     gap: 6px;
-    min-height: 32px;
+    min-height: 26px;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+#played-cards::-webkit-scrollbar {
+    display: none;
+}
+
+#played-cards .card.mini {
+    flex: none;
 }
 
 .empty-note {
@@ -821,6 +896,26 @@ button.primary {
     height: 20px;
 }
 
+/* 設定のスイッチ */
+.setting-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 14px;
+    padding: 12px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 700;
+    background: var(--paper-dim);
+    cursor: pointer;
+}
+
+.setting-toggle input {
+    width: 22px;
+    height: 22px;
+}
+
 /* カードの詳細 */
 .card-detail {
     display: flex;
@@ -970,7 +1065,7 @@ button.primary {
         grid-template-columns: minmax(0, 1fr) 300px;
         grid-template-areas:
             "supply players"
-            "play   log";
+            "supply log";
         grid-template-rows: auto 1fr;
         align-items: start;
         padding: 16px;
@@ -978,7 +1073,6 @@ button.primary {
     }
 
     #supply-section { grid-area: supply; }
-    #play-area { grid-area: play; }
     #game-log { grid-area: log; }
 
     #players-info {
@@ -1056,22 +1150,20 @@ button.primary {
         margin-top: 0;
     }
 
-    /* 左にサプライ、右にプレイヤー・場札・ログ */
+    /* 左にサプライ、右にプレイヤー・ログ */
     #table {
         display: grid;
         grid-template-columns: minmax(0, 1fr) 210px;
         grid-template-areas:
             "supply players"
-            "supply play"
             "supply log";
-        grid-template-rows: auto auto 1fr;
+        grid-template-rows: auto 1fr;
         align-items: start;
         gap: 8px;
-        padding: 8px var(--safe-right) 8px var(--safe-left);
+        padding: 4px var(--safe-right) 4px var(--safe-left);
     }
 
     #supply-section { grid-area: supply; }
-    #play-area { grid-area: play; }
     #game-log { grid-area: log; }
 
     #players-info {
@@ -1087,7 +1179,7 @@ button.primary {
     }
 
     .panel {
-        padding: 8px 10px;
+        padding: 5px 8px;
     }
 
     /* サプライは見出しをなくし、タイルを詰めてスクロールなしで見せる */
@@ -1104,8 +1196,8 @@ button.primary {
     .supply-tile {
         flex-direction: row;
         gap: 1px;
-        min-height: 42px;
-        padding: 18px 2px 3px;
+        min-height: 40px;
+        padding: 17px 2px 2px;
         border-top-width: 4px;
     }
 
@@ -1130,6 +1222,11 @@ button.primary {
 
     .supply-tile .card-title {
         font-size: 11px;
+    }
+
+    /* 場札の帯の分だけ高さが減るので、各部を少しずつ詰めてサプライをスクロールなしで見せる */
+    #play-area {
+        padding: 2px var(--safe-right) 2px var(--safe-left);
     }
 
     /* ドックは「山札・捨て札｜手札｜ボタン」の1行にする */
@@ -1199,11 +1296,11 @@ button.primary {
     }
 
     #hand-cards {
-        min-height: 100px;
+        min-height: 92px;
     }
 
     #hand-cards .card {
         width: 76px;
-        height: 96px;
+        height: 88px;
     }
 }

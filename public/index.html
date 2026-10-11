@@ -14,7 +14,10 @@
     <!-- 手番とフェーズ、残りリソースを常に表示するヘッダー -->
     <header id="topbar">
         <div class="topbar-row">
-            <h1>ドミニオン</h1>
+            <div class="brand">
+                <h1>ドミニオン</h1>
+                <button id="settings-btn" class="icon-btn" aria-label="設定">⚙</button>
+            </div>
             <div id="game-status">ゲームの準備をしています...</div>
         </div>
         <div id="turn-stats"></div>
@@ -33,16 +36,17 @@
             </div>
         </section>
 
-        <section id="play-area" class="panel">
-            <h2>場札</h2>
-            <div id="played-cards"></div>
-        </section>
-
         <details id="game-log" class="panel">
             <summary>ゲームログ</summary>
             <div id="log-entries"></div>
         </details>
     </main>
+
+    <!-- 場札はサプライと手札のあいだに常に表示する -->
+    <section id="play-area">
+        <h2>場札</h2>
+        <div id="played-cards"></div>
+    </section>
 
     <!-- 手札と操作ボタンは親指の届く画面下部に固定 -->
     <footer id="dock">
