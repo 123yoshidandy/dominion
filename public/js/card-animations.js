@@ -3,11 +3,18 @@
  * カードの移動やエフェクトを視覚的に表現します
  */
 
+// カード1枚が移動する時間（ミリ秒）。CSS の --anim-ms にも同じ値を渡す
+export const ANIMATION_MS = 250;
+
+// 複数枚を続けて動かすときに、1枚ごとにずらす時間（ミリ秒）
+export const STAGGER_MS = 60;
+
 class CardAnimator {
     constructor() {
         this.overlay = document.getElementById('animation-overlay');
-        this.animationDuration = 500; // アニメーション時間（ミリ秒）
+        this.animationDuration = ANIMATION_MS;
         this.animationsInProgress = 0; // 実行中のアニメーション数
+        document.documentElement.style.setProperty('--anim-ms', `${ANIMATION_MS}ms`);
     }
 
     /**
@@ -51,15 +58,53 @@ class CardAnimator {
     }
 
     /**
-     * カードを引くアニメーション
-     * @param {Element} sourceContainer - カードの移動元コンテナ
-     * @param {Element} targetContainer - カードの移動先コンテナ
-     * @param {Function} callback - アニメーション完了後のコールバック
+     * カードを引くアニメーション（描画済みの手札のカードを、山札の位置から飛ばして置く）
+     * 手札は横スクロールの枠で切り取られるので、複製をオーバーレイに置いて動かす
+     * @param {Element} cardElement - 手札に描画済みのカード要素
+     * @param {Element} sourceElement - 山札の要素
+     * @param {number} delay - 開始までの待ち時間（ミリ秒）
      */
-    drawCard(sourceContainer, targetContainer, callback) {
-        // 山札からカードを複製して使う
-        const clonedCard = this.createTemporaryCard('山札のカード');
-        this.animateCardMovement(clonedCard, targetContainer, 'card-drawn', callback);
+    drawCard(cardElement, sourceElement, delay = 0) {
+        cardElement.style.visibility = 'hidden';
+        
+        setTimeout(() => {
+            // 待っている間に再描画で要素が置き換わっていたら何もしない
+            if (!cardElement.isConnected) return;
+            
+            const from = sourceElement.getBoundingClientRect();
+            const to = cardElement.getBoundingClientRect();
+            
+            const clone = cardElement.cloneNode(true);
+            clone.classList.add('card-animating');
+            Object.assign(clone.style, {
+                position: 'absolute',
+                margin: '0',
+                visibility: 'visible',
+                left: `${from.left + (from.width - to.width) / 2}px`,
+                top: `${from.top + (from.height - to.height) / 2}px`,
+                width: `${to.width}px`,
+                height: `${to.height}px`,
+                transform: 'scale(0.6)',
+                opacity: '0.7'
+            });
+            this.overlay.appendChild(clone);
+            
+            // 開始位置を確定させてから移動させる（そうしないとトランジションが効かないことがある）
+            clone.getBoundingClientRect();
+            const d = this.animationDuration;
+            clone.style.transition = `left ${d}ms ease-out, top ${d}ms ease-out, transform ${d}ms ease-out, opacity ${d}ms ease-out`;
+            Object.assign(clone.style, {
+                left: `${to.left}px`,
+                top: `${to.top}px`,
+                transform: 'none',
+                opacity: '1'
+            });
+            
+            setTimeout(() => {
+                clone.remove();
+                cardElement.style.visibility = '';
+            }, d);
+        }, delay);
     }
 
     /**
@@ -92,8 +137,9 @@ class CardAnimator {
         // カードの現在位置を取得
         const cardRect = cardElement.getBoundingClientRect();
         
-        // 移動先の位置を取得
-        const targetRect = targetContainer.getBoundingClientRect();
+        // 移動先：要素ならその中央へ、{ left, top, width, height } ならその位置・大きさで着地させる
+        const landsOnRect = typeof targetContainer.getBoundingClientRect !== 'function';
+        const targetRect = landsOnRect ? targetContainer : targetContainer.getBoundingClientRect();
         
         // クローンを作成してオーバーレイに追加
         const clone = cardElement.cloneNode(true);
@@ -122,8 +168,15 @@ class CardAnimator {
         requestAnimationFrame(() => {
             // 終了位置に移動
             clone.style.transition = `all ${this.animationDuration}ms ease-in-out`;
-            clone.style.left = `${targetRect.left + (targetRect.width - cardRect.width) / 2}px`;
-            clone.style.top = `${targetRect.top + (targetRect.height - cardRect.height) / 2}px`;
+            if (landsOnRect) {
+                clone.style.left = `${targetRect.left}px`;
+                clone.style.top = `${targetRect.top}px`;
+                clone.style.width = `${targetRect.width}px`;
+                clone.style.height = `${targetRect.height}px`;
+            } else {
+                clone.style.left = `${targetRect.left + (targetRect.width - cardRect.width) / 2}px`;
+                clone.style.top = `${targetRect.top + (targetRect.height - cardRect.height) / 2}px`;
+            }
             
             // アニメーション終了後の処理
             setTimeout(() => {

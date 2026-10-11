@@ -154,6 +154,19 @@ const CARD_ART = {
     `),
 };
 
+// カードの裏面（山札の表示に使う）。縦長なので viewBox が他の絵と違う
+export const CARD_BACK = `<svg viewBox="0 0 52 74" aria-hidden="true">
+    <rect width="52" height="74" fill="#23345c"/>
+    <rect x="3.5" y="3.5" width="45" height="67" rx="4" fill="none" stroke="#e6b84f" stroke-width="1.2"/>
+    <rect x="6.5" y="6.5" width="39" height="61" rx="3" fill="none" stroke="#e6b84f" stroke-width="0.6" opacity="0.6"/>
+    <path d="M26 14 l3 3 l-3 3 l-3 -3z M26 54 l3 3 l-3 3 l-3 -3z" fill="#e6b84f" opacity="0.7"/>
+    <path d="M16 43 L18 30 L22.5 36 L26 27 L29.5 36 L34 30 L36 43 Z" fill="#e6b84f"/>
+    <rect x="16" y="44" width="20" height="3" rx="1" fill="#e6b84f"/>
+    <circle cx="18" cy="29.5" r="1.4" fill="#fff3c4"/>
+    <circle cx="26" cy="26.5" r="1.6" fill="#fff3c4"/>
+    <circle cx="34" cy="29.5" r="1.4" fill="#fff3c4"/>
+</svg>`;
+
 // カードIDに対応するイラストのSVG（なければ空文字）
 export function getCardArt(cardId) {
     return CARD_ART[cardId.toLowerCase()] ?? '';

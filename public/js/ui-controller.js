@@ -16,7 +16,7 @@ const DEFAULT_SETTINGS = {
 
 class UIController {
     // CPUが1手進めるまでの待ち時間（ミリ秒）
-    static CPU_STEP_DELAY_MS = 700;
+    static CPU_STEP_DELAY_MS = 450;
 
     constructor(gameController) {
         this.gameController = gameController;
@@ -33,7 +33,7 @@ class UIController {
             playersInfo: document.getElementById('players-info'),
             handCards: document.getElementById('hand-cards'),
             playedCards: document.getElementById('played-cards'),
-            deckCount: document.getElementById('deck-count'),
+            deckPile: document.getElementById('deck-pile'),
             discardCards: document.getElementById('discard-cards'),
             logEntries: document.getElementById('log-entries'),
             endTurnBtn: document.getElementById('end-turn-btn'),

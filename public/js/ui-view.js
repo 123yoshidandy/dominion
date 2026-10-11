@@ -5,7 +5,8 @@
 
 import { CARD_TYPES, ALL_CARDS } from './card-data.js';
 import { onPress } from './press-handler.js';
-import { getCardArt } from './card-art.js';
+import { getCardArt, CARD_BACK } from './card-art.js';
+import cardAnimator, { STAGGER_MS } from './card-animations.js';
 
 // サプライの基本カードの並び順（左から勝利点の列、財宝の列、その右にアクション）
 const VICTORY_SUPPLY_ORDER = ['estate', 'duchy', 'province', 'curse'];
@@ -19,6 +20,9 @@ class UIView {
     constructor(uiController) {
         this.uiController = uiController;
         this.elements = uiController.elements;
+        
+        // プレイヤーごとの前回描画した手札。新しく増えたカード（＝引いたカード）を見つけるのに使う
+        this.lastHands = new Map();
     }
 
     // ゲーム画面を更新
@@ -258,22 +262,83 @@ class UIView {
                 onLongPress: () => this.uiController.showCardDetail(currentPlayer.hand[index])
             });
         });
+        
+        this.animateDrawnCards(currentPlayer, groups);
 
-        // 場のカードを更新
-        this.elements.playedCards.innerHTML = currentPlayer.playArea.length > 0
-            ? currentPlayer.playArea.map(card => this.createCardHtml(card, '', 'mini')).join('')
+        // 場札は同じカードを常にまとめ、最初にプレイした位置に ×枚数 で表示する
+        const playGroups = [];
+        currentPlayer.playArea.forEach(card => {
+            const group = playGroups.find(g => g.card.id === card.id);
+            if (group) {
+                group.count++;
+            } else {
+                playGroups.push({ card, count: 1 });
+            }
+        });
+        
+        this.elements.playedCards.innerHTML = playGroups.length > 0
+            ? playGroups.map(({ card, count }) => this.createCardHtml(card, `data-card-id="${card.id}"`, 'mini', count)).join('')
             : '<p class="empty-note">まだカードをプレイしていません</p>';
         
         // 場札は長押しで説明を表示する
         this.elements.playedCards.querySelectorAll('.card').forEach((card, index) => {
             onPress(card, {
-                onLongPress: () => this.uiController.showCardDetail(currentPlayer.playArea[index])
+                onLongPress: () => this.uiController.showCardDetail(playGroups[index].card)
             });
         });
 
-        // 山札と捨て札を更新
-        this.elements.deckCount.textContent = currentPlayer.deck.length;
-        this.elements.discardCards.textContent = currentPlayer.discard.length;
+        // 山札は裏向き、捨て札は一番上のカードを表向きにして、枚数を ×N で表示する
+        const topDiscard = currentPlayer.discard[currentPlayer.discard.length - 1];
+        this.elements.deckPile.innerHTML = this.createPileHtml(currentPlayer.deck.length);
+        this.elements.discardCards.innerHTML = this.createPileHtml(currentPlayer.discard.length, topDiscard);
+        
+        // 捨て札は長押しで一番上のカードの説明を表示する（要素は描画のたびに作り直すので、リスナーは重ならない）
+        const discardCard = this.elements.discardCards.querySelector('.pile-card:not(.empty)');
+        if (discardCard) {
+            onPress(discardCard, {
+                onLongPress: () => this.uiController.showCardDetail(topDiscard)
+            });
+        }
+    }
+    
+    // 前回の描画から手札に増えたカードを、山札から飛んでくるように見せる
+    // 初めて描画するプレイヤーは手札すべてが対象（ゲーム開始時の5枚）
+    animateDrawnCards(player, groups) {
+        const previous = this.lastHands.get(player.id) ?? new Set();
+        this.lastHands.set(player.id, new Set(player.hand));
+        
+        const elements = this.elements.handCards.querySelectorAll('.card');
+        let order = 0;
+        
+        groups.forEach((group, i) => {
+            const isDrawn = group.indices.some(index => !previous.has(player.hand[index]));
+            if (isDrawn) {
+                cardAnimator.drawCard(elements[i], this.elements.deckPile, order * STAGGER_MS);
+                order++;
+            }
+        });
+    }
+    
+    // 山札・捨て札の表示。faceCard を渡すと表向き、渡さなければ裏向きにする
+    createPileHtml(count, faceCard = null) {
+        if (count === 0) {
+            return '<div class="pile-card empty"></div>';
+        }
+        
+        const countHtml = `<span class="stack-count">×${count}</span>`;
+        const stackedClass = count > 1 ? 'piled' : '';
+        
+        if (!faceCard) {
+            return `<div class="pile-card card-back ${stackedClass}">${CARD_BACK}${countHtml}</div>`;
+        }
+        
+        return `
+            <div class="pile-card ${this.getCardTypeClass(faceCard)} ${stackedClass}">
+                <span class="pile-card-name">${faceCard.name}</span>
+                <div class="card-art">${getCardArt(faceCard.id)}</div>
+                ${countHtml}
+            </div>
+        `;
     }
 
     // ゲームコントロールを更新

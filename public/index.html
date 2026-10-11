@@ -50,26 +50,25 @@
 
     <!-- 手札と操作ボタンは親指の届く画面下部に固定 -->
     <footer id="dock">
-        <div class="dock-row">
-            <div id="piles">
-                <div id="deck" class="pile">
-                    <span class="pile-label">山札</span>
-                    <span id="deck-count" class="pile-count">0</span>
-                </div>
-                <div id="discard" class="pile">
-                    <span class="pile-label">捨て札</span>
-                    <div id="discard-cards" class="pile-count">0</div>
-                </div>
+        <div id="game-controls">
+            <div id="action-buttons">
+                <!-- アクションボタンはJavaScriptで動的に生成されます -->
             </div>
-            <div id="game-controls">
-                <div id="action-buttons">
-                    <!-- アクションボタンはJavaScriptで動的に生成されます -->
-                </div>
-                <button id="end-turn-btn" disabled>ターン終了</button>
-            </div>
+            <button id="end-turn-btn" disabled>ターン終了</button>
         </div>
-        <div id="hand">
-            <div id="hand-cards"></div>
+        <!-- 左から山札・手札・捨て札 -->
+        <div class="dock-main">
+            <div id="deck" class="pile">
+                <div id="deck-pile" class="pile-slot"></div>
+                <span class="pile-label">山札</span>
+            </div>
+            <div id="hand">
+                <div id="hand-cards"></div>
+            </div>
+            <div id="discard" class="pile">
+                <div id="discard-cards" class="pile-slot"></div>
+                <span class="pile-label">捨て札</span>
+            </div>
         </div>
     </footer>
 

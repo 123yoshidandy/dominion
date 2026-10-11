@@ -4,11 +4,16 @@
  */
 
 import { CARD_TYPES, ALL_CARDS } from './card-data.js';
-import cardAnimator from './card-animations.js';
+import cardAnimator, { STAGGER_MS } from './card-animations.js';
+
+// 場札の小さなカードの大きさと間隔（styles.css の .card.mini・#played-cards と合わせる）
+const MINI_CARD_WIDTH = 76;
+const MINI_CARD_HEIGHT = 30;
+const PLAYED_CARDS_GAP = 6;
 
 class UIEventHandler {
     // 購入回数を使い切ってから自動でターンを終えるまでの待ち時間（ミリ秒）
-    static AUTO_END_TURN_DELAY_MS = 400;
+    static AUTO_END_TURN_DELAY_MS = 200;
     
     constructor(uiController) {
         this.uiController = uiController;
@@ -32,10 +37,10 @@ class UIEventHandler {
 
         // カード要素を取得（手札は並び替えて表示しているので、画面上の位置ではなく手札の番号で探す）
         const cardElement = this.elements.handCards.querySelector(`[data-card-index="${cardIndex}"]`);
-        const playArea = this.elements.playedCards;
+        const target = this.planPlayTargets()(card.id);
 
-        // アニメーションで移動させてからプレイする
-        cardAnimator.playCard(cardElement, playArea, () => {
+        // 場札の着地点へアニメーションで移動させてからプレイする
+        cardAnimator.playCard(cardElement, target, () => {
             this.gameController.playActionCard(cardIndex);
         });
     }
@@ -56,24 +61,25 @@ class UIEventHandler {
             });
         
         if (treasureCards.length > 0) {
-            // 連続してアニメーションする
-            const playArea = this.elements.playedCards;
-            let cardIndex = 0;
+            // 少しずつずらしてほぼ同時に場へ出し、すべて終わったら購入フェーズに移行する
+            // 着地点は動かし始める前にまとめて決める（同じ財宝は同じ位置へ向かう）
+            const targetFor = this.planPlayTargets();
+            let finished = 0;
             
-            const playNextCard = () => {
-                if (cardIndex < treasureCards.length) {
-                    const card = treasureCards[cardIndex];
-                    cardIndex++;
-                    
-                    cardAnimator.playCard(card, playArea, playNextCard);
-                } else {
-                    // すべてのカードをプレイした後に購入フェーズに移行
-                    this.gameController.enterBuyPhase();
-                }
-            };
-            
-            // 最初のカードからアニメーション開始
-            playNextCard();
+            treasureCards.forEach((card, i) => {
+                const cardId = currentPlayer.hand[parseInt(card.getAttribute('data-card-index'))].id;
+                const target = targetFor(cardId);
+                setTimeout(() => {
+                    cardAnimator.playCard(card, target, () => {
+                        // 残りの財宝が飛んでいる間に手札へ戻って見えないよう、購入フェーズの再描画まで隠しておく
+                        card.style.visibility = 'hidden';
+                        finished++;
+                        if (finished === treasureCards.length) {
+                            this.gameController.enterBuyPhase();
+                        }
+                    });
+                }, i * STAGGER_MS);
+            });
         } else {
             // 財宝カードがない場合は直接購入フェーズに移行
             this.gameController.enterBuyPhase();
@@ -120,6 +126,37 @@ class UIEventHandler {
             // 要素が見つからない場合は直接購入処理
             purchase();
         }
+    }
+    
+    // 場札の着地点を決める関数を返す。同じカードが場にあればその位置、なければ右端の次（空なら左端）
+    // 新しく置く位置は呼ぶたびに右へずらすので、複数枚を同時に出しても重ならない
+    planPlayTargets() {
+        const container = this.elements.playedCards;
+        const containerRect = container.getBoundingClientRect();
+        const minis = Array.from(container.querySelectorAll('.card[data-card-id]'));
+        
+        const targets = new Map();
+        minis.forEach(mini => {
+            const rect = mini.getBoundingClientRect();
+            targets.set(mini.getAttribute('data-card-id'), {
+                left: rect.left, top: rect.top, width: rect.width, height: rect.height
+            });
+        });
+        
+        const last = minis.length > 0 ? minis[minis.length - 1].getBoundingClientRect() : null;
+        const height = last ? last.height : MINI_CARD_HEIGHT;
+        const top = last ? last.top : containerRect.top + (containerRect.height - height) / 2;
+        let nextLeft = last ? last.right + PLAYED_CARDS_GAP : containerRect.left;
+        
+        return (cardId) => {
+            if (!targets.has(cardId)) {
+                // 帯からはみ出す位置は右端にそろえる（帯は横スクロールで続きを表示する）
+                const left = Math.min(nextLeft, containerRect.right - MINI_CARD_WIDTH);
+                targets.set(cardId, { left, top, width: MINI_CARD_WIDTH, height });
+                nextLeft += MINI_CARD_WIDTH + PLAYED_CARDS_GAP;
+            }
+            return targets.get(cardId);
+        };
     }
     
     // 購入回数を使い切っていたら、購入したカードが見える程度に間を置いてターンを終える

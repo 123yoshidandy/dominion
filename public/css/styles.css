@@ -532,6 +532,26 @@ button.primary {
     display: none;
 }
 
+/* 場札のまとめ表示：帯の上下で影が切れるので重なりの影は使わず、名前の右に ×枚数 を置く */
+.card.mini.stacked {
+    width: auto;
+    min-width: 76px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.card.mini.stacked .card-head {
+    padding-right: 34px;
+}
+
+.card.mini .stack-count {
+    top: 50%;
+    right: 4px;
+    bottom: auto;
+    transform: translateY(-50%);
+    padding: 0 5px;
+    font-size: 10px;
+}
+
 /* 詳細表示用の大きなカード */
 .card.large {
     width: 150px;
@@ -676,8 +696,12 @@ button.primary {
 
 /* ===== 下部ドック（手札と操作） ===== */
 
+/* 縦画面は「ボタン」の行と「山札｜手札｜捨て札」の行の2段にする */
 #dock {
     flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
     padding: 8px 12px calc(8px + var(--safe-bottom));
     background: rgba(20, 45, 34, 0.96);
     border-top: 1px solid var(--panel-border);
@@ -685,27 +709,24 @@ button.primary {
     z-index: 20;
 }
 
-.dock-row {
+.dock-main {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-}
-
-#piles {
-    display: flex;
     gap: 6px;
 }
 
+/* 山札・捨て札：カードの絵と ×枚数 を表示し、下にラベルを置く */
 .pile {
+    flex: none;
     display: flex;
     flex-direction: column;
     align-items: center;
-    min-width: 52px;
-    padding: 3px 8px;
-    border-radius: 10px;
-    background: var(--panel);
-    border: 1px solid var(--panel-border);
+    gap: 3px;
+}
+
+.pile-slot {
+    width: 52px;
+    height: 74px;
 }
 
 .pile-label {
@@ -713,14 +734,75 @@ button.primary {
     color: var(--on-felt-muted);
 }
 
-.pile-count {
-    font-size: 16px;
-    font-weight: 800;
-    font-variant-numeric: tabular-nums;
+.pile-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    border-radius: 8px;
+    color: var(--ink);
+    background: var(--paper);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+    -webkit-touch-callout: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* 2枚以上あるときは後ろにカードが重なっているように見せる */
+.pile-card.piled {
+    --pile-under: #d3c6a6;
+    box-shadow: 2px 2px 0 -0.5px var(--pile-under), 4px 4px 0 -1px var(--pile-under), 0 2px 6px rgba(0, 0, 0, 0.35);
+    overflow: visible;
+}
+
+.pile-card.card-back {
+    --pile-under: #16223f;
+    background: #23345c;
+}
+
+.pile-card.card-back svg {
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
+}
+
+.pile-card.empty {
+    background: transparent;
+    border: 1.5px dashed rgba(255, 255, 255, 0.25);
+    box-shadow: none;
+}
+
+.pile-card-name {
+    flex: none;
+    padding: 3px 2px;
+    overflow: hidden;
+    border-radius: 8px 8px 0 0;
+    font-size: 10px;
+    font-weight: 700;
+    text-align: center;
+    white-space: nowrap;
+    color: #fff;
+    background: var(--type);
+}
+
+.pile-card .card-art {
+    flex: 1;
+    height: auto;
+    border-radius: 0 0 8px 8px;
+}
+
+.pile-card .stack-count {
+    right: 3px;
+    bottom: 3px;
+    padding: 0 5px;
+    font-size: 10px;
 }
 
 #game-controls {
     display: flex;
+    justify-content: flex-end;
     gap: 8px;
 }
 
@@ -748,12 +830,12 @@ button.primary {
 }
 
 #hand {
-    margin: 8px -12px 0;
-    padding: 6px 12px 4px;
+    flex: 1;
+    min-width: 0;
+    padding: 6px 0 4px;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scroll-snap-type: x proximity;
-    scroll-padding-inline: 12px;
     scrollbar-width: none;
 }
 
@@ -769,9 +851,9 @@ button.primary {
     padding-top: 4px;
 }
 
-/* 手札5枚が画面幅に収まるようにする（左右の余白24px + 間隔8px×4） */
+/* 山札・捨て札（52px×2）と余白を除いた幅に5枚並べる。狭い画面では60pxを下限にして横スクロールする */
 #hand-cards .card {
-    width: clamp(64px, calc((100vw - 56px) / 5), 92px);
+    width: clamp(60px, calc((100vw - 172px) / 5), 92px);
     height: 116px;
     scroll-snap-align: start;
 }
@@ -1005,7 +1087,7 @@ button.primary {
 .card-played,
 .card-discarded,
 .card-purchased {
-    animation: cardPulse 0.5s ease-in-out;
+    animation: cardPulse var(--anim-ms, 250ms) ease-in-out;
 }
 
 /* ===== 広い画面（タブレット・PC） ===== */
@@ -1229,30 +1311,27 @@ button.primary {
         padding: 2px var(--safe-right) 2px var(--safe-left);
     }
 
-    /* ドックは「山札・捨て札｜手札｜ボタン」の1行にする */
+    /* ドックは「山札｜手札｜捨て札｜ボタン」の1行にする */
     #dock {
-        display: flex;
+        flex-direction: row;
         align-items: center;
         gap: 10px;
         padding: 6px var(--safe-right) calc(6px + var(--safe-bottom)) var(--safe-left);
     }
 
-    .dock-row {
-        display: contents;
+    .dock-main {
+        order: 1;
+        flex: 1;
+        min-width: 0;
+        gap: 8px;
     }
 
-    #piles {
-        order: 1;
-        flex-direction: column;
+    .pile-slot {
+        height: 64px;
     }
 
     #hand {
-        order: 2;
-        flex: 1;
-        min-width: 0;
-        margin: 0;
         padding: 4px 0;
-        scroll-padding-inline: 0;
     }
 
     #game-controls,
@@ -1261,7 +1340,7 @@ button.primary {
     }
 
     #game-controls {
-        order: 3;
+        order: 2;
         width: 112px;
     }
 
@@ -1300,7 +1379,7 @@ button.primary {
     }
 
     #hand-cards .card {
-        width: 76px;
+        width: 72px;
         height: 88px;
     }
 }
