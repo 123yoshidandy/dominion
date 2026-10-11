@@ -14,7 +14,7 @@ import { CARD_SETS } from '../../public/js/card-types.js';
 
 export const MAX_PLAYERS = 4;
 const ROOM_TTL_SECONDS = 2 * 24 * 60 * 60;             // 部屋は最後の操作から2日で消える
-const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 見間違えやすい I・O・0・1 は使わない
+const CODE_ALPHABET = '0123456789'; // 部屋番号は数字だけ（スマホの数字キーボードで入れやすい）
 const CODE_LENGTH = 5;
 const MAX_NAME_LENGTH = 12;
 const RECENT_LOGS = 200;    // 参加・再接続したときに送るログの数

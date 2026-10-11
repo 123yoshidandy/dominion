@@ -242,6 +242,11 @@ class UIEventHandler {
             });
         }
         
+        // 人数・名前・CPUの指定を保存して、次回の設定画面に入れておく
+        const localPlayers = [...this.uiController.settings.localPlayers];
+        playerNames.forEach((player, i) => { localPlayers[i] = player; });
+        this.uiController.updateSettings({ playerCount, localPlayers });
+        
         // ゲームを初期化（使うカードのセットは設定から）
         const cardSets = this.uiController.settings.cardSets.split('+');
         this.uiController.resetForNewGame();

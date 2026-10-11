@@ -119,7 +119,7 @@ class OnlineGameController {
         await this.ensureConnected();
         this.pendingName = name;
         // 同じ部屋に入ったことがあれば、その席に戻る
-        const token = this.session?.roomCode === roomCode.toUpperCase() ? this.session.token : undefined;
+        const token = this.session?.roomCode === roomCode ? this.session.token : undefined;
         this.request({ action: 'join', roomCode, name, token });
     }
 

@@ -35,9 +35,7 @@ class UIModal {
                 <label class="field">
                     <span>プレイヤー数</span>
                     <select id="player-count">
-                        <option value="2">2人</option>
-                        <option value="3">3人</option>
-                        <option value="4">4人</option>
+                        ${[2, 3, 4].map(count => `<option value="${count}" ${this.uiController.settings.playerCount === count ? 'selected' : ''}>${count}人</option>`).join('')}
                     </select>
                 </label>
 
@@ -58,13 +56,14 @@ class UIModal {
         `;
 
         this.elements.modalBody.innerHTML = setupHtml;
-        this.updatePlayerNameInputs(2);
+        this.updatePlayerNameInputs(this.uiController.settings.playerCount);
 
-        // プレイヤー数変更時のイベント
+        // プレイヤー数を変えたら入力欄を作り直し、人数を保存する
         const playerCountSelect = document.getElementById('player-count');
         playerCountSelect.addEventListener('change', () => {
             const count = parseInt(playerCountSelect.value);
             this.updatePlayerNameInputs(count);
+            this.uiController.updateSettings({ playerCount: count });
         });
 
         this.setupStackHandToggle('setup-stack-hand');
@@ -80,8 +79,8 @@ class UIModal {
         });
         document.getElementById('online-btn').addEventListener('click', () => this.showOnlineMenu());
 
-        // モーダルを表示
-        this.openModal({ kind: 'setup' });
+        // モーダルを表示（閉じると何も操作できなくなるので×は出さない）
+        this.openModal({ closable: false, kind: 'setup' });
     }
     
     createCardSetOptionsHtml(selected) {
@@ -100,11 +99,11 @@ class UIModal {
             <div class="setup-form online-form">
                 <label class="field">
                     <span>名前</span>
-                    <input type="text" id="online-name" maxlength="12" value="${escapeHtml(session?.name ?? '')}" placeholder="表示する名前">
+                    <input type="text" id="online-name" maxlength="12" value="${escapeHtml(this.uiController.settings.onlineName || session?.name || '')}" placeholder="表示する名前">
                 </label>
                 <button id="create-room-btn" class="primary">部屋を作る</button>
                 <div class="online-join">
-                    <input type="text" id="room-code" maxlength="5" value="${escapeHtml(roomCode)}" placeholder="部屋コード" autocapitalize="characters" autocomplete="off">
+                    <input type="text" id="room-code" maxlength="5" value="${escapeHtml(roomCode)}" placeholder="部屋番号（数字5桁）" inputmode="numeric" pattern="[0-9]*" autocomplete="off">
                     <button id="join-room-btn" class="primary secondary">参加する</button>
                 </div>
                 ${session && !roomCode ? `<button id="resume-room-btn" class="primary secondary">前の部屋（${escapeHtml(session.roomCode)}）に戻る</button>` : ''}
@@ -115,6 +114,13 @@ class UIModal {
         
         const nameInput = document.getElementById('online-name');
         const name = () => nameInput.value.trim();
+        nameInput.addEventListener('change', () => this.uiController.updateSettings({ onlineName: name() }));
+        
+        // 部屋番号は数字だけを受け付ける
+        const roomCodeInput = document.getElementById('room-code');
+        roomCodeInput.addEventListener('input', () => {
+            roomCodeInput.value = roomCodeInput.value.replace(/[^0-9]/g, '');
+        });
         const requireName = () => {
             if (name()) return true;
             nameInput.focus();
@@ -123,11 +129,15 @@ class UIModal {
         };
         
         document.getElementById('create-room-btn').addEventListener('click', () => {
-            if (requireName()) this.uiController.createOnlineRoom(name());
+            if (!requireName()) return;
+            this.uiController.updateSettings({ onlineName: name() });
+            this.uiController.createOnlineRoom(name());
         });
         document.getElementById('join-room-btn').addEventListener('click', () => {
-            const code = document.getElementById('room-code').value.trim().toUpperCase();
-            if (requireName() && code) this.uiController.joinOnlineRoom(code, name());
+            const code = roomCodeInput.value.trim();
+            if (!requireName() || !code) return;
+            this.uiController.updateSettings({ onlineName: name() });
+            this.uiController.joinOnlineRoom(code, name());
         });
         document.getElementById('resume-room-btn')?.addEventListener('click', () => this.uiController.resumeOnlineRoom());
         document.getElementById('back-to-local-btn').addEventListener('click', () => this.uiController.leaveOnline());
@@ -145,7 +155,7 @@ class UIModal {
         this.elements.modalBody.innerHTML = `
             <div class="setup-form lobby">
                 <div class="lobby-code">
-                    <span>部屋コード</span>
+                    <span>部屋番号</span>
                     <b>${escapeHtml(lobby.roomCode)}</b>
                     <button id="share-room-btn" class="primary secondary">招待URLを共有</button>
                 </div>
@@ -206,24 +216,42 @@ class UIModal {
         }
     }
 
-    // プレイヤー名入力欄を更新
+    // プレイヤー名入力欄を更新（保存した名前とCPUの指定があればそれを入れる）
     updatePlayerNameInputs(count) {
         const playerNamesDiv = document.getElementById('player-names');
+        const saved = this.uiController.settings.localPlayers;
         let html = '';
 
         for (let i = 1; i <= count; i++) {
+            const { name, isCPU } = saved[i - 1] ?? { name: i === 1 ? 'プレイヤー1' : `CPU${i - 1}`, isCPU: i !== 1 };
             html += `
                 <div class="player-input">
                     <label for="player-${i}">P${i}</label>
-                    <input type="text" id="player-${i}" value="${i === 1 ? 'プレイヤー1' : `CPU${i - 1}`}">
+                    <input type="text" id="player-${i}" value="${escapeHtml(name)}">
                     <label class="cpu-toggle">
-                        <input type="checkbox" id="player-${i}-cpu" ${i === 1 ? '' : 'checked'}> CPU
+                        <input type="checkbox" id="player-${i}-cpu" ${isCPU ? 'checked' : ''}> CPU
                     </label>
                 </div>
             `;
         }
 
         playerNamesDiv.innerHTML = html;
+        
+        // 名前やCPUの指定を変えたら保存する（表示していない席の保存内容はそのまま残す）
+        playerNamesDiv.querySelectorAll('input').forEach(input => {
+            input.addEventListener('change', () => this.saveLocalPlayers(count));
+        });
+    }
+    
+    saveLocalPlayers(count) {
+        const localPlayers = [...this.uiController.settings.localPlayers];
+        for (let i = 1; i <= count; i++) {
+            localPlayers[i - 1] = {
+                name: document.getElementById(`player-${i}`).value,
+                isCPU: document.getElementById(`player-${i}-cpu`).checked
+            };
+        }
+        this.uiController.updateSettings({ localPlayers });
     }
 
     // 「手札の同じカードを重ねる」設定のチェックボックス
@@ -415,7 +443,8 @@ class UIModal {
         });
         document.getElementById('leave-room-btn')?.addEventListener('click', () => this.uiController.leaveOnline());
 
-        this.openModal({ closable: !online, kind: 'result' });
+        // 閉じると次のゲームを始められなくなるので×は出さない
+        this.openModal({ closable: false, kind: 'result' });
     }
 }
 

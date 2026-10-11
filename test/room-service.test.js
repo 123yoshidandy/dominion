@@ -37,11 +37,11 @@ describe('オンライン対戦の部屋', () => {
     it('部屋を作ると部屋コードと再接続用のトークンが届き、参加者はロビーで互いを見られる', async () => {
         await send('c1', { action: 'create', name: 'あき' });
         const joined = last('c1', 'joined');
-        expect(joined.roomCode).toMatch(/^[A-Z2-9]{5}$/);
+        expect(joined.roomCode).toMatch(/^\d{5}$/);
         expect(joined.seat).toBe(0);
         expect(joined.token).toBe('token-1');
 
-        await send('c2', { action: 'join', roomCode: joined.roomCode.toLowerCase(), name: 'はる' });
+        await send('c2', { action: 'join', roomCode: joined.roomCode, name: 'はる' });
         expect(last('c2', 'joined').seat).toBe(1);
         expect(last('c1', 'lobby').players.map(p => p.name)).toEqual(['あき', 'はる']);
         // 他の人のトークンはロビーに入らない
@@ -49,7 +49,7 @@ describe('オンライン対戦の部屋', () => {
     });
 
     it('存在しない部屋・満員の部屋には入れない', async () => {
-        await send('c9', { action: 'join', roomCode: 'ZZZZZ', name: 'x' });
+        await send('c9', { action: 'join', roomCode: '00000', name: 'x' });
         expect(last('c9', 'error').message).toBe('部屋が見つかりません');
 
         await send('c1', { action: 'create', name: 'あき' });

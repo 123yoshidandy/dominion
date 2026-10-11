@@ -14,7 +14,10 @@ import { getServerUrl } from './online-config.js';
 const SETTINGS_KEY = 'dominion.settings';
 const DEFAULT_SETTINGS = {
     stackHand: false, // 手札の同じカードを重ねて表示する
-    cardSets: 'base+seaside' // 王国カードを選ぶセット（'base' / 'seaside' / 'base+seaside'）
+    cardSets: 'base+seaside', // 王国カードを選ぶセット（'base' / 'seaside' / 'base+seaside'）
+    playerCount: 2,           // ローカル対戦の人数
+    localPlayers: [],         // ローカル対戦の各席の { name, isCPU }
+    onlineName: ''            // オンライン対戦で使う名前
 };
 
 class UIController {
