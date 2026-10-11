@@ -288,33 +288,36 @@ export function hasCpuPrompt(game) {
 }
 
 // CPUの手番を1手だけ進める（CPUへの選択待ちがあれば、手番に関係なくそれに答える）
-// 選んだ操作が失敗しても、次の段階へ進めることで必ずゲームを前進させる
+// 操作は人間と同じく game.applyCommand で行い、記録に残す
+// 選んだ操作が受け付けられなくても、次の段階へ進めることで必ずゲームを前進させる
 export function runCpuStep(game) {
     if (game.phase === 'end') return;
 
-    if (game.pendingPrompt) {
+    const prompt = game.pendingPrompt;
+    if (prompt) {
         // 人間の選択待ちなら、答えが出るまで待つ
         if (hasCpuPrompt(game)) {
-            game.resolvePrompt(choosePromptAnswer(game.pendingPrompt, game));
+            game.applyCommand(prompt.player.id, { type: 'answer', answer: choosePromptAnswer(prompt, game) });
         }
         return;
     }
 
     const player = game.getCurrentPlayer();
     if (!player.isCPU) return;
+    const apply = (command) => game.applyCommand(player.id, command);
 
     if (game.phase === 'action') {
         const index = chooseActionCard(player, game);
-        if (index < 0 || !game.playActionCard(index)) {
-            game.enterBuyPhase();
+        if (index < 0 || !apply({ type: 'play', cardIndex: index })) {
+            apply({ type: 'buyPhase' });
         }
         return;
     }
 
     if (game.phase === 'buy') {
         const cardId = player.buys > 0 ? chooseCardToBuy(player, game) : null;
-        if (!cardId || !game.buyCard(cardId)) {
-            game.endTurn();
+        if (!cardId || !apply({ type: 'buy', cardId })) {
+            apply({ type: 'endTurn' });
         }
     }
 }

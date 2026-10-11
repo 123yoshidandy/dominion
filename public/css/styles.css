@@ -300,6 +300,14 @@ button.primary {
 /* ===== カード共通 ===== */
 
 /* --type-tint はイラストの背景色（魔女の三日月はこの色の円を重ねて描いている） */
+/* 他のプレイヤーが選択に答えるのを待っている表示 */
+.status-waiting {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--gold, #e6b84f);
+    white-space: nowrap;
+}
+
 .action-card { --type: var(--type-action); --type-tint: #dce8f5; }
 .treasure-card { --type: var(--type-treasure); --type-tint: #f7ecd0; }
 .victory-card { --type: var(--type-victory); --type-tint: #e2f0dc; }

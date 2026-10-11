@@ -11,9 +11,8 @@ export const DEFAULT_KINGDOM = [
 export const makeCards = (ids) => ids.map(id => new Card(ALL_CARDS[id]));
 
 // 王国カードを指定してゲームを始める（ランダムに選ばれると結果が変わるテストのため）
-export function createGame(players, kingdom = DEFAULT_KINGDOM) {
-    const game = new Game(players);
-    game.selectRandomKingdomCards = () => [...kingdom];
+export function createGame(players, kingdom = DEFAULT_KINGDOM, options = {}) {
+    const game = new Game(players, { kingdom, ...options });
     game.setup();
     return game;
 }

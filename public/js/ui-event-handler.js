@@ -23,14 +23,12 @@ class UIEventHandler {
     
     // カードプレイ処理
     handleCardPlay(cardIndex) {
-        const gameState = this.gameController.getGameState();
-        if (!gameState) return;
+        const view = this.gameController.getView();
+        if (!view) return;
 
-        const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-        const card = currentPlayer.hand[cardIndex];
-
-        const canPlay = !this.gameController.isCpuTurn() && gameState.phase === 'action' &&
-            currentPlayer.actions > 0 && card.isType(CARD_TYPES.ACTION);
+        const card = view.me?.hand[cardIndex];
+        const canPlay = view.isMyTurn && view.phase === 'action' && view.me.actions > 0 &&
+            card && card.isType(CARD_TYPES.ACTION);
 
         // 今プレイできないカードはタップしても何もしない（説明は長押しで表示する）
         if (!canPlay) return;
@@ -41,22 +39,21 @@ class UIEventHandler {
 
         // 場札の着地点へアニメーションで移動させてからプレイする
         cardAnimator.playCard(cardElement, target, () => {
-            this.gameController.playActionCard(cardIndex);
+            this.gameController.send({ type: 'play', cardIndex });
         });
     }
     
     // 購入フェーズへの移行処理
     handleEnterBuyPhase() {
-        if (this.gameController.isCpuTurn()) return;
+        const view = this.gameController.getView();
+        if (!view || !view.isMyTurn) return;
+        const hand = view.me.hand;
+        const enterBuyPhase = () => this.gameController.send({ type: 'buyPhase' });
         
         // 財宝カードをアニメーションするためのカード要素を取得（要素の data-card-index で手札と対応させる）
-        const gameState = this.gameController.getGameState();
-        if (!gameState) return;
-        const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-        
         const treasureCards = Array.from(this.elements.handCards.querySelectorAll('.card'))
             .filter(card => {
-                const cardData = currentPlayer.hand[parseInt(card.getAttribute('data-card-index'))];
+                const cardData = hand[parseInt(card.getAttribute('data-card-index'))];
                 return cardData && cardData.isType(CARD_TYPES.TREASURE);
             });
         
@@ -67,7 +64,7 @@ class UIEventHandler {
             let finished = 0;
             
             treasureCards.forEach((card, i) => {
-                const cardId = currentPlayer.hand[parseInt(card.getAttribute('data-card-index'))].id;
+                const cardId = hand[parseInt(card.getAttribute('data-card-index'))].id;
                 const target = targetFor(cardId);
                 setTimeout(() => {
                     cardAnimator.playCard(card, target, () => {
@@ -75,31 +72,27 @@ class UIEventHandler {
                         card.style.visibility = 'hidden';
                         finished++;
                         if (finished === treasureCards.length) {
-                            this.gameController.enterBuyPhase();
+                            enterBuyPhase();
                         }
                     });
                 }, i * STAGGER_MS);
             });
         } else {
             // 財宝カードがない場合は直接購入フェーズに移行
-            this.gameController.enterBuyPhase();
+            enterBuyPhase();
         }
     }
     
     // カード購入処理
     handleCardPurchase(cardId) {
-        if (this.gameController.isCpuTurn()) return;
+        const view = this.gameController.getView();
+        if (!view || !view.isMyTurn || view.phase !== 'buy') return;
         
-        const gameState = this.gameController.getGameState();
-        if (!gameState || gameState.phase !== 'buy') return;
+        const currentPlayer = view.me;
         
-        const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-        
-        // 購入に成功したら、購入回数が残っていなければターンを自動で終える
+        // 購入回数を使い切ったときのターン終了は、描き直すときに endTurnIfNoBuysLeft で判定する
         const purchase = () => {
-            if (this.gameController.buyCard(cardId)) {
-                this.endTurnIfNoBuysLeft();
-            }
+            this.gameController.send({ type: 'buy', cardId });
         };
         
         // カード情報を取得して購入可能かチェック
@@ -159,30 +152,28 @@ class UIEventHandler {
         };
     }
     
-    // 購入回数を使い切っていたら、購入したカードが見える程度に間を置いてターンを終える
-    endTurnIfNoBuysLeft() {
-        const gameState = this.gameController.getGameState();
-        if (!gameState || gameState.phase !== 'buy') return;
+    // 自分の購入フェーズで購入回数を使い切っていたら、購入したカードが見える程度に間を置いてターンを終える
+    // 画面を描き直すたびに呼ぶ。選択待ち（船乗りなど）の間は終えず、答えた後の描き直しでもう一度判定する
+    endTurnIfNoBuysLeft(view) {
+        if (this.autoEndTimer || !view.isMyTurn || view.phase !== 'buy') return;
+        if (view.me.buys > 0 || view.prompt) return;
         
-        const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-        // 選択待ちの間は終えない（答えた後にもう一度判定する）
-        if (currentPlayer.buys > 0 || currentPlayer.isCPU || this.gameController.game.pendingPrompt) return;
-        
-        setTimeout(() => this.handleEndTurn(), UIEventHandler.AUTO_END_TURN_DELAY_MS);
+        this.autoEndTimer = setTimeout(() => {
+            this.autoEndTimer = null;
+            this.handleEndTurn();
+        }, UIEventHandler.AUTO_END_TURN_DELAY_MS);
     }
     
     // ターン終了処理
     handleEndTurn() {
+        const view = this.gameController.getView();
         // 自動のターン終了とボタン操作が重なっても、二重にターンを進めない
-        if (this.isEndingTurn || this.gameController.isCpuTurn()) return;
-        
-        const gameState = this.gameController.getGameState();
-        if (!gameState) return;
+        if (this.isEndingTurn || !view || !view.isMyTurn || view.prompt) return;
         
         this.isEndingTurn = true;
         const finishTurn = () => {
             this.isEndingTurn = false;
-            this.gameController.endTurn();
+            this.gameController.send({ type: 'endTurn' });
         };
         
         // 手札と場のカードを捨て札にアニメーションする
@@ -237,6 +228,7 @@ class UIEventHandler {
         
         // ゲームを初期化（使うカードのセットは設定から）
         const cardSets = this.uiController.settings.cardSets.split('+');
+        this.uiController.resetForNewGame();
         this.gameController.initGame(playerNames, { cardSets });
         
         // モーダルを閉じる

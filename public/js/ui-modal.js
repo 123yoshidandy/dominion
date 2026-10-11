@@ -147,11 +147,11 @@ class UIModal {
     }
     
     // 選択待ちの画面。必ず答える必要があるので×は出さない
-    showPrompt(prompt) {
+    showPrompt(prompt, view) {
         // 手番ではないプレイヤーが答える選択（民兵の攻撃など）は、誰が答えるのかを明示する
-        const current = this.uiController.gameController.getCurrentPlayer();
-        const who = prompt.player !== current ? `${prompt.player.name}：` : '';
+        const who = prompt.playerId !== view.currentPlayerId ? `${prompt.playerName}：` : '';
         this.elements.modalTitle.textContent = `${who}${prompt.title}`;
+        this.currentPromptView = view;
         
         if (prompt.type === 'confirm') {
             this.showConfirmPrompt(prompt);
@@ -165,12 +165,9 @@ class UIModal {
     // 答えをゲームに渡す。受け付けられなかったときは同じ選択を出し直して、ゲームが止まらないようにする
     answerPrompt(prompt, answer) {
         this.closeModal();
-        if (!this.uiController.gameController.resolvePrompt(answer)) {
-            this.showPrompt(prompt);
-            return;
+        if (!this.uiController.gameController.send({ type: 'answer', answer })) {
+            this.showPrompt(prompt, this.currentPromptView);
         }
-        // 購入で起きた選択（船乗り）に答えた後、購入回数がなければターンを終える
-        this.uiController.eventHandler.endTurnIfNoBuysLeft();
     }
     
     // はい／いいえの選択（対象のカードがあれば大きく表示する）
@@ -193,7 +190,7 @@ class UIModal {
         const { cards, min, max } = prompt;
         
         // 手札から選ぶときは手札と同じ順に並べる（data-index は元の番号のまま）
-        const order = cards === prompt.player.hand
+        const order = prompt.fromHand
             ? this.view.getSortedHandIndices(cards)
             : cards.map((card, index) => index);
         const range = min === max ? `${min}枚` : (min === 0 ? `最大${max}枚` : `${min}〜${max}枚`);
@@ -246,15 +243,15 @@ class UIModal {
     }
     
     // ゲーム結果表示
-    showGameResults(scores) {
+    showGameResults(result) {
         this.elements.modalTitle.textContent = 'ゲーム終了';
 
         let html = '<div class="game-results">';
 
-        scores.forEach((score, index) => {
+        result.forEach((score, index) => {
             html += `<div class="result-row ${index === 0 ? 'winner' : ''}">
                 <span class="rank">${index + 1}位</span>
-                <span class="player-name">${score.player.name}</span>
+                <span class="player-name">${score.name}</span>
                 <span class="points">${score.points}点</span>
             </div>`;
         });

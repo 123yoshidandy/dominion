@@ -5,12 +5,18 @@
 import Card from './card.js';
 import Player from './player.js';
 import { ALL_CARDS, BASIC_CARDS, CARD_TYPES, CARD_SETS, getKingdomCardIds } from './card-data.js';
+import { createRandom, createSeed } from './random.js';
 
 // ゲームクラス
 class Game {
-    // cardSets は王国カードを選ぶセット（基本・海辺）
-    constructor(playerNames, { cardSets = Object.values(CARD_SETS) } = {}) {
+    // cardSets は王国カードを選ぶセット（基本・海辺）。kingdom を渡すとその王国カードで遊ぶ
+    // seed が同じなら、同じ操作をすれば必ず同じ結果になる
+    constructor(playerNames, { cardSets = Object.values(CARD_SETS), kingdom = null, seed = createSeed() } = {}) {
         this.cardSets = cardSets;
+        this.kingdom = kingdom;
+        this.seed = seed;
+        this.random = createRandom(seed);
+        this.commands = []; // 受け付けた操作の記録（Game.replay で再現できる）
         this.players = [];
         this.supply = {};   // サプライパイル
         this.trash = [];    // 廃棄置き場
@@ -21,11 +27,14 @@ class Game {
         this.pendingPrompt = null; // プレイヤーの選択待ち（地下室・礼拝堂など）
         this.effectQueue = [];     // カード効果のまだ実行していない手順（選択待ちの後に続きを進める）
         this.isExtraTurn = false;  // 前哨地による追加のターン中か
+        this.lastError = null;     // 直前に受け付けなかった操作の理由
+        this.promptCount = 0;      // これまでの選択待ちの数（画面で同じ選択を出し直さないための番号）
         
         // プレイヤーの作成（名前の文字列か { name, isCPU } を受け付ける）
         playerNames.forEach((config, index) => {
             const { name, isCPU = false } = typeof config === 'string' ? { name: config } : config;
             const player = new Player(name, index, isCPU);
+            player.random = this.random;
             this.players.push(player);
         });
     }
@@ -42,7 +51,7 @@ class Game {
         });
         
         // 最初のプレイヤーを設定
-        this.currentPlayerIndex = Math.floor(Math.random() * this.players.length);
+        this.currentPlayerIndex = Math.floor(this.random() * this.players.length);
         
         this.log('ゲームが開始されました');
         this.startTurn(this.getCurrentPlayer());
@@ -65,7 +74,7 @@ class Game {
         this.supply.curse = (this.players.length - 1) * 10;
         
         // 王国カードをランダムに10種類選ぶ
-        this.selectedKingdomCards = this.selectRandomKingdomCards(10);
+        this.selectedKingdomCards = this.kingdom ? [...this.kingdom] : this.selectRandomKingdomCards(10);
         
         // 選んだ王国カードをサプライに追加
         this.selectedKingdomCards.forEach(cardId => {
@@ -89,7 +98,7 @@ class Game {
         for (let i = 0; i < count; i++) {
             if (kingdomCardIds.length === 0) break;
             
-            const randomIndex = Math.floor(Math.random() * kingdomCardIds.length);
+            const randomIndex = Math.floor(this.random() * kingdomCardIds.length);
             const cardId = kingdomCardIds.splice(randomIndex, 1)[0];
             // 小文字に変換して返す
             selectedCards.push(cardId.toLowerCase());
@@ -111,10 +120,7 @@ class Game {
     
     // ゲームログを追加
     log(message) {
-        const logEntry = {
-            message,
-            timestamp: new Date().toISOString()
-        };
+        const logEntry = { message };
         this.logs.push(logEntry);
         
         // UIに通知するためのコールバックがあれば呼び出す
@@ -123,10 +129,66 @@ class Game {
         }
     }
     
+    // 受け付けられない操作の理由を残す（ログには書かないので、操作を再現しても結果が変わらない）
+    reject(message) {
+        this.lastError = message;
+    }
+    
+    // ===== 操作 =====
+    // プレイヤーの操作はすべてここを通す。操作したプレイヤーを確かめ、受け付けた操作だけを記録する
+    //   { type: 'play', cardIndex } アクションカードをプレイ
+    //   { type: 'buyPhase' }        購入フェーズへ
+    //   { type: 'buy', cardId }     カードを購入
+    //   { type: 'endTurn' }         ターン終了
+    //   { type: 'answer', answer }  選択に答える（select はインデックスの配列、confirm は真偽値）
+    applyCommand(playerId, command) {
+        this.lastError = null;
+        const isCurrent = this.getCurrentPlayer().id === playerId;
+        let accepted = false;
+        
+        switch (command.type) {
+            case 'play':
+                accepted = isCurrent && this.playActionCard(command.cardIndex);
+                break;
+            case 'buyPhase':
+                accepted = isCurrent && this.enterBuyPhase();
+                break;
+            case 'buy':
+                accepted = isCurrent && this.buyCard(command.cardId);
+                break;
+            case 'endTurn':
+                accepted = isCurrent && this.endTurn();
+                break;
+            case 'answer':
+                // 選択はそれを求められたプレイヤーだけが答えられる（民兵の攻撃は手番ではない人が答える）
+                accepted = this.pendingPrompt?.player.id === playerId && this.resolvePrompt(command.answer);
+                break;
+        }
+        
+        if (accepted) {
+            this.commands.push({ playerId, ...command });
+        } else if (!this.lastError) {
+            this.reject('今はその操作はできません');
+        }
+        return accepted;
+    }
+    
+    // 操作の記録からゲームを再現する（サーバーでは操作のたびにこれで今の状態に戻す）
+    static replay(players, options, commands) {
+        const game = new Game(players, options);
+        game.setup();
+        commands.forEach(({ playerId, ...command }, index) => {
+            if (!game.applyCommand(playerId, command)) {
+                throw new Error(`操作 ${index} を再現できませんでした: ${game.lastError}`);
+            }
+        });
+        return game;
+    }
+    
     // 選択待ちの間は他の操作を受け付けない
     isAwaitingPrompt() {
         if (this.pendingPrompt) {
-            this.log('カードの選択を完了してください');
+            this.reject('カードの選択を完了してください');
             return true;
         }
         return false;
@@ -148,19 +210,19 @@ class Game {
         }
 
         if (this.phase !== 'action') {
-            this.log('アクションフェーズではありません');
+            this.reject('アクションフェーズではありません');
             return false;
         }
         
         if (player.actions <= 0) {
-            this.log('アクションが残っていません');
+            this.reject('アクションが残っていません');
             return false;
         }
         
         const card = player.hand[cardIndex];
         
         if (!card || !card.isType(CARD_TYPES.ACTION)) {
-            this.log('選択されたカードはアクションカードではありません');
+            this.reject('選択されたカードはアクションカードではありません');
             return false;
         }
         
@@ -289,12 +351,12 @@ class Game {
         }
 
         if (this.phase !== 'buy') {
-            this.log('購入フェーズではありません');
+            this.reject('購入フェーズではありません');
             return false;
         }
 
         if (player.buys <= 0) {
-            this.log('購入回数が残っていません');
+            this.reject('購入回数が残っていません');
             return false;
         }
 
@@ -303,19 +365,19 @@ class Game {
         const lowerCardId = cardId.toLowerCase();
 
         if (!this.supply[lowerCardId] || this.supply[lowerCardId] <= 0) {
-            this.log('選択されたカードはサプライにありません');
+            this.reject('選択されたカードはサプライにありません');
             return false;
         }
 
         const card = ALL_CARDS[upperCardId];
 
         if (!card) {
-            this.log(`カードID ${cardId} は定義されていません`);
+            this.reject(`カードID ${cardId} は定義されていません`);
             return false;
         }
 
         if (player.coins < card.cost) {
-            this.log(`${card.name}を購入するためのコインが足りません（必要: ${card.cost}, 所持: ${player.coins}）`);
+            this.reject(`${card.name}を購入するためのコインが足りません（必要: ${card.cost}, 所持: ${player.coins}）`);
             return false;
         }
 
@@ -431,8 +493,9 @@ class Game {
             this.log(`${index + 1}位: ${score.player.name} - ${score.points}点`);
         });
         
-        // 勝者を記録
+        // 勝者と結果を記録
         this.winner = scores[0].player;
+        this.result = scores.map(({ player, points }) => ({ playerId: player.id, name: player.name, points }));
         
         // UIに通知するためのコールバックがあれば呼び出す
         if (this.callbacks.onGameEnd) {
@@ -573,7 +636,9 @@ class Game {
     
     // 選択待ちにしてUIに知らせる。答えは resolvePrompt で受け取る
     setPrompt(prompt) {
-        this.pendingPrompt = prompt;
+        this.promptCount++;
+        this.pendingPrompt = { ...prompt, id: this.promptCount };
+        prompt = this.pendingPrompt;
         
         if (this.callbacks.onPrompt) {
             this.callbacks.onPrompt(prompt);
@@ -591,7 +656,7 @@ class Game {
                 .filter(index => Number.isInteger(index) && index >= 0 && index < prompt.cards.length);
             
             if (indices.length < prompt.min || indices.length > prompt.max) {
-                this.log(prompt.min === prompt.max
+                this.reject(prompt.min === prompt.max
                     ? `${prompt.min}枚選んでください`
                     : `${prompt.min}〜${prompt.max}枚選んでください`);
                 return false;

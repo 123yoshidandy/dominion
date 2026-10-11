@@ -101,7 +101,7 @@ class UIController {
             // 保存できなくても、このセッション中は設定が有効
         }
         
-        if (this.gameController.game) {
+        if (this.gameController.getView()) {
             this.updateGameView();
         }
     }
@@ -116,12 +116,49 @@ class UIController {
         this.eventHandler.startGame();
     }
     
-    // ゲーム画面を更新
+    // 新しいゲームを始める前に、前のゲームの表示を片付ける
+    resetForNewGame() {
+        this.view.reset();
+        this.view.clearLog();
+        this.renderedLogCount = 0;
+        this.shownPromptId = null;
+        this.isResultShown = false;
+    }
+    
+    // ゲーム画面を更新（ゲームの状態が変わるたびに呼ばれる）
     updateGameView() {
-        const gameState = this.gameController.getGameState();
-        this.view.updateGameView(gameState);
+        const view = this.gameController.getView();
+        if (!view) return;
+        
+        this.view.updateGameView(view);
+        this.syncLogs(view);
+        this.syncPrompt(view);
+        this.syncResult(view);
+        this.eventHandler.endTurnIfNoBuysLeft(view);
 
         this.scheduleCpuStep();
+    }
+    
+    // まだ表示していないログを追加する（ビューには logsFrom 番目以降のログが入っている）
+    syncLogs(view) {
+        const skip = Math.max(0, this.renderedLogCount - view.logsFrom);
+        view.logs.slice(skip).forEach(message => this.view.addLogEntry(message));
+        this.renderedLogCount = Math.max(this.renderedLogCount, view.logsFrom + view.logs.length);
+    }
+    
+    // 自分が答える選択待ちがあれば、まだ出していないものだけ表示する
+    syncPrompt(view) {
+        const prompt = view.prompt;
+        if (!prompt || prompt.waiting || prompt.id === this.shownPromptId) return;
+        this.shownPromptId = prompt.id;
+        this.modal.showPrompt(prompt, view);
+    }
+    
+    // ゲームが終わったら結果を1回だけ表示する
+    syncResult(view) {
+        if (!view.result || this.isResultShown) return;
+        this.isResultShown = true;
+        this.modal.showGameResults(view.result);
     }
 
     // CPUにやることがあれば、ログを追えるよう少し間を置いて1手進める
@@ -136,21 +173,6 @@ class UIController {
         }, UIController.CPU_STEP_DELAY_MS);
     }
     
-    // ログエントリ追加
-    addLogEntry(logEntry) {
-        this.view.addLogEntry(logEntry);
-    }
-    
-    // プレイヤーの選択待ちを表示する
-    showPrompt(prompt) {
-        this.modal.showPrompt(prompt);
-    }
-    
-    // ゲーム結果表示
-    showGameResults(scores) {
-        this.modal.showGameResults(scores);
-    }
-    
     // カードプレイ処理
     handleCardPlay(cardIndex) {
         this.eventHandler.handleCardPlay(cardIndex);
@@ -163,11 +185,11 @@ class UIController {
     
     // サプライのカードの説明を表示する（長押し時）
     showSupplyCardDetail(cardId) {
-        const gameState = this.gameController.getGameState();
-        if (!gameState) return;
+        const view = this.gameController.getView();
+        if (!view) return;
         
         const card = ALL_CARDS[cardId.toUpperCase()];
-        this.modal.showCardDetail(card, { count: gameState.supply[cardId] ?? 0 });
+        this.modal.showCardDetail(card, { count: view.supply[cardId] ?? 0 });
     }
     
     // 手札・場札のカードの説明を表示する（長押し時）

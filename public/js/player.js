@@ -18,6 +18,7 @@ class Player {
         this.actions = 0;    // アクション数
         this.buys = 0;       // 購入数
         this.coins = 0;      // コイン数
+        this.random = Math.random; // シャッフルに使う乱数（Game がシード付きの乱数に差し替える）
         this.merchantBonus = 0;      // このターンにプレイした商人の数（最初の銀貨で財宝+1ずつ）
         this.hasPlayedSilver = false; // このターンに銀貨をプレイしたか
         
@@ -71,7 +72,7 @@ class Player {
     // デッキをシャッフル
     shuffleDeck() {
         for (let i = this.deck.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
+            const j = Math.floor(this.random() * (i + 1));
             [this.deck[i], this.deck[j]] = [this.deck[j], this.deck[i]];
         }
     }

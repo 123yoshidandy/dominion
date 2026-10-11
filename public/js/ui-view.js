@@ -21,35 +21,32 @@ class UIView {
         this.uiController = uiController;
         this.elements = uiController.elements;
         
-        // プレイヤーごとの前回描画した手札。新しく増えたカード（＝引いたカード）を見つけるのに使う
+        // プレイヤーごとの前回描画した手札（カードIDごとの枚数）。増えたカード（＝引いたカード）を見つけるのに使う
         this.lastHands = new Map();
     }
+    
+    // 新しいゲームを始めるときに、前のゲームの描画の記録を消す
+    reset() {
+        this.lastHands.clear();
+    }
 
-    // ゲーム画面を更新
-    updateGameView(gameState) {
-        if (!gameState) return;
+    // ゲーム画面を更新（view は hydrateGameView したプレイヤーから見た状態）
+    updateGameView(view) {
+        if (!view) return;
 
-        // ゲームステータスを更新
-        this.updateGameStatus(gameState);
-
-        // サプライパイルを更新
-        this.updateSupplyPiles(gameState);
-
-        // プレイヤー情報を更新
-        this.updatePlayersInfo(gameState);
-
-        // 現在のプレイヤーの手札と場を更新
-        this.updateCurrentPlayerArea(gameState);
-
-        // ボタンやアクション状態を更新
-        this.updateGameControls(gameState);
+        this.updateGameStatus(view);
+        this.updateSupplyPiles(view);
+        this.updatePlayersInfo(view);
+        this.updateDock(view);
+        this.updatePlayArea(view);
+        this.updateGameControls(view);
     }
 
     // ゲームステータスと、現在のプレイヤーの残りリソースを更新
-    updateGameStatus(gameState) {
-        const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+    updateGameStatus(view) {
+        const currentPlayer = view.current;
 
-        if (gameState.phase === 'end') {
+        if (view.phase === 'end') {
             this.elements.gameStatus.textContent = 'ゲーム終了';
             this.elements.turnStats.innerHTML = '';
             return;
@@ -58,7 +55,8 @@ class UIView {
         const cpuLabel = currentPlayer.isCPU ? '（CPU）' : '';
         this.elements.gameStatus.innerHTML = `
             <span class="status-player">${currentPlayer.name}${cpuLabel}</span>
-            <span class="status-phase phase-${gameState.phase}">${this.getPhaseText(gameState.phase)}</span>
+            <span class="status-phase phase-${view.phase}">${this.getPhaseText(view.phase)}</span>
+            ${view.prompt?.waiting ? `<span class="status-waiting">${view.prompt.playerName}が選択中</span>` : ''}
         `;
 
         const stat = (label, value, dim) => `
@@ -69,7 +67,7 @@ class UIView {
         `;
 
         this.elements.turnStats.innerHTML =
-            stat('アクション', currentPlayer.actions, gameState.phase !== 'action') +
+            stat('アクション', currentPlayer.actions, view.phase !== 'action') +
             stat('購入', currentPlayer.buys, false) +
             stat('コイン', currentPlayer.coins, false);
     }
@@ -85,14 +83,14 @@ class UIView {
     }
 
     // サプライパイルを更新
-    updateSupplyPiles(gameState) {
-        const supply = gameState.supply;
-        const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+    updateSupplyPiles(view) {
+        const supply = view.supply;
+        const currentPlayer = view.current;
 
-        // 人間の購入フェーズでは、コインが足りず買えないカードをグレーアウトする
-        // （アクションフェーズやCPUの手番では、すべて通常の表示にする）
-        const isHumanBuying = gameState.phase === 'buy' && !currentPlayer.isCPU && currentPlayer.buys > 0;
-        const isUnaffordable = (card) => isHumanBuying && currentPlayer.coins < card.cost;
+        // 自分の購入フェーズでは、コインが足りず買えないカードをグレーアウトする
+        // （アクションフェーズや他のプレイヤーの手番では、すべて通常の表示にする）
+        const isBuying = view.isMyTurn && view.phase === 'buy' && currentPlayer.buys > 0;
+        const isUnaffordable = (card) => isBuying && currentPlayer.coins < card.cost;
 
         const tilesHtml = (cardIds) => cardIds
             .filter(cardId => supply[cardId] !== undefined)
@@ -206,9 +204,9 @@ class UIView {
     }
 
     // プレイヤー情報を更新
-    updatePlayersInfo(gameState) {
-        const html = gameState.players.map((player, index) => {
-            const isCurrentPlayer = index === gameState.currentPlayerIndex;
+    updatePlayersInfo(view) {
+        const html = view.players.map(player => {
+            const isCurrentPlayer = player === view.current;
 
             return `
                 <div class="player-stats ${isCurrentPlayer ? 'active-player' : ''}">
@@ -216,10 +214,10 @@ class UIView {
                         ${player.name}${player.isCPU ? '<span class="cpu-badge">CPU</span>' : ''}
                     </div>
                     <div class="player-meta">
-                        <span>勝利点 <b>${player.calculateVictoryPoints()}</b></span>
-                        <span>山札 ${player.deck.length}</span>
-                        <span>手札 ${player.hand.length}</span>
-                        <span>捨て札 ${player.discard.length}</span>
+                        <span>勝利点 <b>${player.victoryPoints}</b></span>
+                        <span>山札 ${player.deckCount}</span>
+                        <span>手札 ${player.handCount}</span>
+                        <span>捨て札 ${player.discardCount}</span>
                         ${this.createMatsHtml(player)}
                     </div>
                 </div>
@@ -232,9 +230,9 @@ class UIView {
     // 島マット・原住民の村マット・脇に置いたカードの枚数（あるときだけ表示する）
     createMatsHtml(player) {
         return [
-            ['島', player.mats.island.length],
-            ['村マット', player.mats.nativeVillage.length],
-            ['脇', player.setAside.length]
+            ['島', player.islandMat.length],
+            ['村マット', player.nativeVillageCount],
+            ['脇', player.setAsideCount]
         ]
             .filter(([, count]) => count > 0)
             .map(([label, count]) => `<span>${label} ${count}</span>`)
@@ -274,15 +272,16 @@ class UIView {
         return groups;
     }
     
-    // 現在のプレイヤーの手札と場を更新
-    updateCurrentPlayerArea(gameState) {
-        const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+    // 下段（自分の手札・山札・捨て札）を更新
+    updateDock(view) {
+        const me = view.me;
+        const hand = me?.hand ?? [];
 
         // 今プレイできるアクションカードを強調する
-        const canPlayActions = gameState.phase === 'action' && !currentPlayer.isCPU && currentPlayer.actions > 0;
+        const canPlayActions = view.isMyTurn && view.phase === 'action' && me.actions > 0;
 
         // 手札を種類・コスト順に並べて表示する。重ねたカードは先頭の1枚の番号を持たせ、タップでその1枚をプレイする
-        const groups = this.getHandGroups(currentPlayer.hand, this.uiController.settings.stackHand);
+        const groups = this.getHandGroups(hand, this.uiController.settings.stackHand);
         
         this.elements.handCards.innerHTML = groups.map(({ card, indices }) => {
             const playable = canPlayActions && card.isType(CARD_TYPES.ACTION);
@@ -294,15 +293,33 @@ class UIView {
             const index = parseInt(element.getAttribute('data-card-index'));
             onPress(element, {
                 onTap: () => this.uiController.handleCardPlay(index),
-                onLongPress: () => this.uiController.showCardDetail(currentPlayer.hand[index])
+                onLongPress: () => this.uiController.showCardDetail(hand[index])
             });
         });
         
-        this.animateDrawnCards(currentPlayer, groups);
+        if (me) {
+            this.animateDrawnCards(me, groups);
+        }
 
-        // 場札は同じカードを常にまとめ、最初にプレイした位置に ×枚数 で表示する
+        // 山札は裏向き、捨て札は一番上のカードを表向きにして、枚数を ×N で表示する
+        const topDiscard = me?.discardTop ?? null;
+        this.elements.deckPile.innerHTML = this.createPileHtml(me?.deckCount ?? 0);
+        this.elements.discardCards.innerHTML = this.createPileHtml(me?.discardCount ?? 0, topDiscard);
+        
+        // 捨て札は長押しで一番上のカードの説明を表示する（要素は描画のたびに作り直すので、リスナーは重ならない）
+        const discardCard = this.elements.discardCards.querySelector('.pile-card:not(.empty)');
+        if (discardCard) {
+            onPress(discardCard, {
+                onLongPress: () => this.uiController.showCardDetail(topDiscard)
+            });
+        }
+    }
+    
+    // 場札（手番のプレイヤーがプレイしたカード）を更新
+    // 同じカードは常にまとめ、最初にプレイした位置に ×枚数 で表示する
+    updatePlayArea(view) {
         const playGroups = [];
-        currentPlayer.playArea.forEach(card => {
+        view.current.playArea.forEach(card => {
             const group = playGroups.find(g => g.card.id === card.id);
             if (group) {
                 group.count++;
@@ -321,36 +338,27 @@ class UIView {
                 onLongPress: () => this.uiController.showCardDetail(playGroups[index].card)
             });
         });
-
-        // 山札は裏向き、捨て札は一番上のカードを表向きにして、枚数を ×N で表示する
-        const topDiscard = currentPlayer.discard[currentPlayer.discard.length - 1];
-        this.elements.deckPile.innerHTML = this.createPileHtml(currentPlayer.deck.length);
-        this.elements.discardCards.innerHTML = this.createPileHtml(currentPlayer.discard.length, topDiscard);
-        
-        // 捨て札は長押しで一番上のカードの説明を表示する（要素は描画のたびに作り直すので、リスナーは重ならない）
-        const discardCard = this.elements.discardCards.querySelector('.pile-card:not(.empty)');
-        if (discardCard) {
-            onPress(discardCard, {
-                onLongPress: () => this.uiController.showCardDetail(topDiscard)
-            });
-        }
     }
     
     // 前回の描画から手札に増えたカードを、山札から飛んでくるように見せる
+    // ビューのカードは毎回作り直されるので、カードIDごとの枚数が増えた分を引いたカードとみなす
     // 初めて描画するプレイヤーは手札すべてが対象（ゲーム開始時の5枚）
     animateDrawnCards(player, groups) {
-        const previous = this.lastHands.get(player.id) ?? new Set();
-        this.lastHands.set(player.id, new Set(player.hand));
+        const countById = (cards) => cards.reduce((counts, card) => counts.set(card.id, (counts.get(card.id) ?? 0) + 1), new Map());
+        const previous = this.lastHands.get(player.id) ?? new Map();
+        const current = countById(player.hand);
+        this.lastHands.set(player.id, current);
         
+        const increased = new Map([...current].map(([id, count]) => [id, count - (previous.get(id) ?? 0)]));
         const elements = this.elements.handCards.querySelectorAll('.card');
         let order = 0;
         
         groups.forEach((group, i) => {
-            const isDrawn = group.indices.some(index => !previous.has(player.hand[index]));
-            if (isDrawn) {
-                cardAnimator.drawCard(elements[i], this.elements.deckPile, order * STAGGER_MS);
-                order++;
-            }
+            const id = group.card.id;
+            if ((increased.get(id) ?? 0) <= 0) return;
+            increased.set(id, increased.get(id) - group.indices.length);
+            cardAnimator.drawCard(elements[i], this.elements.deckPile, order * STAGGER_MS);
+            order++;
         });
     }
     
@@ -377,21 +385,16 @@ class UIView {
     }
 
     // ゲームコントロールを更新
-    updateGameControls(gameState) {
-        const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-
-        // CPUの手番中は人間の操作ボタンを無効にする
-        const isCpuTurn = currentPlayer.isCPU;
-
-        // ターン終了ボタン
-        this.elements.endTurnBtn.disabled = gameState.phase === 'end' || isCpuTurn;
+    updateGameControls(view) {
+        // 自分の手番でなければ操作ボタンを無効にする
+        this.elements.endTurnBtn.disabled = !view.isMyTurn;
 
         // アクションボタン
         let actionButtonsHtml = '';
 
-        if (gameState.phase === 'action' && !isCpuTurn) {
+        if (view.phase === 'action' && view.isMyTurn) {
             actionButtonsHtml += `
-                <button id="buy-phase-btn" ${currentPlayer.actions <= 0 ? 'class="highlight"' : ''}>購入へ</button>
+                <button id="buy-phase-btn" ${view.me.actions <= 0 ? 'class="highlight"' : ''}>購入へ</button>
             `;
         }
 
@@ -406,11 +409,17 @@ class UIView {
         }
     }
 
+    // ログを消す（新しいゲームを始めるとき）
+    clearLog() {
+        this.elements.logEntries.innerHTML = '';
+        this.elements.latestLog.textContent = '';
+    }
+
     // ログエントリ追加
-    addLogEntry(logEntry) {
+    addLogEntry(message) {
         const logElement = document.createElement('div');
         logElement.className = 'log-entry';
-        logElement.textContent = logEntry.message;
+        logElement.textContent = message;
 
         // 最新のログを強調表示するクラスを追加
         logElement.classList.add('new-log');
@@ -422,7 +431,7 @@ class UIView {
         this.elements.logEntries.appendChild(logElement);
 
         // ヘッダーにも最新のログを1行表示する
-        this.elements.latestLog.textContent = logEntry.message;
+        this.elements.latestLog.textContent = message;
 
         // アニメーション効果のためのクラスを追加して少し遅れて削除
         logElement.classList.add('log-entry-animation');

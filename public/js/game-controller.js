@@ -1,121 +1,71 @@
 /**
- * ドミニオンのゲームコントローラー
- * ゲームロジックとUIの橋渡しをします
+ * ドミニオンのゲームコントローラー（ローカル対戦）
+ * 画面には getView() でプレイヤーから見た状態だけを渡し、操作は send() で受け取る
+ * オンライン対戦のコントローラーも同じ形にして、画面からは区別なく使えるようにする
  */
 
 import Game from './game.js';
-import GameActionHandler from './game-action-handler.js';
+import { createGameView, hydrateGameView } from './game-view.js';
 import { runCpuStep, hasCpuPrompt } from './cpu-player.js';
 
 class GameController {
     constructor() {
         this.game = null;
         this.uiController = null;
-        this.actionHandler = new GameActionHandler(this);
+        this.viewerId = null; // 画面に表示しているプレイヤー
     }
-    
+
     // ゲームを初期化
     initGame(playerNames, options) {
         this.game = new Game(playerNames, options);
-        
-        // ゲームイベント用のコールバックを設定
-        this.setupGameCallbacks();
-        
-        // ゲームの初期設定を行う
-        this.game.setup();
-        
-        return this.game;
-    }
-    
-    // UIコントローラーを設定
-    setUIController(uiController) {
-        this.uiController = uiController;
-    }
-    
-    // ゲームのコールバックを設定
-    setupGameCallbacks() {
-        if (!this.game) return;
-        
-        // ゲーム状態が変更されたときのコールバック
+
+        // ゲーム状態が変わったら画面を描き直す
         this.game.setCallback('onStateChanged', () => {
             if (this.uiController) {
                 this.uiController.updateGameView();
             }
         });
-        
-        // ログが追加されたときのコールバック
-        this.game.setCallback('onLog', (logEntry) => {
-            if (this.uiController) {
-                this.uiController.addLogEntry(logEntry);
-            }
-        });
-        
-        // ゲームが終了したときのコールバック
-        this.game.setCallback('onGameEnd', (scores) => {
-            if (this.uiController) {
-                this.uiController.showGameResults(scores);
-            }
-        });
-        
-        // プレイヤーの選択待ちのコールバック（CPUの選択は runCpuStep で答えるので、人間のときだけ画面を出す）
-        this.game.setCallback('onPrompt', (prompt) => {
-            if (this.uiController && !prompt.player.isCPU) {
-                this.uiController.showPrompt(prompt);
-            }
-        });
+
+        this.game.setup();
+        this.viewerId = null;
+
+        return this.game;
     }
 
-    // アクションカードをプレイ
-    playActionCard(cardIndex) {
-        return this.actionHandler.playActionCard(cardIndex);
-    }
-    
-    // 購入フェーズに移行
-    enterBuyPhase() {
-        return this.actionHandler.enterBuyPhase();
-    }
-    
-    // カードを購入
-    buyCard(cardId) {
-        return this.actionHandler.buyCard(cardId);
-    }
-    
-    // ターン終了
-    endTurn() {
-        return this.actionHandler.endTurn();
-    }
-    
-    // ゲームの状態を取得
-    getGameState() {
-        if (!this.game) return null;
-        
-        return {
-            players: this.game.players,
-            currentPlayerIndex: this.game.currentPlayerIndex,
-            phase: this.game.phase,
-            supply: this.game.supply,
-            trash: this.game.trash,
-            logs: this.game.logs
-        };
-    }
-    
-    // 現在のプレイヤーを取得
-    getCurrentPlayer() {
-        if (!this.game) return null;
-        return this.game.getCurrentPlayer();
-    }
-    
-    // カード選択（捨てる・廃棄する）の結果を処理
-    resolvePrompt(selectedIndices) {
-        return this.actionHandler.resolvePrompt(selectedIndices);
+    // UIコントローラーを設定
+    setUIController(uiController) {
+        this.uiController = uiController;
     }
 
-    // 現在のプレイヤーがCPUで、まだゲームが続いているか
-    isCpuTurn() {
-        if (!this.game || this.game.phase === 'end') return false;
-        return this.game.getCurrentPlayer().isCPU;
+    // 画面に表示するプレイヤー。人間の選択待ちならその人、人間の手番ならその人
+    // CPUの手番中は、直前に表示していた人間のままにする（同じ端末で人間が交代で遊ぶときにも使える）
+    getViewerId() {
+        const game = this.game;
+        const prompt = game.pendingPrompt;
+        const current = game.getCurrentPlayer();
+
+        if (prompt && !prompt.player.isCPU) {
+            this.viewerId = prompt.player.id;
+        } else if (!current.isCPU) {
+            this.viewerId = current.id;
+        } else if (this.viewerId === null) {
+            this.viewerId = (game.players.find(player => !player.isCPU) ?? game.players[0]).id;
+        }
+        return this.viewerId;
     }
-    
+
+    // 画面に表示するプレイヤーから見たゲームの状態
+    getView() {
+        if (!this.game) return null;
+        return hydrateGameView(createGameView(this.game, this.getViewerId()));
+    }
+
+    // 画面に表示しているプレイヤーの操作を送る。受け付けられたかを返す
+    send(command) {
+        if (!this.game) return false;
+        return this.game.applyCommand(this.getViewerId(), command);
+    }
+
     // CPUがやることがあるか（CPUの手番、または人間の手番中にCPUが答える選択待ちがある）
     // 人間の選択待ちのあいだは、答えが出るまでCPUは待つ
     hasCpuWork() {
@@ -123,7 +73,7 @@ class GameController {
         if (this.game.pendingPrompt) return hasCpuPrompt(this.game);
         return this.game.getCurrentPlayer().isCPU;
     }
-    
+
     // CPUの手番を1手進める
     runCpuStep() {
         if (!this.game) return;
