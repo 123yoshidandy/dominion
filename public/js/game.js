@@ -4,11 +4,13 @@
 
 import Card from './card.js';
 import Player from './player.js';
-import { ALL_CARDS, BASIC_CARDS, KINGDOM_CARD_IDS, CARD_TYPES } from './card-data.js';
+import { ALL_CARDS, BASIC_CARDS, CARD_TYPES, CARD_SETS, getKingdomCardIds } from './card-data.js';
 
 // ゲームクラス
 class Game {
-    constructor(playerNames) {
+    // cardSets は王国カードを選ぶセット（基本・海辺）
+    constructor(playerNames, { cardSets = Object.values(CARD_SETS) } = {}) {
+        this.cardSets = cardSets;
         this.players = [];
         this.supply = {};   // サプライパイル
         this.trash = [];    // 廃棄置き場
@@ -18,6 +20,7 @@ class Game {
         this.callbacks = {}; // コールバック関数
         this.pendingPrompt = null; // プレイヤーの選択待ち（地下室・礼拝堂など）
         this.effectQueue = [];     // カード効果のまだ実行していない手順（選択待ちの後に続きを進める）
+        this.isExtraTurn = false;  // 前哨地による追加のターン中か
         
         // プレイヤーの作成（名前の文字列か { name, isCPU } を受け付ける）
         playerNames.forEach((config, index) => {
@@ -41,13 +44,8 @@ class Game {
         // 最初のプレイヤーを設定
         this.currentPlayerIndex = Math.floor(Math.random() * this.players.length);
         
-        // ゲームフェーズをアクションフェーズに変更
-        this.phase = 'action';
-        this.getCurrentPlayer().actions = 1;
-        this.getCurrentPlayer().buys = 1;
-        
         this.log('ゲームが開始されました');
-        this.log(`${this.getCurrentPlayer().name}のターンです`);
+        this.startTurn(this.getCurrentPlayer());
     }
     
     // サプライパイルの初期化
@@ -85,7 +83,7 @@ class Game {
     
     // 王国カードをランダムに選ぶ
     selectRandomKingdomCards(count) {
-        const kingdomCardIds = [...KINGDOM_CARD_IDS];
+        const kingdomCardIds = getKingdomCardIds(this.cardSets);
         const selectedCards = [];
         
         for (let i = 0; i < count; i++) {
@@ -210,7 +208,76 @@ class Game {
         }
 
         this.supply[lowerCardId]--;
-        return player.gainCard(cardId, destination);
+        const card = player.gainCard(cardId, destination);
+        this.onCardGained(player, card);
+        return card;
+    }
+    
+    // カードを獲得したときに起きる効果（海辺の猿・封鎖・海賊・船乗りなど）
+    onCardGained(player, card) {
+        const current = this.getCurrentPlayer();
+        if (player === current) {
+            player.gainedThisTurn.push(card.id);
+            if (this.phase === 'buy' && card.isType(CARD_TYPES.VICTORY)) {
+                player.gainedVictoryInBuyPhase = true;
+            }
+        }
+        
+        this.players.forEach(owner => {
+            if (owner === player) return;
+            
+            // 封鎖：自分のターンに、封鎖で脇に置かれたカードと同じカードを獲得したら呪いを獲得する
+            if (player === current) {
+                owner.blockades
+                    .filter(blockade => blockade.cardId === card.id && blockade.victims.has(player))
+                    .forEach(() => {
+                        if (this.gainCardFromSupply(player, 'curse')) {
+                            this.log(`${player.name}は${owner.name}の封鎖で呪いカードを獲得しました`);
+                        }
+                    });
+            }
+            
+            // 猿：右隣のプレイヤーが獲得するたびにカードを引く
+            if (owner.monkeys > 0 && this.getPlayerToRight(owner) === player) {
+                owner.drawCards(owner.monkeys);
+                this.log(`${owner.name}は猿の効果でカードを${owner.monkeys}枚引きました`);
+            }
+        });
+        
+        // 海賊：誰かが財宝を獲得したら、手札の海賊をプレイする（常に得なので自動でプレイする）
+        if (card.isType(CARD_TYPES.TREASURE)) {
+            this.getPlayersFrom(current).forEach(owner => {
+                owner.hand.filter(handCard => handCard.reactsToTreasureGain).forEach(pirate => {
+                    owner.hand.splice(owner.hand.indexOf(pirate), 1);
+                    owner.playArea.push(pirate);
+                    this.log(`${owner.name}は${pirate.name}をプレイしました`);
+                    pirate.play(owner, this);
+                });
+            });
+        }
+        
+        // 船乗り：このターンに獲得した持続カードを1回プレイしてもよい
+        if (player === current && player.sailorUses > 0 && card.isType(CARD_TYPES.DURATION)) {
+            player.sailorUses--;
+            this.runNext(() => this.promptConfirm({
+                player,
+                card,
+                title: '船乗り',
+                message: `獲得した${card.name}をプレイしますか？`,
+                yesLabel: 'プレイする',
+                noLabel: 'プレイしない',
+                purpose: 'sailor-play',
+                callback: (play) => {
+                    if (!play) return;
+                    const zone = [player.discard, player.hand, player.deck, player.setAside].find(cards => cards.includes(card));
+                    if (!zone) return;
+                    zone.splice(zone.indexOf(card), 1);
+                    player.playArea.push(card);
+                    this.log(`${player.name}は${card.name}をプレイしました`);
+                    card.play(player, this);
+                }
+            }));
+        }
     }
 
     // カードを購入
@@ -252,12 +319,12 @@ class Game {
             return false;
         }
 
-        // カードを購入
-        this.gainCardFromSupply(player, upperCardId);
+        // カードを購入（獲得で起きる効果のログより先に購入を記録する）
         player.buys--;
         player.coins -= card.cost;
-
         this.log(`${player.name}は${card.name}を購入しました`);
+        this.gainCardFromSupply(player, upperCardId);
+        this.processEffects();
 
         this.notifyStateChanged();
 
@@ -272,8 +339,20 @@ class Game {
 
         const player = this.getCurrentPlayer();
 
-        // クリーンアップフェーズ
-        player.cleanup();
+        // 宝物庫：購入フェーズで勝利点カードを獲得していなければ山札の上に戻す（常に得なので自動で戻す）
+        if (!player.gainedVictoryInBuyPhase) {
+            player.playArea.filter(card => card.id === 'treasury').forEach(card => {
+                player.playArea.splice(player.playArea.indexOf(card), 1);
+                player.deck.unshift(card);
+                this.log(`${player.name}は宝物庫を山札の上に置きました`);
+            });
+        }
+
+        // クリーンアップフェーズ（前哨地の追加のターンの前は3枚だけ引く）
+        const takesExtraTurn = player.outpostPending && !this.isExtraTurn;
+        player.outpostPending = false;
+        player.cleanup(takesExtraTurn ? 3 : 5);
+        player.gainedLastTurn = player.gainedThisTurn;
         this.log(`${player.name}のターンが終了しました`);
 
         // ゲーム終了条件はターン終了時にチェックする
@@ -283,17 +362,37 @@ class Game {
             return true;
         }
 
-        // 次のプレイヤーに切り替え
-        const nextPlayer = this.nextPlayer();
-        nextPlayer.actions = 1;
-        nextPlayer.buys = 1;
-
-        this.phase = 'action';
-        this.log(`${nextPlayer.name}のターンです`);
+        // 次のプレイヤーに切り替え（前哨地なら同じプレイヤーがもう1ターン）
+        this.isExtraTurn = takesExtraTurn;
+        if (takesExtraTurn) {
+            this.log(`${player.name}は前哨地の効果で追加のターンを行います`);
+        }
+        this.startTurn(takesExtraTurn ? player : this.nextPlayer());
 
         this.notifyStateChanged();
 
         return true;
+    }
+    
+    // ターンを始める（持続カードの効果をここで処理する）
+    startTurn(player) {
+        player.actions = 1;
+        player.buys = 1;
+        player.gainedThisTurn = [];
+        player.gainedVictoryInBuyPhase = false;
+        player.hasTrashedForCorsair = false;
+        this.phase = 'action';
+        this.log(`${player.name}のターンです`);
+        
+        // 前のターンからの効果（猿・私掠船・封鎖）は、このターンの開始で終わる
+        player.monkeys = 0;
+        player.corsairVictims.clear();
+        player.blockades = [];
+        
+        const durations = player.durations;
+        player.durations = [];
+        this.runNext(...durations.filter(duration => duration.effect).map(duration => duration.effect));
+        this.processEffects();
     }
     
     // ゲーム終了条件をチェック
@@ -357,6 +456,22 @@ class Game {
         }
     }
     
+    // 指定したプレイヤーから席順に並べた、すべてのプレイヤー
+    getPlayersFrom(player) {
+        return [player, ...this.getOtherPlayers(player)];
+    }
+    
+    // 右隣のプレイヤー（自分の直前に手番が来るプレイヤー）
+    getPlayerToRight(player) {
+        const index = this.players.indexOf(player);
+        return this.players[(index - 1 + this.players.length) % this.players.length];
+    }
+    
+    // 私掠船の攻撃を受けているか
+    isCorsairTarget(player) {
+        return this.players.some(owner => owner !== player && owner.corsairVictims.has(player));
+    }
+    
     // 指定したプレイヤーの次の席から順に並べた、他のプレイヤー
     getOtherPlayers(player) {
         const start = this.players.indexOf(player);
@@ -374,8 +489,12 @@ class Game {
         }));
     }
     
-    // お堀などのリアクションで攻撃を防げるか（リアクションカードを持っていれば常に公開する）
+    // 灯台が場にあるか、お堀などのリアクションで攻撃を防げるか（リアクションカードを持っていれば常に公開する）
     isProtectedFromAttack(target, attacker) {
+        if (target.playArea.some(card => card.id === 'lighthouse')) {
+            this.log(`${target.name}は灯台で${attacker.name}の攻撃を防ぎました`);
+            return true;
+        }
         const reaction = target.hand.find(card => card.isReaction);
         return reaction ? reaction.react(target, this, attacker) : false;
     }
@@ -421,7 +540,8 @@ class Game {
     }
     
     // サプライからコスト maxCost 以下のカードを1枚選んで獲得させる（filter でカードの種類を絞れる）
-    promptGain({ player, maxCost, filter = () => true, destination = 'discard', title, message, purpose = 'gain' }) {
+    // onGained には獲得したカードが渡る
+    promptGain({ player, maxCost, filter = () => true, destination = 'discard', title, message, purpose = 'gain', onGained }) {
         const candidates = Object.keys(this.supply)
             .filter(cardId => this.supply[cardId] > 0)
             .map(cardId => ALL_CARDS[cardId.toUpperCase()])
@@ -444,8 +564,9 @@ class Game {
             purpose,
             callback: ([index]) => {
                 const data = candidates[index];
-                this.gainCardFromSupply(player, data.id, destination);
                 this.log(`${player.name}は${data.name}を獲得しました`);
+                const card = this.gainCardFromSupply(player, data.id, destination);
+                if (card && onGained) onGained(card);
             }
         });
     }

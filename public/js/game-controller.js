@@ -15,8 +15,8 @@ class GameController {
     }
     
     // ゲームを初期化
-    initGame(playerNames) {
-        this.game = new Game(playerNames);
+    initGame(playerNames, options) {
+        this.game = new Game(playerNames, options);
         
         // ゲームイベント用のコールバックを設定
         this.setupGameCallbacks();

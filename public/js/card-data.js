@@ -2,13 +2,10 @@
  * ドミニオンのカードデータ
  */
 
-// カードタイプの定義
-export const CARD_TYPES = {
-    TREASURE: 'treasure',
-    VICTORY: 'victory',
-    ACTION: 'action',
-    CURSE: 'curse'
-};
+import { CARD_TYPES, CARD_SETS } from './card-types.js';
+import { SEASIDE_CARDS } from './card-data-seaside.js';
+
+export { CARD_TYPES, CARD_SETS };
 
 // 基本カードデータ
 export const BASIC_CARDS = {
@@ -88,7 +85,7 @@ export const BASIC_CARDS = {
 const isAction = (card) => card.isType(CARD_TYPES.ACTION);
 const isTreasure = (card) => card.isType(CARD_TYPES.TREASURE);
 
-export const KINGDOM_CARDS = {
+const BASE_KINGDOM_CARDS = {
     // ===== コスト2 =====
     CELLAR: {
         id: 'cellar',
@@ -445,7 +442,7 @@ export const KINGDOM_CARDS = {
         types: [CARD_TYPES.ACTION],
         description: '手札のアクションカードを1枚選び、2回プレイしてもよい',
         count: 10,
-        onPlay: (player, game) => {
+        onPlay: (player, game, throneRoom) => {
             const actionCards = player.hand.filter(isAction);
             if (actionCards.length === 0) {
                 game.log(`${player.name}の手札にアクションカードがありませんでした`);
@@ -470,6 +467,10 @@ export const KINGDOM_CARDS = {
                         () => {
                             game.log(`${player.name}は${chosen.name}をもう一度プレイしました`);
                             chosen.play(player, game);
+                        },
+                        // 持続カードが場に残るなら、玉座の間も一緒に残す
+                        () => {
+                            if (player.hasPendingDuration(chosen)) player.addDuration(throneRoom, null);
                         }
                     );
                 }
@@ -810,6 +811,15 @@ export const KINGDOM_CARDS = {
     }
 };
 
+// 収録セットを書き込んだ王国カード
+const withSet = (cards, set) =>
+    Object.fromEntries(Object.entries(cards).map(([key, data]) => [key, { ...data, set }]));
+
+export const KINGDOM_CARDS = {
+    ...withSet(BASE_KINGDOM_CARDS, CARD_SETS.BASE),
+    ...withSet(SEASIDE_CARDS, CARD_SETS.SEASIDE)
+};
+
 // 全カードデータの結合
 export const ALL_CARDS = { ...BASIC_CARDS, ...KINGDOM_CARDS };
 
@@ -817,3 +827,6 @@ export const ALL_CARDS = { ...BASIC_CARDS, ...KINGDOM_CARDS };
 export const ALL_CARD_IDS = Object.keys(ALL_CARDS);
 export const BASIC_CARD_IDS = Object.keys(BASIC_CARDS);
 export const KINGDOM_CARD_IDS = Object.keys(KINGDOM_CARDS);
+
+// 指定したセットの王国カードのID（大文字）
+export const getKingdomCardIds = (sets) => KINGDOM_CARD_IDS.filter(id => sets.includes(KINGDOM_CARDS[id].set));

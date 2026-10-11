@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { KINGDOM_CARD_IDS } from '../public/js/card-data.js';
+import { getKingdomCardIds } from '../public/js/card-data.js';
 import { runCpuStep, hasCpuPrompt } from '../public/js/cpu-player.js';
 import { createGame, makeCards } from './helpers.js';
 
-// 26種すべてをサプライに入れたいテスト用（サプライの枚数を見るテストで使う）
-const ALL_KINGDOM = KINGDOM_CARD_IDS.map(id => id.toLowerCase());
+// 基本セットの26種すべてをサプライに入れたいテスト用（サプライの枚数を見るテストで使う）
+const BASE_CARD_IDS = getKingdomCardIds(['base']);
+const ALL_KINGDOM = BASE_CARD_IDS.map(id => id.toLowerCase());
 
 const ids = (cards) => cards.map(card => card.id);
 
@@ -390,7 +391,7 @@ describe('全カードでのCPU同士の試合', () => {
 
     it('全アクションカードを最初からデッキに入れても、すべてプレイして最後まで進められる', () => {
         // CPUは購入戦略にないカードを買わないので、デッキに入れておいて全カードの効果と選択を通す
-        const actionIds = KINGDOM_CARD_IDS.filter(id => id !== 'GARDENS');
+        const actionIds = BASE_CARD_IDS.filter(id => id !== 'GARDENS');
         const played = new Set();
         
         for (let round = 0; round < 10; round++) {

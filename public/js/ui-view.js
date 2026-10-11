@@ -122,6 +122,8 @@ class UIView {
             </div>
         `;
 
+        this.fitSupplyTitles();
+
         // タップで購入、長押しで説明を表示する
         const supplyCards = this.elements.supplyPiles.querySelectorAll('.card');
         supplyCards.forEach(card => {
@@ -134,6 +136,24 @@ class UIView {
     }
 
     // サプライカードのHTML生成
+    // タイルに収まらないカード名は、収まる大きさまで文字を小さくする
+    // それでも読めないほど小さくなるなら、タイルの小さな絵を消して名前の幅を空ける
+    fitSupplyTitles() {
+        const fit = (title, minFontSize) => {
+            title.style.fontSize = '';
+            if (title.scrollWidth <= title.clientWidth) return true;
+            const fontSize = parseFloat(getComputedStyle(title).fontSize);
+            const fitted = Math.floor(fontSize * title.clientWidth / title.scrollWidth * 10) / 10;
+            title.style.fontSize = `${Math.max(minFontSize, fitted)}px`;
+            return fitted >= minFontSize;
+        };
+        this.elements.supplyPiles.querySelectorAll('.card-title').forEach(title => {
+            if (fit(title, 8)) return;
+            title.closest('.supply-tile').classList.add('no-art');
+            fit(title, 7);
+        });
+    }
+
     createSupplyCardHtml(card, count, unaffordable) {
         const stateClass = count <= 0 ? 'empty' : (unaffordable ? 'unaffordable' : '');
 
@@ -178,7 +198,8 @@ class UIView {
             [CARD_TYPES.TREASURE]: '財宝',
             [CARD_TYPES.VICTORY]: '勝利点',
             [CARD_TYPES.ACTION]: 'アクション',
-            [CARD_TYPES.CURSE]: '呪い'
+            [CARD_TYPES.CURSE]: '呪い',
+            [CARD_TYPES.DURATION]: '持続'
         };
 
         return types.map(type => typeMap[type] || type).join(' - ');
@@ -199,12 +220,25 @@ class UIView {
                         <span>山札 ${player.deck.length}</span>
                         <span>手札 ${player.hand.length}</span>
                         <span>捨て札 ${player.discard.length}</span>
+                        ${this.createMatsHtml(player)}
                     </div>
                 </div>
             `;
         }).join('');
 
         this.elements.playersInfo.innerHTML = html;
+    }
+
+    // 島マット・原住民の村マット・脇に置いたカードの枚数（あるときだけ表示する）
+    createMatsHtml(player) {
+        return [
+            ['島', player.mats.island.length],
+            ['村マット', player.mats.nativeVillage.length],
+            ['脇', player.setAside.length]
+        ]
+            .filter(([, count]) => count > 0)
+            .map(([label, count]) => `<span>${label} ${count}</span>`)
+            .join('');
     }
 
     // 手札を表示する順に並べた、手札のインデックスの配列（手札そのものは並び替えない）

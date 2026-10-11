@@ -26,6 +26,7 @@
     --type-treasure: #c9971f;
     --type-victory: #3f8a4c;
     --type-curse: #85549f;
+    --type-duration: #d17a22;
 
     --radius: 12px;
     --safe-top: env(safe-area-inset-top, 0px);
@@ -303,6 +304,7 @@ button.primary {
 .treasure-card { --type: var(--type-treasure); --type-tint: #f7ecd0; }
 .victory-card { --type: var(--type-victory); --type-tint: #e2f0dc; }
 .curse-card { --type: var(--type-curse); --type-tint: #ece2f3; }
+.duration-card { --type: var(--type-duration); --type-tint: #f8e5d0; }
 
 .card {
     position: relative;
@@ -402,6 +404,10 @@ button.primary {
     font-weight: 700;
     text-align: center;
     white-space: nowrap;
+}
+
+.supply-tile.no-art .tile-art {
+    display: none;
 }
 
 .supply-tile .card-count {
@@ -953,6 +959,10 @@ button.primary {
 }
 
 #player-names {
+    margin-top: 12px;
+}
+
+.setup-form .field + .field {
     margin-top: 12px;
 }
 

@@ -11,7 +11,8 @@ import { ALL_CARDS } from './card-data.js';
 // 表示設定はブラウザに保存し、次回以降も引き継ぐ
 const SETTINGS_KEY = 'dominion.settings';
 const DEFAULT_SETTINGS = {
-    stackHand: false // 手札の同じカードを重ねて表示する
+    stackHand: false, // 手札の同じカードを重ねて表示する
+    cardSets: 'base+seaside' // 王国カードを選ぶセット（'base' / 'seaside' / 'base+seaside'）
 };
 
 class UIController {

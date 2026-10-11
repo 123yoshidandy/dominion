@@ -165,7 +165,8 @@ class UIEventHandler {
         if (!gameState || gameState.phase !== 'buy') return;
         
         const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-        if (currentPlayer.buys > 0) return;
+        // 選択待ちの間は終えない（答えた後にもう一度判定する）
+        if (currentPlayer.buys > 0 || currentPlayer.isCPU || this.gameController.game.pendingPrompt) return;
         
         setTimeout(() => this.handleEndTurn(), UIEventHandler.AUTO_END_TURN_DELAY_MS);
     }
@@ -234,8 +235,9 @@ class UIEventHandler {
             });
         }
         
-        // ゲームを初期化
-        this.gameController.initGame(playerNames);
+        // ゲームを初期化（使うカードのセットは設定から）
+        const cardSets = this.uiController.settings.cardSets.split('+');
+        this.gameController.initGame(playerNames, { cardSets });
         
         // モーダルを閉じる
         this.uiController.modal.closeModal();

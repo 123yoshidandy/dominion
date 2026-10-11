@@ -32,6 +32,15 @@ class UIModal {
 
                 <div id="player-names"></div>
 
+                <label class="field">
+                    <span>使うカード</span>
+                    <select id="card-sets">
+                        ${[['base', '基本'], ['seaside', '海辺'], ['base+seaside', '基本＋海辺']]
+                            .map(([value, label]) => `<option value="${value}" ${this.uiController.settings.cardSets === value ? 'selected' : ''}>${label}</option>`)
+                            .join('')}
+                    </select>
+                </label>
+
                 ${this.createStackHandToggleHtml('setup-stack-hand')}
 
                 <button id="start-game-btn" class="primary">ゲーム開始</button>
@@ -49,6 +58,10 @@ class UIModal {
         });
 
         this.setupStackHandToggle('setup-stack-hand');
+        
+        document.getElementById('card-sets').addEventListener('change', (event) => {
+            this.uiController.updateSettings({ cardSets: event.target.value });
+        });
         
         // ゲーム開始ボタンのイベント
         const startGameBtn = document.getElementById('start-game-btn');
@@ -154,7 +167,10 @@ class UIModal {
         this.closeModal();
         if (!this.uiController.gameController.resolvePrompt(answer)) {
             this.showPrompt(prompt);
+            return;
         }
+        // 購入で起きた選択（船乗り）に答えた後、購入回数がなければターンを終える
+        this.uiController.eventHandler.endTurnIfNoBuysLeft();
     }
     
     // はい／いいえの選択（対象のカードがあれば大きく表示する）

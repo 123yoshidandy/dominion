@@ -8,20 +8,25 @@ import { CARD_TYPES } from './card-data.js';
 
 // アクションを増やすカード（何枚プレイしても他のアクションを妨げない）の優先順
 const NON_TERMINAL_PRIORITY = [
-    'village', 'festival', 'laboratory', 'market', 'sentry', 'poacher', 'harbinger', 'merchant', 'cellar'
+    'village', 'bazaar', 'fishing_village', 'festival', 'native_village', 'laboratory', 'market', 'treasury',
+    'caravan', 'tide_pools', 'sea_chart', 'sentry', 'poacher', 'lighthouse', 'sailor', 'harbinger', 'merchant',
+    'haven', 'lookout', 'warehouse', 'cellar'
 ];
 
 // アクションを増やさないカード（ターミナル）の優先順
 const TERMINAL_PRIORITY = [
-    'witch', 'artisan', 'council_room', 'library', 'bandit', 'smithy', 'militia', 'mine', 'moneylender',
-    'remodel', 'bureaucrat', 'vassal', 'workshop', 'moat', 'chapel'
+    'witch', 'sea_witch', 'artisan', 'wharf', 'council_room', 'library', 'bandit', 'corsair', 'merchant_ship',
+    'pirate', 'outpost', 'smithy', 'militia', 'cutpurse', 'blockade', 'monkey', 'salvager', 'mine', 'moneylender',
+    'remodel', 'bureaucrat', 'vassal', 'smugglers', 'workshop', 'treasure_map', 'island', 'moat', 'chapel',
+    'tactician'
 ];
 
 // 玉座の間は他のアクションカードがあるときに最優先でプレイする
 const PLAY_PRIORITY = ['throne_room', ...NON_TERMINAL_PRIORITY, ...TERMINAL_PRIORITY];
 
-// 不要なカード（地下室で捨てる・礼拝堂で廃棄する対象）かどうか
-const isJunk = (card) => card.isType(CARD_TYPES.CURSE) || card.isType(CARD_TYPES.VICTORY);
+// 不要なカード（地下室で捨てる・礼拝堂で廃棄する対象）かどうか（島のようなアクションの勝利点は除く）
+const isJunk = (card) =>
+    card.isType(CARD_TYPES.CURSE) || (card.isType(CARD_TYPES.VICTORY) && !card.isType(CARD_TYPES.ACTION));
 
 // プレイヤーが持つすべてのカード
 const allCardsOf = (player) => [...player.hand, ...player.deck, ...player.discard, ...player.playArea];
@@ -33,9 +38,21 @@ const playRank = (card) => {
 };
 
 // アクションカードをプレイする価値があるか（効果が空振りするならプレイしない）
-function isWorthPlaying(card, player) {
+function isWorthPlaying(card, player, game) {
     const others = player.hand.filter(c => c !== card);
     switch (card.id) {
+        case 'salvager':
+        case 'island':
+            return others.length > 0;
+        case 'treasure_map':
+            return others.some(c => c.id === 'treasure_map');
+        case 'outpost':
+            return !game?.isExtraTurn;
+        case 'tactician': {
+            // 手札の財宝が少ないときだけ、手札を捨てて次のターンに備える
+            const coins = others.filter(c => c.isType(CARD_TYPES.TREASURE)).reduce((sum, c) => sum + c.value, 0);
+            return others.length > 0 && coins <= 2;
+        }
         case 'chapel':
             return others.some(c => c.id === 'curse' || c.id === 'estate');
         case 'moneylender':
@@ -52,12 +69,12 @@ function isWorthPlaying(card, player) {
 }
 
 // 手札からプレイするアクションカードのインデックスを選ぶ（なければ -1）
-export function chooseActionCard(player) {
+export function chooseActionCard(player, game) {
     if (player.actions <= 0) return -1;
 
     // アクションを増やすカードを先にプレイし、ターミナルは最後に回す
     for (const cardId of PLAY_PRIORITY) {
-        const index = player.hand.findIndex(card => card.id === cardId && isWorthPlaying(card, player));
+        const index = player.hand.findIndex(card => card.id === cardId && isWorthPlaying(card, player, game));
         if (index >= 0) return index;
     }
 
@@ -87,16 +104,16 @@ export function chooseCardToBuy(player, game) {
     if (coins >= 5) {
         if (provincesLeft <= 5) return pick(['duchy', 'silver']);
 
-        const actions = ['laboratory', 'market', 'festival'];
+        const actions = ['laboratory', 'bazaar', 'market', 'festival'];
         if (canAddTerminal) {
-            if (available('curse')) actions.unshift('witch');
-            actions.push('council_room', 'library', 'bandit');
+            if (available('curse')) actions.unshift('witch', 'sea_witch');
+            actions.push('wharf', 'council_room', 'library', 'bandit', 'merchant_ship');
         }
         return pick([...actions, 'silver']);
     }
     if (coins >= 3) {
         if (provincesLeft <= 2) return pick(['estate', 'silver']);
-        if (coins === 4 && canAddTerminal) return pick(['smithy', 'militia', 'moneylender', 'silver']);
+        if (coins === 4 && canAddTerminal) return pick(['smithy', 'militia', 'cutpurse', 'moneylender', 'silver']);
         return pick(['silver']);
     }
     if (coins >= 2 && provincesLeft <= 2) {
@@ -201,6 +218,27 @@ function chooseSelection(prompt, game) {
         case 'sentry-top':
             return [indicesByKeepValue(cards).reverse()[0]];
 
+        case 'lookout-trash':
+        case 'lookout-discard':
+        case 'island':
+            return [indicesByKeepValue(cards)[0]];
+
+        case 'haven':
+            // 次のターンに一番使いたいカードを脇に置く
+            return [indicesByKeepValue(cards).reverse()[0]];
+
+        case 'sailor-trash':
+            return cards.map((card, index) => (['curse', 'estate'].includes(card.id) ? index : -1))
+                .filter(index => index >= 0).slice(0, 1);
+
+        case 'salvager-trash': {
+            for (const cardId of ['curse', 'estate', 'copper']) {
+                const index = indexOf(card => card.id === cardId);
+                if (index >= 0) return [index];
+            }
+            return [indicesByKeepValue(cards)[0]];
+        }
+
         case 'artisan-topdeck': {
             // アクションが残っていなければ、手札のアクションカードを次のターンに回す
             if (prompt.player.actions <= 0) {
@@ -226,7 +264,11 @@ function chooseConfirm(prompt) {
     switch (prompt.purpose) {
         case 'moneylender':
         case 'vassal-play':
+        case 'sailor-play':
             return true;
+        case 'native-village':
+            // マットに3枚たまるまでは山札の上を置き、たまったら手札に加える
+            return player.mats.nativeVillage.length < 3;
         case 'library-skip':
             // アクションが残っていないなら、引いたアクションカードは脇に置いて別のカードを引く
             return player.actions <= 0;
@@ -262,7 +304,7 @@ export function runCpuStep(game) {
     if (!player.isCPU) return;
 
     if (game.phase === 'action') {
-        const index = chooseActionCard(player);
+        const index = chooseActionCard(player, game);
         if (index < 0 || !game.playActionCard(index)) {
             game.enterBuyPhase();
         }

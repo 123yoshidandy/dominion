@@ -9,6 +9,9 @@ const svg = (body) => `<svg viewBox="0 0 48 32" aria-hidden="true">${body}</svg>
 // 地面
 const ground = (color = '#8cbf73') => `<rect x="0" y="27" width="48" height="5" fill="${color}"/>`;
 
+// 海（下側の波）
+const sea = () => `<path d="M0 26 q4 -2 8 0 t8 0 t8 0 t8 0 t8 0 t8 0 V32 H0 Z" fill="#5dade2"/>`;
+
 // 財宝のコイン（色違い）
 const coin = (fill, edge, shine, sparkle = '') => svg(`
     <circle cx="24" cy="16" r="12" fill="${fill}" stroke="${edge}" stroke-width="2"/>
@@ -293,6 +296,208 @@ const CARD_ART = {
         <path d="M26 25 l2.5 -2.5 l2.5 2.5 l-2.5 2.5 z" fill="#d6eaf8"/>
         <path d="M8 6 Q20 0 32 6" fill="none" stroke="#7f8c8d" stroke-width="3" stroke-linecap="round"/>
         <line x1="20" y1="3.5" x2="30" y2="17" stroke="#8b5a2b" stroke-width="2.5" stroke-linecap="round"/>
+    `),
+
+    // ===== 海辺（第2版） =====
+    haven: svg(`
+        ${sea()}
+        <path d="M4 22 Q12 10 24 9 Q36 10 44 22" fill="none" stroke="#8b6b4a" stroke-width="2"/>
+        <path d="M18 23 h14 l-2 4 h-10 z" fill="#8b5a2b"/>
+        <line x1="25" y1="11" x2="25" y2="23" stroke="#6b4423" stroke-width="1.5"/>
+        <path d="M25 12 l6 8 h-6 z" fill="#fdfefe"/>
+    `),
+    lighthouse: svg(`
+        ${sea()}
+        <path d="M19 26 L21 9 h6 L29 26 Z" fill="#fdfefe" stroke="#7f8c8d" stroke-width="0.8"/>
+        <path d="M20.2 15 h7.6 l0.7 5 h-9 z" fill="#c0392b"/>
+        <rect x="20" y="5" width="8" height="4" fill="#f7dc6f" stroke="#7f8c8d" stroke-width="0.8"/>
+        <path d="M22 4 l2 -3 l2 3 z" fill="#c0392b"/>
+        <path d="M28 6 L46 2 L46 11 Z M20 6 L2 2 L2 11 Z" fill="#f7dc6f" opacity="0.55"/>
+    `),
+    native_village: svg(`
+        ${ground('#d9c39a')}
+        <path d="M6 27 L16 10 L26 27 Z" fill="#c8a165" stroke="#8b6b4a"/>
+        <path d="M14 27 L16 20 L18 27 Z" fill="#6b4423"/>
+        <path d="M30 27 V12 M30 12 Q36 8 42 13 M30 12 Q35 14 38 20 M30 12 Q24 8 22 14" fill="none" stroke="#3f8a4c" stroke-width="2"/>
+        <rect x="29" y="12" width="2" height="15" fill="#8b5a2b"/>
+    `),
+    astrolabe: svg(`
+        <circle cx="24" cy="17" r="12" fill="#e6b84f" stroke="#a87b1f" stroke-width="2"/>
+        <circle cx="24" cy="17" r="8" fill="none" stroke="#a87b1f" stroke-width="1"/>
+        <path d="M24 5 v24 M12 17 h24" stroke="#a87b1f" stroke-width="0.8"/>
+        <line x1="17" y1="23" x2="31" y2="11" stroke="#6b4f2a" stroke-width="1.8" stroke-linecap="round"/>
+        <circle cx="24" cy="4" r="2" fill="none" stroke="#a87b1f" stroke-width="1.5"/>
+    `),
+    fishing_village: svg(`
+        ${sea()}
+        <path d="M8 22 h20 l-3 4 h-14 z" fill="#8b5a2b"/>
+        <line x1="17" y1="8" x2="17" y2="22" stroke="#6b4423" stroke-width="1.4"/>
+        <path d="M17 9 l8 11 h-8 z" fill="#f5ecd7"/>
+        <path d="M33 14 q5 -4 10 0 q-5 4 -10 0 z M43 14 l3 -3 v6 z" fill="#5dade2"/>
+    `),
+    lookout: svg(`
+        ${sea()}
+        <path d="M14 6 h8 l-1 4 h-6 z" fill="#8b5a2b"/>
+        <line x1="18" y1="10" x2="18" y2="30" stroke="#6b4423" stroke-width="2"/>
+        <rect x="26" y="6" width="14" height="5" rx="2.5" fill="#c9971f" transform="rotate(-12 33 8)"/>
+        <rect x="38" y="3.5" width="5" height="6.5" rx="1.5" fill="#a87b1f" transform="rotate(-12 40 7)"/>
+    `),
+    monkey: svg(`
+        <circle cx="24" cy="15" r="10" fill="#8b5a2b"/>
+        <circle cx="13" cy="13" r="4" fill="#8b5a2b"/><circle cx="35" cy="13" r="4" fill="#8b5a2b"/>
+        <circle cx="13" cy="13" r="2" fill="#e0b48a"/><circle cx="35" cy="13" r="2" fill="#e0b48a"/>
+        <ellipse cx="24" cy="18" rx="7" ry="6" fill="#e0b48a"/>
+        <circle cx="21" cy="14" r="1.3" fill="#2b2620"/><circle cx="27" cy="14" r="1.3" fill="#2b2620"/>
+        <path d="M21 20 q3 2 6 0" fill="none" stroke="#6b4423" stroke-width="1"/>
+        <path d="M30 27 q8 4 12 -6" fill="none" stroke="#8b5a2b" stroke-width="2"/>
+    `),
+    sea_chart: svg(`
+        <rect x="6" y="4" width="36" height="24" rx="1.5" fill="#f5e6c4" stroke="#a0703c"/>
+        <path d="M10 20 q6 -6 12 -2 t12 -6" fill="none" stroke="#5dade2" stroke-width="1.5"/>
+        <path d="M14 10 q3 -3 6 0 q-1 4 -6 0 z" fill="#7fb069"/>
+        <circle cx="34" cy="20" r="4" fill="none" stroke="#a0703c"/>
+        <path d="M34 15 v10 M29 20 h10" stroke="#a0703c" stroke-width="0.8"/>
+    `),
+    smugglers: svg(`
+        ${sea()}
+        <path d="M6 22 h22 l-4 5 h-14 z" fill="#2b2620"/>
+        <rect x="11" y="16" width="7" height="6" fill="#a0703c" stroke="#6b4423" stroke-width="0.8"/>
+        <rect x="18" y="17" width="6" height="5" fill="#8b5a2b" stroke="#6b4423" stroke-width="0.8"/>
+        <circle cx="38" cy="8" r="4" fill="#fdfefe" opacity="0.9"/>
+        <circle cx="36.5" cy="7" r="4" fill="#23345c"/>
+    `),
+    warehouse: svg(`
+        ${ground('#b8b0a0')}
+        <path d="M6 27 V12 L24 4 L42 12 V27 Z" fill="#a0703c" stroke="#6b4423"/>
+        <rect x="16" y="15" width="16" height="12" fill="#6b4423"/>
+        <rect x="18" y="19" width="6" height="8" fill="#c8a165" stroke="#8b6b4a" stroke-width="0.6"/>
+        <rect x="24" y="21" width="6" height="6" fill="#d9b07a" stroke="#8b6b4a" stroke-width="0.6"/>
+    `),
+    blockade: svg(`
+        ${sea()}
+        <path d="M4 20 h16 l-3 5 h-10 z M28 20 h16 l-3 5 h-10 z" fill="#5d3a1a"/>
+        <line x1="12" y1="8" x2="12" y2="20" stroke="#6b4423" stroke-width="1.4"/>
+        <line x1="36" y1="8" x2="36" y2="20" stroke="#6b4423" stroke-width="1.4"/>
+        <path d="M12 8 h7 v6 h-7 z M36 8 h7 v6 h-7 z" fill="#c0392b"/>
+        <path d="M18 23 q6 -3 12 0" fill="none" stroke="#7f8c8d" stroke-width="1.5" stroke-dasharray="2 1.2"/>
+    `),
+    caravan: svg(`
+        ${ground('#e3c98c')}
+        <path d="M8 18 q4 -10 9 -2 q3 -6 6 0 h2 v4 h-17 z" fill="#c8a165"/>
+        <path d="M10 22 v6 M21 22 v6" stroke="#8b6b4a" stroke-width="1.6"/>
+        <path d="M25 16 q2 -6 4 -6 l2 2" fill="none" stroke="#c8a165" stroke-width="2.4" stroke-linecap="round"/>
+        <rect x="31" y="14" width="12" height="8" rx="1" fill="#a0703c"/>
+        <circle cx="34" cy="24" r="2.4" fill="#6b4423"/><circle cx="40" cy="24" r="2.4" fill="#6b4423"/>
+    `),
+    cutpurse: svg(`
+        <path d="M14 10 q-6 6 -6 12 q0 6 10 6 q10 0 10 -6 q0 -6 -6 -12 z" fill="#a8432f" stroke="#6d2a1d"/>
+        <path d="M14 10 h8" stroke="#e6b84f" stroke-width="2"/>
+        <path d="M30 6 L44 20" stroke="#bdc3c7" stroke-width="2.4" stroke-linecap="round"/>
+        <rect x="27" y="3" width="5" height="5" rx="1" fill="#2b2620" transform="rotate(45 29.5 5.5)"/>
+        <circle cx="40" cy="26" r="3.5" fill="#c8793a" stroke="#8a4b1f"/>
+    `),
+    island: svg(`
+        ${sea()}
+        <ellipse cx="22" cy="25" rx="14" ry="4" fill="#e3c98c"/>
+        <path d="M22 24 q-1 -10 3 -16" fill="none" stroke="#8b5a2b" stroke-width="2"/>
+        <path d="M25 8 q-8 -2 -12 4 M25 8 q8 -2 12 4 M25 8 q-3 -5 -9 -5 M25 8 q4 -5 10 -4" fill="none" stroke="#3f8a4c" stroke-width="2.2" stroke-linecap="round"/>
+    `),
+    sailor: svg(`
+        ${sea()}
+        <path d="M10 20 h28 l-4 6 h-20 z" fill="#8b5a2b"/>
+        <line x1="24" y1="3" x2="24" y2="20" stroke="#6b4423" stroke-width="1.6"/>
+        <path d="M24 4 q12 7 0 14 z" fill="#fdfefe" stroke="#bdc3c7" stroke-width="0.6"/>
+        <path d="M24 6 q-9 6 0 12 z" fill="#f5ecd7" stroke="#bdc3c7" stroke-width="0.6"/>
+    `),
+    salvager: svg(`
+        ${sea()}
+        <path d="M6 26 q4 -6 10 -4 l4 -6 l10 3 l-2 7 z" fill="#7d6b5a" opacity="0.9"/>
+        <path d="M34 3 v14" stroke="#7f8c8d" stroke-width="1.2"/>
+        <path d="M34 17 q0 5 -4 5 M34 17 q0 5 4 5" fill="none" stroke="#5d646d" stroke-width="2"/>
+        <rect x="30" y="20" width="8" height="5" fill="#c9971f" stroke="#8b6b2a" stroke-width="0.8"/>
+    `),
+    tide_pools: svg(`
+        <rect x="0" y="0" width="48" height="32" fill="#d9c39a"/>
+        <ellipse cx="18" cy="17" rx="14" ry="9" fill="#5dade2" stroke="#7d6b5a" stroke-width="2"/>
+        <path d="M14 15 l1.5 -4 l1.5 4 l4 0 l-3 2.5 l1 4 l-3.5 -2.5 l-3.5 2.5 l1 -4 l-3 -2.5 z" fill="#e67e22"/>
+        <ellipse cx="38" cy="22" rx="7" ry="5" fill="#5dade2" stroke="#7d6b5a" stroke-width="2"/>
+        <circle cx="38" cy="22" r="2" fill="#f1948a"/>
+    `),
+    treasure_map: svg(`
+        <path d="M5 6 L16 4 L30 7 L43 4 L43 27 L30 29 L16 26 L5 28 Z" fill="#f5e6c4" stroke="#a0703c"/>
+        <path d="M10 22 q8 -2 10 -8 t14 -4" fill="none" stroke="#a0703c" stroke-width="1.2" stroke-dasharray="2 1.5"/>
+        <path d="M32 7 l5 5 M37 7 l-5 5" stroke="#c0392b" stroke-width="2" stroke-linecap="round"/>
+    `),
+    bazaar: svg(`
+        ${ground('#d9c39a')}
+        <path d="M4 12 L24 4 L44 12 Z" fill="#c0392b"/>
+        <path d="M4 12 h40 v3 h-40 z" fill="#f5ecd7"/>
+        <path d="M8 15 v12 M40 15 v12" stroke="#8b5a2b" stroke-width="2"/>
+        <circle cx="16" cy="24" r="3" fill="#e67e22"/><circle cx="23" cy="24" r="3" fill="#f1c40f"/>
+        <circle cx="30" cy="24" r="3" fill="#27ae60"/>
+    `),
+    corsair: svg(`
+        ${sea()}
+        <path d="M6 21 h30 l-5 6 h-20 z" fill="#2b2620"/>
+        <line x1="20" y1="3" x2="20" y2="21" stroke="#6b4423" stroke-width="1.6"/>
+        <path d="M20 4 h14 v12 h-14 z" fill="#c0392b"/>
+        <circle cx="27" cy="9" r="2.4" fill="#fdfefe"/>
+        <path d="M24 13 l6 0" stroke="#fdfefe" stroke-width="1.2"/>
+    `),
+    merchant_ship: svg(`
+        ${sea()}
+        <path d="M4 20 h40 l-6 7 h-28 z" fill="#8b5a2b"/>
+        <line x1="16" y1="4" x2="16" y2="20" stroke="#6b4423" stroke-width="1.4"/>
+        <line x1="32" y1="4" x2="32" y2="20" stroke="#6b4423" stroke-width="1.4"/>
+        <path d="M10 6 h12 v11 h-12 z M26 6 h12 v11 h-12 z" fill="#f5ecd7" stroke="#bdc3c7" stroke-width="0.6"/>
+        <circle cx="24" cy="23" r="2" fill="#f2c14e"/>
+    `),
+    outpost: svg(`
+        ${ground('#7fb069')}
+        <g fill="#a0703c" stroke="#6b4423" stroke-width="0.6">
+            <path d="M8 27 V12 l2 -3 l2 3 V27 z"/><path d="M12 27 V12 l2 -3 l2 3 V27 z"/>
+            <path d="M32 27 V12 l2 -3 l2 3 V27 z"/><path d="M36 27 V12 l2 -3 l2 3 V27 z"/>
+        </g>
+        <rect x="16" y="16" width="16" height="11" fill="#c8a165" stroke="#6b4423" stroke-width="0.6"/>
+        <line x1="24" y1="4" x2="24" y2="16" stroke="#6b4423" stroke-width="1.2"/>
+        <path d="M24 4 h8 l-2 3 l2 3 h-8 z" fill="#2e86c1"/>
+    `),
+    pirate: svg(`
+        <path d="M8 14 Q24 2 40 14 Z" fill="#2b2620"/>
+        <circle cx="24" cy="10" r="2.2" fill="#fdfefe"/>
+        <circle cx="24" cy="20" r="8" fill="#e0b48a"/>
+        <path d="M17 18 h14" stroke="#2b2620" stroke-width="1"/>
+        <circle cx="21" cy="19" r="2.4" fill="#2b2620"/>
+        <circle cx="27" cy="19" r="1.2" fill="#2b2620"/>
+        <path d="M21 25 q3 2 6 0" fill="none" stroke="#6b4423" stroke-width="1"/>
+    `),
+    sea_witch: svg(`
+        ${sea()}
+        <path d="M15 24 Q21 13 23 6 Q26 1 31 4 Q27 7 33 24 Z" fill="#1f6f78"/>
+        <path d="M16.6 20.5 Q24 18.5 31.6 20.5 L32.4 23 Q24 21 15.8 23 Z" fill="#5dade2"/>
+        <path d="M38 6 v10 M35 8 v5 M41 8 v5 M35 13 q3 3 6 0" fill="none" stroke="#c9971f" stroke-width="1.4"/>
+    `),
+    tactician: svg(`
+        <rect x="4" y="5" width="40" height="23" rx="2" fill="#7fb069" stroke="#4f7a3f"/>
+        <path d="M10 22 l6 -6 l6 4 l8 -9" fill="none" stroke="#c0392b" stroke-width="1.6"/>
+        <path d="M28 10 l3 1 l-1 3" fill="none" stroke="#c0392b" stroke-width="1.6"/>
+        <circle cx="12" cy="11" r="2.4" fill="#2e86c1"/><circle cx="36" cy="22" r="2.4" fill="#2b2620"/>
+    `),
+    treasury: svg(`
+        <rect x="8" y="12" width="32" height="16" rx="2" fill="#8b5a2b" stroke="#5d3a1a"/>
+        <path d="M8 12 q16 -10 32 0 z" fill="#a0703c" stroke="#5d3a1a"/>
+        <rect x="21" y="16" width="6" height="6" rx="1" fill="#c9971f"/>
+        <circle cx="14" cy="10" r="2.5" fill="#f2c14e"/><circle cx="34" cy="10" r="2.5" fill="#f2c14e"/>
+        <circle cx="24" cy="7" r="2.5" fill="#f2c14e"/>
+    `),
+    wharf: svg(`
+        ${sea()}
+        <rect x="2" y="17" width="26" height="4" fill="#a0703c"/>
+        <path d="M6 21 v8 M14 21 v8 M22 21 v8" stroke="#6b4423" stroke-width="2"/>
+        <rect x="8" y="11" width="6" height="6" fill="#c8a165" stroke="#8b6b4a" stroke-width="0.6"/>
+        <path d="M30 20 h14 l-3 5 h-9 z" fill="#8b5a2b"/>
+        <line x1="37" y1="8" x2="37" y2="20" stroke="#6b4423" stroke-width="1.2"/>
+        <path d="M37 9 l6 9 h-6 z" fill="#fdfefe"/>
     `),
 };
 

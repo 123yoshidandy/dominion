@@ -39,6 +39,11 @@ class Card {
         if (cardData.isAttack) {
             this.isAttack = true;
         }
+        
+        // 誰かが財宝を獲得したときに手札からプレイされるカード（海賊）
+        if (cardData.reactsToTreasureGain) {
+            this.reactsToTreasureGain = true;
+        }
     }
     
     // カードのタイプをチェックするユーティリティメソッド
