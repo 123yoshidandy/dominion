@@ -7,6 +7,10 @@ Parameters:
     Type: String
     Default: ''
     Description: Email address for the monthly cost alert (leave empty to skip creating the budget)
+  BudgetEmail2:
+    Type: String
+    Default: ''
+    Description: Second email address for the monthly cost alert (optional)
   BudgetLimitUsd:
     Type: Number
     Default: 1
@@ -14,6 +18,7 @@ Parameters:
 
 Conditions:
   CreateBudget: !Not [!Equals [!Ref BudgetEmail, '']]
+  HasSecondBudgetEmail: !Not [!Equals [!Ref BudgetEmail2, '']]
 
 Resources:
   # 部屋（ROOM#コード）と接続（CONN#接続ID）を入れるテーブル。使った分だけの課金で、expiresAt を過ぎると消える
@@ -133,6 +138,11 @@ Resources:
           Subscribers:
             - SubscriptionType: EMAIL
               Address: !Ref BudgetEmail
+            - !If
+              - HasSecondBudgetEmail
+              - SubscriptionType: EMAIL
+                Address: !Ref BudgetEmail2
+              - !Ref AWS::NoValue
         - Notification:
             NotificationType: FORECASTED
             ComparisonOperator: GREATER_THAN
@@ -141,6 +151,11 @@ Resources:
           Subscribers:
             - SubscriptionType: EMAIL
               Address: !Ref BudgetEmail
+            - !If
+              - HasSecondBudgetEmail
+              - SubscriptionType: EMAIL
+                Address: !Ref BudgetEmail2
+              - !Ref AWS::NoValue
 
 Outputs:
   WebSocketUrl:
