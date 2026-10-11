@@ -16,6 +16,7 @@ class Game {
         this.phase = 'setup'; // ゲームフェーズ: setup, action, buy, cleanup
         this.logs = [];      // ゲームログ
         this.callbacks = {}; // コールバック関数
+        this.pendingPrompt = null; // プレイヤーの選択待ち（地下室・礼拝堂など）
         
         // プレイヤーの作成
         playerNames.forEach((name, index) => {
@@ -56,7 +57,7 @@ class Game {
         
         // プレイヤー数に応じて勝利点カードの枚数を調整
         const victoryCardCount = this.players.length <= 2 ? 8 : 12;
-        this.supply.estate = BASIC_CARDS.ESTATE.count;
+        this.supply.estate = victoryCardCount;
         this.supply.duchy = victoryCardCount;
         this.supply.province = victoryCardCount;
         
@@ -124,10 +125,30 @@ class Game {
         }
     }
     
+    // 選択待ちの間は他の操作を受け付けない
+    isAwaitingPrompt() {
+        if (this.pendingPrompt) {
+            this.log('カードの選択を完了してください');
+            return true;
+        }
+        return false;
+    }
+
+    // UIを更新するためのコールバックがあれば呼び出す
+    notifyStateChanged() {
+        if (this.callbacks.onStateChanged) {
+            this.callbacks.onStateChanged();
+        }
+    }
+
     // アクションカードをプレイ
     playActionCard(cardIndex) {
         const player = this.getCurrentPlayer();
-        
+
+        if (this.isAwaitingPrompt()) {
+            return false;
+        }
+
         if (this.phase !== 'action') {
             this.log('アクションフェーズではありません');
             return false;
@@ -145,22 +166,22 @@ class Game {
             return false;
         }
         
-        // アクションカードをプレイ
-        player.playCard(cardIndex, this);
+        // アクションカードをプレイ（効果のログより先にプレイしたことを記録する）
         player.actions--;
-        
         this.log(`${player.name}は${card.name}をプレイしました`);
-        
-        // UIを更新するためのコールバックがあれば呼び出す
-        if (this.callbacks.onStateChanged) {
-            this.callbacks.onStateChanged();
-        }
-        
+        player.playCard(cardIndex, this);
+
+        this.notifyStateChanged();
+
         return true;
     }
-    
+
     // 購入フェーズに移行
     enterBuyPhase() {
+        if (this.isAwaitingPrompt()) {
+            return false;
+        }
+
         if (this.phase !== 'action') {
             return false;
         }
@@ -173,104 +194,104 @@ class Game {
         
         this.phase = 'buy';
         this.log('購入フェーズに移行しました');
-        
-        // UIを更新するためのコールバックがあれば呼び出す
-        if (this.callbacks.onStateChanged) {
-            this.callbacks.onStateChanged();
-        }
-        
+
+        this.notifyStateChanged();
+
         return true;
     }
-    
+
+    // サプライからカードを獲得する（サプライの枚数を減らす）
+    gainCardFromSupply(player, cardId, destination = 'discard') {
+        const lowerCardId = cardId.toLowerCase();
+
+        if (!this.supply[lowerCardId] || this.supply[lowerCardId] <= 0) {
+            return null;
+        }
+
+        this.supply[lowerCardId]--;
+        return player.gainCard(cardId, destination);
+    }
+
     // カードを購入
     buyCard(cardId) {
         const player = this.getCurrentPlayer();
-        
+
+        if (this.isAwaitingPrompt()) {
+            return false;
+        }
+
         if (this.phase !== 'buy') {
             this.log('購入フェーズではありません');
             return false;
         }
-        
+
         if (player.buys <= 0) {
             this.log('購入回数が残っていません');
             return false;
         }
-        
-        // デバッグ情報
-        console.log('購入リクエスト:', cardId);
-        console.log('サプライの状態:', this.supply);
-        
-        // カードIDを統一して処理する
+
+        // ALL_CARDSには大文字のID、サプライには小文字のIDで参照する
         const upperCardId = cardId.toUpperCase();
         const lowerCardId = cardId.toLowerCase();
-        
-        console.log('変換後のID - 大文字:', upperCardId, '小文字:', lowerCardId);
-        console.log('サプライにあるか:', this.supply[lowerCardId] !== undefined);
-        console.log('カードデータ存在確認:', ALL_CARDS[upperCardId] !== undefined);
-        
+
         if (!this.supply[lowerCardId] || this.supply[lowerCardId] <= 0) {
             this.log('選択されたカードはサプライにありません');
-            console.log('存在しないカードID:', lowerCardId, '全サプライ:', this.supply);
             return false;
         }
-        
-        // ALL_CARDSには大文字のIDで参照
+
         const card = ALL_CARDS[upperCardId];
-        
+
         if (!card) {
             this.log(`カードID ${cardId} は定義されていません`);
-            console.log('定義されていないカードID:', upperCardId);
             return false;
         }
-        
+
         if (player.coins < card.cost) {
             this.log(`${card.name}を購入するためのコインが足りません（必要: ${card.cost}, 所持: ${player.coins}）`);
             return false;
         }
-        
+
         // カードを購入
-        player.gainCard(upperCardId);
+        this.gainCardFromSupply(player, upperCardId);
         player.buys--;
         player.coins -= card.cost;
-        this.supply[lowerCardId]--;
-        
+
         this.log(`${player.name}は${card.name}を購入しました`);
-        
-        // 勝利条件をチェック
-        if (this.checkGameEnd()) {
-            this.endGame();
-            return true;
-        }
-        
-        // UIを更新するためのコールバックがあれば呼び出す
-        if (this.callbacks.onStateChanged) {
-            this.callbacks.onStateChanged();
-        }
-        
+
+        this.notifyStateChanged();
+
         return true;
     }
-    
+
     // ターン終了
     endTurn() {
+        if (this.phase === 'end' || this.isAwaitingPrompt()) {
+            return false;
+        }
+
         const player = this.getCurrentPlayer();
-        
+
         // クリーンアップフェーズ
         player.cleanup();
         this.log(`${player.name}のターンが終了しました`);
-        
+
+        // ゲーム終了条件はターン終了時にチェックする
+        if (this.checkGameEnd()) {
+            this.endGame();
+            this.notifyStateChanged();
+            return true;
+        }
+
         // 次のプレイヤーに切り替え
         const nextPlayer = this.nextPlayer();
         nextPlayer.actions = 1;
         nextPlayer.buys = 1;
-        
+
         this.phase = 'action';
         this.log(`${nextPlayer.name}のターンです`);
-        
-        // UIを更新するためのコールバックがあれば呼び出す
-        if (this.callbacks.onStateChanged) {
-            this.callbacks.onStateChanged();
-        }
-        
+
+        this.notifyStateChanged();
+
         return true;
     }
     
@@ -357,16 +378,57 @@ class Game {
     
     // 地下室などで捨てるカードを選ぶプロンプト
     promptDiscardForBenefit(player, cardId, callback) {
-        // 実際の実装ではUIと連携して選択インターフェースを表示する
-        // ここではコールバックを登録して後で呼び出せるようにする
-        this.callbacks.onDiscardPrompt = { player, cardId, callback };
+        this.pendingPrompt = { type: 'discard', player, cardId, callback };
+
+        // 選択待ちをUIに通知する。結果は resolvePrompt で受け取る
+        if (this.callbacks.onDiscardPrompt) {
+            this.callbacks.onDiscardPrompt(this.pendingPrompt);
+        }
     }
-    
+
     // 礼拝堂などで廃棄するカードを選ぶプロンプト
     promptTrash(player, maxCount, callback) {
-        // 実際の実装ではUIと連携して選択インターフェースを表示する
-        // ここではコールバックを登録して後で呼び出せるようにする
-        this.callbacks.onTrashPrompt = { player, maxCount, callback };
+        this.pendingPrompt = { type: 'trash', player, maxCount, callback };
+
+        // 選択待ちをUIに通知する。結果は resolvePrompt で受け取る
+        if (this.callbacks.onTrashPrompt) {
+            this.callbacks.onTrashPrompt(this.pendingPrompt);
+        }
+    }
+
+    // 選択待ちを、選ばれた手札のインデックスで解決する
+    resolvePrompt(selectedIndices) {
+        const prompt = this.pendingPrompt;
+        if (!prompt) return false;
+
+        const { player } = prompt;
+
+        // 不正なインデックスと重複を除き、大きい順に処理する（手札から抜いてもずれないように）
+        let indices = [...new Set(selectedIndices)]
+            .filter(index => index >= 0 && index < player.hand.length);
+        if (prompt.type === 'trash') {
+            indices = indices.slice(0, prompt.maxCount);
+        }
+        indices.sort((a, b) => b - a);
+
+        this.pendingPrompt = null;
+
+        if (prompt.type === 'discard') {
+            indices.forEach(index => player.discardCard(index));
+            prompt.callback(indices.length);
+        } else if (prompt.type === 'trash') {
+            indices.forEach(index => {
+                const trashedCard = player.trashCard(index);
+                if (trashedCard) {
+                    this.trash.push(trashedCard);
+                }
+            });
+            prompt.callback(indices.length);
+        }
+
+        this.notifyStateChanged();
+
+        return true;
     }
     
     // コールバック関数を設定

@@ -175,7 +175,6 @@ export const KINGDOM_CARDS = {
         onPlay: (player, game) => {
             player.actions += 1;
             game.log(`${player.name}はアクション+1を得ました`);
-            // 捨てるカードを選択する処理は別途実装が必要
             game.promptDiscardForBenefit(player, 'cellar', (discardCount) => {
                 player.drawCards(discardCount);
                 game.log(`${player.name}は${discardCount}枚のカードを捨て、${discardCount}枚のカードを引きました`);
@@ -207,9 +206,8 @@ export const KINGDOM_CARDS = {
         description: '最大4枚までのカードを廃棄する',
         count: 10,
         onPlay: (player, game) => {
-            // 廃棄するカードを選択する処理は別途実装が必要
-            game.promptTrash(player, 4, () => {
-                game.log(`${player.name}はカードを廃棄しました`);
+            game.promptTrash(player, 4, (trashCount) => {
+                game.log(`${player.name}はカードを${trashCount}枚廃棄しました`);
             });
         }
     },
@@ -225,8 +223,7 @@ export const KINGDOM_CARDS = {
             player.drawCards(2);
             game.log(`${player.name}はカードを2枚引きました`);
             game.attackOtherPlayers(player, (target) => {
-                if (game.supply.curse > 0) {
-                    target.gainCard(BASIC_CARDS.CURSE.id);
+                if (game.gainCardFromSupply(target, BASIC_CARDS.CURSE.id)) {
                     game.log(`${target.name}は呪いカードを獲得しました`);
                 } else {
                     game.log(`呪いカードの山札がないため、${target.name}は呪いカードを獲得しませんでした`);

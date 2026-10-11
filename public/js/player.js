@@ -103,7 +103,8 @@ class Player {
     
     // カードを獲得する（サプライから）
     gainCard(cardId, destination = 'discard') {
-        const card = new Card(ALL_CARDS[cardId]);
+        // ALL_CARDSのキーは大文字なので、どちらのIDでも受け付ける
+        const card = new Card(ALL_CARDS[cardId.toUpperCase()]);
         
         if (destination === 'hand') {
             this.hand.push(card);

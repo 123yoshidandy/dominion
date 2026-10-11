@@ -45,6 +45,11 @@ class UIController {
         // モーダルを閉じるイベントを設定
         this.elements.modalClose.addEventListener('click', () => {
             this.modal.closeModal();
+
+            // カード選択中に閉じた場合は「何も選ばない」として解決し、ゲームが止まらないようにする
+            if (this.gameController.hasPendingPrompt()) {
+                this.gameController.resolvePrompt([]);
+            }
         });
         
         // ゲーム終了ボタンのイベントを設定

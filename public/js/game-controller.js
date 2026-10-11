@@ -111,14 +111,14 @@ class GameController {
         return this.game.getCurrentPlayer();
     }
     
-    // カード捨て選択の結果を処理
-    handleDiscardSelection(player, selectedIndices) {
-        this.actionHandler.handleDiscardSelection(player, selectedIndices);
+    // カード選択（捨てる・廃棄する）の結果を処理
+    resolvePrompt(selectedIndices) {
+        return this.actionHandler.resolvePrompt(selectedIndices);
     }
-    
-    // カード廃棄選択の結果を処理
-    handleTrashSelection(player, selectedIndices) {
-        this.actionHandler.handleTrashSelection(player, selectedIndices);
+
+    // カード選択待ちかどうか
+    hasPendingPrompt() {
+        return !!(this.game && this.game.pendingPrompt);
     }
 }
 

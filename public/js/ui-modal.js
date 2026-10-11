@@ -121,8 +121,8 @@ class UIModal {
                 }
             });
             
-            this.uiController.gameController.handleDiscardSelection(player, selectedIndices);
             this.closeModal();
+            this.uiController.gameController.resolvePrompt(selectedIndices);
         });
         
         this.elements.gameModal.style.display = 'block';
@@ -179,8 +179,8 @@ class UIModal {
                 }
             });
             
-            this.uiController.gameController.handleTrashSelection(player, selectedIndices);
             this.closeModal();
+            this.uiController.gameController.resolvePrompt(selectedIndices);
         });
         
         this.elements.gameModal.style.display = 'block';
