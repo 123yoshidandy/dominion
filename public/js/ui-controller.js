@@ -6,7 +6,7 @@
 import UIView from './ui-view.js';
 import UIModal from './ui-modal.js';
 import UIEventHandler from './ui-event-handler.js';
-import { CARD_TYPES } from './card-data.js';
+import { ALL_CARDS } from './card-data.js';
 
 class UIController {
     // CPUが1手進めるまでの待ち時間（ミリ秒）
@@ -19,6 +19,9 @@ class UIController {
         // DOM要素の参照を保持
         this.elements = {
             gameStatus: document.getElementById('game-status'),
+            turnStats: document.getElementById('turn-stats'),
+            latestLog: document.getElementById('latest-log'),
+            gameLog: document.getElementById('game-log'),
             supplyPiles: document.getElementById('supply-piles'),
             playersInfo: document.getElementById('players-info'),
             handCards: document.getElementById('hand-cards'),
@@ -62,6 +65,11 @@ class UIController {
 
         // スクロールボタンのセットアップ
         this.eventHandler.setupScrollToBottomButton();
+        
+        // 広い画面ではログを最初から開いておく（スマホでは折りたたむ）
+        if (window.matchMedia('(min-width: 900px)').matches) {
+            this.elements.gameLog.open = true;
+        }
     }
     
     // ゲームの初期化画面を表示
@@ -122,6 +130,20 @@ class UIController {
     // 購入フェーズへの移行処理
     handleEnterBuyPhase() {
         this.eventHandler.handleEnterBuyPhase();
+    }
+    
+    // サプライのカードの説明を表示する（長押し時）
+    showSupplyCardDetail(cardId) {
+        const gameState = this.gameController.getGameState();
+        if (!gameState) return;
+        
+        const card = ALL_CARDS[cardId.toUpperCase()];
+        this.modal.showCardDetail(card, { count: gameState.supply[cardId] ?? 0 });
+    }
+    
+    // 手札・場札のカードの説明を表示する（長押し時）
+    showCardDetail(card) {
+        this.modal.showCardDetail(card);
     }
     
     // カード購入処理

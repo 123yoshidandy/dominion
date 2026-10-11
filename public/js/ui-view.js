@@ -4,184 +4,164 @@
  */
 
 import { CARD_TYPES, ALL_CARDS } from './card-data.js';
+import { onPress } from './press-handler.js';
+import { getCardArt } from './card-art.js';
+
+// サプライの基本カードの並び順（左から勝利点の列、財宝の列、その右にアクション）
+const VICTORY_SUPPLY_ORDER = ['estate', 'duchy', 'province', 'curse'];
+const TREASURE_SUPPLY_ORDER = ['copper', 'silver', 'gold'];
+const BASIC_SUPPLY_ORDER = [...VICTORY_SUPPLY_ORDER, ...TREASURE_SUPPLY_ORDER];
 
 class UIView {
     constructor(uiController) {
         this.uiController = uiController;
         this.elements = uiController.elements;
     }
-    
+
     // ゲーム画面を更新
     updateGameView(gameState) {
         if (!gameState) return;
-        
+
         // ゲームステータスを更新
         this.updateGameStatus(gameState);
-        
+
         // サプライパイルを更新
         this.updateSupplyPiles(gameState);
-        
+
         // プレイヤー情報を更新
         this.updatePlayersInfo(gameState);
-        
+
         // 現在のプレイヤーの手札と場を更新
         this.updateCurrentPlayerArea(gameState);
-        
+
         // ボタンやアクション状態を更新
         this.updateGameControls(gameState);
     }
-    
-    // ゲームステータスを更新
+
+    // ゲームステータスと、現在のプレイヤーの残りリソースを更新
     updateGameStatus(gameState) {
         const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-        let statusText = '';
-        
+
         if (gameState.phase === 'end') {
-            statusText = 'ゲーム終了';
-        } else {
-            const cpuLabel = currentPlayer.isCPU ? '（CPU）' : '';
-            statusText = `${currentPlayer.name}${cpuLabel}のターン - ${this.getPhaseText(gameState.phase)}`;
+            this.elements.gameStatus.textContent = 'ゲーム終了';
+            this.elements.turnStats.innerHTML = '';
+            return;
         }
-        
-        this.elements.gameStatus.textContent = statusText;
+
+        const cpuLabel = currentPlayer.isCPU ? '（CPU）' : '';
+        this.elements.gameStatus.innerHTML = `
+            <span class="status-player">${currentPlayer.name}${cpuLabel}</span>
+            <span class="status-phase phase-${gameState.phase}">${this.getPhaseText(gameState.phase)}</span>
+        `;
+
+        const stat = (label, value, dim) => `
+            <div class="stat ${dim ? 'dim' : ''}">
+                <span class="stat-label">${label}</span>
+                <span class="stat-value">${value}</span>
+            </div>
+        `;
+
+        this.elements.turnStats.innerHTML =
+            stat('アクション', currentPlayer.actions, gameState.phase !== 'action') +
+            stat('購入', currentPlayer.buys, false) +
+            stat('コイン', currentPlayer.coins, false);
     }
-    
+
     // フェーズの日本語テキストを取得
     getPhaseText(phase) {
         switch (phase) {
-            case 'action': return 'アクションフェーズ';
-            case 'buy': return '購入フェーズ';
-            case 'cleanup': return 'クリーンアップフェーズ';
+            case 'action': return 'アクション';
+            case 'buy': return '購入';
+            case 'cleanup': return 'クリーンアップ';
             default: return phase;
         }
     }
-    
+
     // サプライパイルを更新
     updateSupplyPiles(gameState) {
         const supply = gameState.supply;
-        
-        // サプライパイルのDOMをクリア
+        const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+
+        // 購入フェーズの人間のプレイヤーが買えるカードを強調する
+        const canBuy = (card) => gameState.phase === 'buy' && !currentPlayer.isCPU &&
+            currentPlayer.buys > 0 && currentPlayer.coins >= card.cost;
+
+        const tilesHtml = (cardIds) => cardIds
+            .filter(cardId => supply[cardId] !== undefined)
+            .map(cardId => {
+                const card = ALL_CARDS[cardId.toUpperCase()];
+                return this.createSupplyCardHtml(card, supply[cardId], canBuy(card));
+            })
+            .join('');
+
+        // 王国カードはサプライのキーから基本カード以外を取り出し、コスト順に並べる
+        const kingdomCardIds = Object.keys(supply)
+            .filter(cardId => !BASIC_SUPPLY_ORDER.includes(cardId) && ALL_CARDS[cardId.toUpperCase()])
+            .sort((a, b) => ALL_CARDS[a.toUpperCase()].cost - ALL_CARDS[b.toUpperCase()].cost);
+
         this.elements.supplyPiles.innerHTML = `
-            <div id="victory-cards" class="supply-area">
-                <div class="supply-card-grid"></div>
+            <div class="supply-group supply-victory">
+                <h3>勝利点</h3>
+                <div class="supply-grid">${tilesHtml(VICTORY_SUPPLY_ORDER)}</div>
             </div>
-            <div id="action-cards-top" class="supply-area">
-                <div class="supply-card-grid"></div>
+            <div class="supply-group supply-treasure">
+                <h3>財宝</h3>
+                <div class="supply-grid">${tilesHtml(TREASURE_SUPPLY_ORDER)}</div>
             </div>
-            <div id="treasure-cards" class="supply-area">
-                <div class="supply-card-grid"></div>
-            </div>
-            <div id="action-cards-bottom" class="supply-area">
-                <div class="supply-card-grid"></div>
+            <div class="supply-group supply-kingdom">
+                <h3>アクション</h3>
+                <div class="supply-grid">${tilesHtml(kingdomCardIds)}</div>
             </div>
         `;
-        
-        // 勝利点カード (左上) - 呪いを屋敷の左側に配置
-        const victoryCardsContainer = document.querySelector('#victory-cards .supply-card-grid');
-        
-        // まず呪いカードを配置
-        if (supply['curse'] !== undefined) {
-            const curseCard = ALL_CARDS['CURSE'];
-            victoryCardsContainer.innerHTML += this.createSupplyCardHtml(curseCard, supply['curse']);
-        }
-        
-        // 次に勝利点カードを配置
-        const victoryCards = ['estate', 'duchy', 'province'];
-        victoryCards.forEach(cardId => {
-            if (supply[cardId] !== undefined) {
-                const card = ALL_CARDS[cardId.toUpperCase()];
-                victoryCardsContainer.innerHTML += this.createSupplyCardHtml(card, supply[cardId]);
-            }
-        });
-        
-        // 財宝カード (左下)
-        const treasureCards = ['copper', 'silver', 'gold'];
-        const treasureCardsContainer = document.querySelector('#treasure-cards .supply-card-grid');
-        treasureCards.forEach(cardId => {
-            if (supply[cardId] !== undefined) {
-                const card = ALL_CARDS[cardId.toUpperCase()];
-                treasureCardsContainer.innerHTML += this.createSupplyCardHtml(card, supply[cardId]);
-            }
-        });
-        
-        // アクションカード (右側上下)
-        let actionCards = [];
-        
-        // 王国カードのリストを取得
-        if (gameState.game && gameState.game.selectedKingdomCards) {
-            actionCards = gameState.game.selectedKingdomCards.filter(cardId => {
-                const card = ALL_CARDS[cardId.toUpperCase()];
-                return card && card.types.includes(CARD_TYPES.ACTION);
-            });
-        } else {
-            // 王国カードIDがない場合は、サプライオブジェクトのキーから取得
-            actionCards = Object.keys(supply).filter(cardId => {
-                if (treasureCards.includes(cardId) || victoryCards.includes(cardId) || cardId === 'curse') {
-                    return false;
-                }
-                const cardKey = cardId.toUpperCase();
-                return ALL_CARDS[cardKey] && ALL_CARDS[cardKey].types.includes(CARD_TYPES.ACTION);
-            });
-        }
-        
-        // アクションカードをコスト順にソート（低いものから順に）
-        actionCards.sort((a, b) => {
-            const cardA = ALL_CARDS[a.toUpperCase()];
-            const cardB = ALL_CARDS[b.toUpperCase()];
-            return cardA.cost - cardB.cost; // 低いコストが先に来るようにソート
-        });
-        
-        // アクションカードを左下→右下→左上→右上の順に配置
-        const actionCardsTopContainer = document.querySelector('#action-cards-top .supply-card-grid');
-        const actionCardsBottomContainer = document.querySelector('#action-cards-bottom .supply-card-grid');
-        
-        // 半分のインデックスを計算（奇数個の場合は下段に多く配置）
-        const halfIndex = Math.ceil(actionCards.length / 2);
-        
-        // 各カードにグリッド位置を割り当てる
-        actionCards.forEach((cardId, index) => {
-            if (supply[cardId] !== undefined) {
-                const card = ALL_CARDS[cardId.toUpperCase()];
-                
-                // 下段（低コスト）と上段（高コスト）に分ける
-                if (index < halfIndex) {
-                    // 下段：左から右へ（低コスト→中コスト）
-                    actionCardsBottomContainer.innerHTML += this.createSupplyCardHtml(card, supply[cardId]);
-                } else {
-                    // 上段：左から右へ（中コスト→高コスト）
-                    actionCardsTopContainer.innerHTML += this.createSupplyCardHtml(card, supply[cardId]);
-                }
-            }
-        });
-        
-        // カードクリックイベントを追加
+
+        // タップで購入、長押しで説明を表示する
         const supplyCards = this.elements.supplyPiles.querySelectorAll('.card');
         supplyCards.forEach(card => {
-            card.addEventListener('click', () => {
-                const cardId = card.getAttribute('data-card-id');
-                this.uiController.handleCardPurchase(cardId);
+            const cardId = card.getAttribute('data-card-id');
+            onPress(card, {
+                onTap: () => this.uiController.handleCardPurchase(cardId),
+                onLongPress: () => this.uiController.showSupplyCardDetail(cardId)
             });
         });
     }
-    
+
     // サプライカードのHTML生成
-    createSupplyCardHtml(card, count) {
-        const cardTypeClass = card.types.map(type => `${type}-card`).join(' ');
-        
+    createSupplyCardHtml(card, count, affordable) {
+        const stateClass = count <= 0 ? 'empty' : (affordable ? 'affordable' : '');
+
         // カードIDは小文字に変換して一貫性を保つ
         const cardId = card.id.toLowerCase();
-        
+
         return `
-            <div class="card ${cardTypeClass}" data-card-id="${cardId}">
-                <div class="card-title">${card.name}</div>
-                <div class="card-cost">${card.cost}</div>
-                <div class="card-type">${this.getCardTypeText(card.types)}</div>
-                <div class="card-description">${card.description}</div>
-                <div class="card-count">${count}</div>
+            <div class="card supply-tile ${this.getCardTypeClass(card)} ${stateClass}" data-card-id="${cardId}">
+                <span class="card-cost">${card.cost}</span>
+                <span class="tile-art">${getCardArt(card.id)}</span>
+                <span class="card-title">${card.name}</span>
+                <span class="card-count">${count}</span>
             </div>
         `;
     }
-    
+
+    // 手札・場札などに使う通常サイズのカードのHTML生成
+    createCardHtml(card, attributes = '', extraClass = '') {
+        return `
+            <div class="card ${this.getCardTypeClass(card)} ${extraClass}" ${attributes}>
+                <div class="card-head">
+                    <span class="card-cost">${card.cost}</span>
+                    <span class="card-title">${card.name}</span>
+                </div>
+                <div class="card-art">${getCardArt(card.id)}</div>
+                <div class="card-type">${this.getCardTypeText(card.types)}</div>
+                <div class="card-description">${card.description}</div>
+            </div>
+        `;
+    }
+
+    // カードタイプに応じたクラス名
+    getCardTypeClass(card) {
+        return card.types.map(type => `${type}-card`).join(' ');
+    }
+
     // カードタイプの日本語テキスト取得
     getCardTypeText(types) {
         const typeMap = {
@@ -190,137 +170,93 @@ class UIView {
             [CARD_TYPES.ACTION]: 'アクション',
             [CARD_TYPES.CURSE]: '呪い'
         };
-        
+
         return types.map(type => typeMap[type] || type).join(' - ');
     }
-    
+
     // プレイヤー情報を更新
     updatePlayersInfo(gameState) {
-        let html = '';
-        
-        gameState.players.forEach((player, index) => {
+        const html = gameState.players.map((player, index) => {
             const isCurrentPlayer = index === gameState.currentPlayerIndex;
-            const playerClass = isCurrentPlayer ? 'player-stats active-player' : 'player-stats';
-            
-            html += `
-                <div class="${playerClass}">
-                    <div class="player-name">${player.name}${player.isCPU ? ' (CPU)' : ''}</div>
-                    <div class="player-deck">山札: ${player.deck.length}枚</div>
-                    <div class="player-hand">手札: ${player.hand.length}枚</div>
-                    <div class="player-discard">捨て札: ${player.discard.length}枚</div>
-                    ${isCurrentPlayer ? this.getCurrentPlayerStatsHtml(player, gameState.phase) : ''}
+
+            return `
+                <div class="player-stats ${isCurrentPlayer ? 'active-player' : ''}">
+                    <div class="player-name">
+                        ${player.name}${player.isCPU ? '<span class="cpu-badge">CPU</span>' : ''}
+                    </div>
+                    <div class="player-meta">
+                        <span>勝利点 <b>${player.calculateVictoryPoints()}</b></span>
+                        <span>山札 ${player.deck.length}</span>
+                        <span>手札 ${player.hand.length}</span>
+                        <span>捨て札 ${player.discard.length}</span>
+                    </div>
                 </div>
             `;
-        });
-        
+        }).join('');
+
         this.elements.playersInfo.innerHTML = html;
     }
-    
-    // 現在のプレイヤーの詳細情報HTML生成
-    getCurrentPlayerStatsHtml(player, phase) {
-        if (phase === 'action') {
-            return `
-                <div class="player-actions">アクション: ${player.actions}</div>
-                <div class="player-buys">購入: ${player.buys}</div>
-                <div class="player-coins">財宝: ${player.coins}</div>
-            `;
-        } else if (phase === 'buy') {
-            return `
-                <div class="player-buys">購入: ${player.buys}</div>
-                <div class="player-coins">財宝: ${player.coins}</div>
-            `;
-        }
-        
-        return '';
-    }
-    
+
     // 現在のプレイヤーの手札と場を更新
     updateCurrentPlayerArea(gameState) {
         const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-        
+
+        // 今プレイできるアクションカードを強調する
+        const canPlayActions = gameState.phase === 'action' && !currentPlayer.isCPU && currentPlayer.actions > 0;
+
         // 手札を更新
-        let handHtml = '';
-        currentPlayer.hand.forEach((card, index) => {
-            const cardTypeClass = card.types.map(type => `${type}-card`).join(' ');
-            
-            handHtml += `
-                <div class="card ${cardTypeClass}" data-card-index="${index}">
-                    <div class="card-title">${card.name}</div>
-                    <div class="card-cost">${card.cost}</div>
-                    <div class="card-type">${this.getCardTypeText(card.types)}</div>
-                    <div class="card-description">${card.description}</div>
-                </div>
-            `;
-        });
-        
-        this.elements.handCards.innerHTML = handHtml;
-        
-        // 手札のカードクリックイベントを追加
+        this.elements.handCards.innerHTML = currentPlayer.hand.map((card, index) => {
+            const playable = canPlayActions && card.isType(CARD_TYPES.ACTION);
+            return this.createCardHtml(card, `data-card-index="${index}"`, playable ? 'playable' : '');
+        }).join('');
+
+        // 手札はタップでプレイ、長押しで説明を表示する
         const handCards = this.elements.handCards.querySelectorAll('.card');
-        handCards.forEach(card => {
-            card.addEventListener('click', () => {
-                const cardIndex = parseInt(card.getAttribute('data-card-index'));
-                this.uiController.handleCardPlay(cardIndex);
+        handCards.forEach((card, index) => {
+            onPress(card, {
+                onTap: () => this.uiController.handleCardPlay(index),
+                onLongPress: () => this.uiController.showCardDetail(currentPlayer.hand[index])
             });
         });
-        
+
         // 場のカードを更新
-        let playedHtml = '';
-        currentPlayer.playArea.forEach(card => {
-            const cardTypeClass = card.types.map(type => `${type}-card`).join(' ');
-            
-            playedHtml += `
-                <div class="card ${cardTypeClass}">
-                    <div class="card-title">${card.name}</div>
-                    <div class="card-cost">${card.cost}</div>
-                    <div class="card-type">${this.getCardTypeText(card.types)}</div>
-                    <div class="card-description">${card.description}</div>
-                </div>
-            `;
+        this.elements.playedCards.innerHTML = currentPlayer.playArea.length > 0
+            ? currentPlayer.playArea.map(card => this.createCardHtml(card, '', 'mini')).join('')
+            : '<p class="empty-note">まだカードをプレイしていません</p>';
+        
+        // 場札は長押しで説明を表示する
+        this.elements.playedCards.querySelectorAll('.card').forEach((card, index) => {
+            onPress(card, {
+                onLongPress: () => this.uiController.showCardDetail(currentPlayer.playArea[index])
+            });
         });
-        
-        this.elements.playedCards.innerHTML = playedHtml;
-        
+
         // 山札と捨て札を更新
         this.elements.deckCount.textContent = currentPlayer.deck.length;
-        
-        let discardHtml = '';
-        if (currentPlayer.discard.length > 0) {
-            const topCard = currentPlayer.discard[currentPlayer.discard.length - 1];
-            const cardTypeClass = topCard.types.map(type => `${type}-card`).join(' ');
-            
-            discardHtml = `
-                <div class="card ${cardTypeClass}">
-                    <div class="card-title">${topCard.name}</div>
-                    <div class="card-count">${currentPlayer.discard.length}</div>
-                </div>
-            `;
-        }
-        
-        this.elements.discardCards.innerHTML = discardHtml;
+        this.elements.discardCards.textContent = currentPlayer.discard.length;
     }
-    
+
     // ゲームコントロールを更新
     updateGameControls(gameState) {
         const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-        
+
         // CPUの手番中は人間の操作ボタンを無効にする
         const isCpuTurn = currentPlayer.isCPU;
-        
+
         // ターン終了ボタン
         this.elements.endTurnBtn.disabled = gameState.phase === 'end' || isCpuTurn;
-        
+
         // アクションボタン
         let actionButtonsHtml = '';
-        
+
         if (gameState.phase === 'action' && !isCpuTurn) {
             actionButtonsHtml += `
-                <button id="buy-phase-btn" ${currentPlayer.actions <= 0 ? '' : 'class="highlight"'}>購入フェーズへ</button>
+                <button id="buy-phase-btn" ${currentPlayer.actions <= 0 ? 'class="highlight"' : ''}>購入へ</button>
             `;
         }
-        
+
         this.elements.actionButtons.innerHTML = actionButtonsHtml;
-        
+
         // 購入フェーズボタンのイベント
         const buyPhaseBtn = document.getElementById('buy-phase-btn');
         if (buyPhaseBtn) {
@@ -329,31 +265,34 @@ class UIView {
             });
         }
     }
-    
+
     // ログエントリ追加
     addLogEntry(logEntry) {
         const logElement = document.createElement('div');
         logElement.className = 'log-entry';
         logElement.textContent = logEntry.message;
-        
+
         // 最新のログを強調表示するクラスを追加
         logElement.classList.add('new-log');
-        
+
         // 既存のログから 'new-log' クラスを削除
         const existingLogs = this.elements.logEntries.querySelectorAll('.new-log');
         existingLogs.forEach(log => log.classList.remove('new-log'));
-        
+
         this.elements.logEntries.appendChild(logElement);
-        
+
+        // ヘッダーにも最新のログを1行表示する
+        this.elements.latestLog.textContent = logEntry.message;
+
         // アニメーション効果のためのクラスを追加して少し遅れて削除
         logElement.classList.add('log-entry-animation');
         setTimeout(() => {
             logElement.classList.remove('log-entry-animation');
         }, 1000);
-        
+
         // 自動スクロール
         this.elements.logEntries.scrollTop = this.elements.logEntries.scrollHeight;
-        
+
         // スクロールボタンの表示状態を更新
         this.updateScrollToBottomButton();
     }
@@ -362,10 +301,10 @@ class UIView {
     updateScrollToBottomButton() {
         if (this.elements.scrollToBottomBtn) {
             // スクロール位置が下部から一定以上離れていればボタンを表示
-            const isScrolledUp = this.elements.logEntries.scrollHeight - 
-                                this.elements.logEntries.scrollTop - 
+            const isScrolledUp = this.elements.logEntries.scrollHeight -
+                                this.elements.logEntries.scrollTop -
                                 this.elements.logEntries.clientHeight > 50;
-            
+
             this.elements.scrollToBottomBtn.style.display = isScrolledUp ? 'block' : 'none';
         }
     }

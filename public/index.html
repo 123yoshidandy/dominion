@@ -2,80 +2,84 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#173326">
     <title>ドミニオン - カードゲーム</title>
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-    <header>
-        <h1>ドミニオン</h1>
-        <div id="game-status">ゲームの準備をしています...</div>
+    <!-- アニメーションのためのオーバーレイ -->
+    <div id="animation-overlay"></div>
+
+    <!-- 手番とフェーズ、残りリソースを常に表示するヘッダー -->
+    <header id="topbar">
+        <div class="topbar-row">
+            <h1>ドミニオン</h1>
+            <div id="game-status">ゲームの準備をしています...</div>
+        </div>
+        <div id="turn-stats"></div>
+        <div id="latest-log" aria-live="polite"></div>
     </header>
 
-    <main>
-        <!-- アニメーションのためのオーバーレイ -->
-        <div id="animation-overlay"></div>
-        
-        <section id="game-board">
-            <div id="supply-piles" class="card-area">
+    <main id="table">
+        <section id="players-info">
+            <!-- プレイヤー情報はJavaScriptで動的に生成されます -->
+        </section>
+
+        <section id="supply-section" class="panel">
+            <h2>サプライ <span class="hint">タップで購入・長押しで説明</span></h2>
+            <div id="supply-piles">
                 <!-- サプライパイルはJavaScriptで動的に生成されます -->
             </div>
-
-            <div id="game-info-panel">
-                <div id="players-info">
-                    <!-- プレイヤー情報はJavaScriptで動的に生成されます -->
-                </div>
-                <div id="game-log">
-                    <h3>ゲームログ</h3>
-                    <div id="log-entries"></div>
-                </div>
-            </div>
-
-            <div id="player-area">
-                <div id="hand" class="card-area">
-                    <h3>手札</h3>
-                    <div id="hand-cards"></div>
-                </div>
-                <div id="play-area" class="card-area">
-                    <h3>場札</h3>
-                    <div id="played-cards"></div>
-                </div>
-                <div id="deck-discard">
-                    <div id="deck" class="card-pile">
-                        <h3>山札</h3>
-                        <div id="deck-count">0</div>
-                    </div>
-                    <div id="discard" class="card-pile">
-                        <h3>捨て札</h3>
-                        <div id="discard-cards"></div>
-                    </div>
-                </div>
-            </div>
         </section>
 
-        <section id="game-controls">
-            <button id="end-turn-btn" disabled>ターン終了</button>
-            <div id="action-buttons">
-                <!-- アクションボタンはJavaScriptで動的に生成されます -->
-            </div>
+        <section id="play-area" class="panel">
+            <h2>場札</h2>
+            <div id="played-cards"></div>
         </section>
 
-        <div id="game-modal" class="modal">
-            <div class="modal-content">
-                <span class="close">&times;</span>
-                <div id="modal-title"></div>
-                <div id="modal-body"></div>
-            </div>
-        </div>
+        <details id="game-log" class="panel">
+            <summary>ゲームログ</summary>
+            <div id="log-entries"></div>
+        </details>
     </main>
 
-    <footer>
-        <p>ドミニオン ウェブアプリ - 2025年</p>
+    <!-- 手札と操作ボタンは親指の届く画面下部に固定 -->
+    <footer id="dock">
+        <div class="dock-row">
+            <div id="piles">
+                <div id="deck" class="pile">
+                    <span class="pile-label">山札</span>
+                    <span id="deck-count" class="pile-count">0</span>
+                </div>
+                <div id="discard" class="pile">
+                    <span class="pile-label">捨て札</span>
+                    <div id="discard-cards" class="pile-count">0</div>
+                </div>
+            </div>
+            <div id="game-controls">
+                <div id="action-buttons">
+                    <!-- アクションボタンはJavaScriptで動的に生成されます -->
+                </div>
+                <button id="end-turn-btn" disabled>ターン終了</button>
+            </div>
+        </div>
+        <div id="hand">
+            <div id="hand-cards"></div>
+        </div>
     </footer>
+
+    <div id="game-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" role="button" aria-label="閉じる">&times;</span>
+            <div id="modal-title"></div>
+            <div id="modal-body"></div>
+        </div>
+    </div>
 
     <!-- JavaScriptファイル - ES Modulesとして読み込み -->
     <script type="module" src="js/main.js"></script>
-    
+
     <!-- 後方互換性のために残しているファイル -->
     <script type="module" src="js/game-models.js"></script>
 </body>

@@ -7,6 +7,9 @@ import { CARD_TYPES, ALL_CARDS } from './card-data.js';
 import cardAnimator from './card-animations.js';
 
 class UIEventHandler {
+    // 購入回数を使い切ってから自動でターンを終えるまでの待ち時間（ミリ秒）
+    static AUTO_END_TURN_DELAY_MS = 400;
+    
     constructor(uiController) {
         this.uiController = uiController;
         this.gameController = uiController.gameController;
@@ -15,25 +18,26 @@ class UIEventHandler {
     
     // カードプレイ処理
     handleCardPlay(cardIndex) {
-        if (this.gameController.isCpuTurn()) return;
-        
         const gameState = this.gameController.getGameState();
         if (!gameState) return;
-        
+
         const currentPlayer = gameState.players[gameState.currentPlayerIndex];
         const card = currentPlayer.hand[cardIndex];
-        
-        // アクションフェーズでアクションカードの場合
-        if (gameState.phase === 'action' && card.isType(CARD_TYPES.ACTION)) {
-            // カード要素を取得
-            const cardElement = this.elements.handCards.querySelectorAll('.card')[cardIndex];
-            const playArea = this.elements.playedCards;
-            
-            // アニメーションで移動させてからプレイする
-            cardAnimator.playCard(cardElement, playArea, () => {
-                this.gameController.playActionCard(cardIndex);
-            });
-        }
+
+        const canPlay = !this.gameController.isCpuTurn() && gameState.phase === 'action' &&
+            currentPlayer.actions > 0 && card.isType(CARD_TYPES.ACTION);
+
+        // 今プレイできないカードはタップしても何もしない（説明は長押しで表示する）
+        if (!canPlay) return;
+
+        // カード要素を取得
+        const cardElement = this.elements.handCards.querySelectorAll('.card')[cardIndex];
+        const playArea = this.elements.playedCards;
+
+        // アニメーションで移動させてからプレイする
+        cardAnimator.playCard(cardElement, playArea, () => {
+            this.gameController.playActionCard(cardIndex);
+        });
     }
     
     // 購入フェーズへの移行処理
@@ -85,13 +89,20 @@ class UIEventHandler {
         
         const currentPlayer = gameState.players[gameState.currentPlayerIndex];
         
+        // 購入に成功したら、購入回数が残っていなければターンを自動で終える
+        const purchase = () => {
+            if (this.gameController.buyCard(cardId)) {
+                this.endTurnIfNoBuysLeft();
+            }
+        };
+        
         // カード情報を取得して購入可能かチェック
         const upperCardId = cardId.toUpperCase();
         const card = ALL_CARDS[upperCardId];
         
         if (!card || currentPlayer.coins < card.cost) {
             // 購入できない場合（コスト不足）はアニメーションしない
-            this.gameController.buyCard(cardId);
+            purchase();
             return;
         }
         
@@ -104,23 +115,37 @@ class UIEventHandler {
         
         if (cardElement && discardArea) {
             // アニメーションで移動させてから購入処理
-            cardAnimator.purchaseCard(cardElement, discardArea, () => {
-                this.gameController.buyCard(cardId);
-            });
+            cardAnimator.purchaseCard(cardElement, discardArea, purchase);
         } else {
             // 要素が見つからない場合は直接購入処理
-            this.gameController.buyCard(cardId);
+            purchase();
         }
+    }
+    
+    // 購入回数を使い切っていたら、購入したカードが見える程度に間を置いてターンを終える
+    endTurnIfNoBuysLeft() {
+        const gameState = this.gameController.getGameState();
+        if (!gameState || gameState.phase !== 'buy') return;
+        
+        const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+        if (currentPlayer.buys > 0) return;
+        
+        setTimeout(() => this.handleEndTurn(), UIEventHandler.AUTO_END_TURN_DELAY_MS);
     }
     
     // ターン終了処理
     handleEndTurn() {
-        if (this.gameController.isCpuTurn()) return;
+        // 自動のターン終了とボタン操作が重なっても、二重にターンを進めない
+        if (this.isEndingTurn || this.gameController.isCpuTurn()) return;
         
         const gameState = this.gameController.getGameState();
         if (!gameState) return;
         
-        const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+        this.isEndingTurn = true;
+        const finishTurn = () => {
+            this.isEndingTurn = false;
+            this.gameController.endTurn();
+        };
         
         // 手札と場のカードを捨て札にアニメーションする
         const handCards = Array.from(this.elements.handCards.querySelectorAll('.card'));
@@ -138,7 +163,7 @@ class UIEventHandler {
                 processedCards++;
                 if (processedCards >= totalCards) {
                     // すべてのアニメーションが完了したらターン終了
-                    this.gameController.endTurn();
+                    finishTurn();
                 }
             };
             
@@ -153,7 +178,7 @@ class UIEventHandler {
             });
         } else {
             // カードがない場合は直接ターン終了
-            this.gameController.endTurn();
+            finishTurn();
         }
     }
     
