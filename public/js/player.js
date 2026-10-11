@@ -7,9 +7,10 @@ import { ALL_CARDS, CARD_TYPES } from './card-data.js';
 
 // プレイヤークラス
 class Player {
-    constructor(name, id) {
+    constructor(name, id, isCPU = false) {
         this.name = name;
         this.id = id;
+        this.isCPU = isCPU;  // CPUプレイヤーかどうか
         this.hand = [];      // 手札
         this.deck = [];      // 山札
         this.discard = [];   // 捨て札

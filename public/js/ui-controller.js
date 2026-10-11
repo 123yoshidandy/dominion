@@ -9,6 +9,9 @@ import UIEventHandler from './ui-event-handler.js';
 import { CARD_TYPES } from './card-data.js';
 
 class UIController {
+    // CPUが1手進めるまでの待ち時間（ミリ秒）
+    static CPU_STEP_DELAY_MS = 700;
+
     constructor(gameController) {
         this.gameController = gameController;
         this.gameController.setUIController(this);
@@ -75,6 +78,20 @@ class UIController {
     updateGameView() {
         const gameState = this.gameController.getGameState();
         this.view.updateGameView(gameState);
+
+        this.scheduleCpuStep();
+    }
+
+    // CPUの手番なら、ログを追えるよう少し間を置いて1手進める
+    scheduleCpuStep() {
+        if (this.cpuTimer || !this.gameController.isCpuTurn()) return;
+
+        this.cpuTimer = setTimeout(() => {
+            this.cpuTimer = null;
+            this.gameController.runCpuStep();
+            // 画面が更新されない手でも止まらないよう、次の手を予約し直す
+            this.scheduleCpuStep();
+        }, UIController.CPU_STEP_DELAY_MS);
     }
     
     // ログエントリ追加

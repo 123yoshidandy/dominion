@@ -18,9 +18,10 @@ class Game {
         this.callbacks = {}; // コールバック関数
         this.pendingPrompt = null; // プレイヤーの選択待ち（地下室・礼拝堂など）
         
-        // プレイヤーの作成
-        playerNames.forEach((name, index) => {
-            const player = new Player(name, index);
+        // プレイヤーの作成（名前の文字列か { name, isCPU } を受け付ける）
+        playerNames.forEach((config, index) => {
+            const { name, isCPU = false } = typeof config === 'string' ? { name: config } : config;
+            const player = new Player(name, index, isCPU);
             this.players.push(player);
         });
     }
@@ -73,13 +74,10 @@ class Game {
             const upperCardId = cardId.toUpperCase();
             if (ALL_CARDS[upperCardId]) {
                 this.supply[cardId] = ALL_CARDS[upperCardId].count;
-                console.log(`サプライに追加: ${cardId}, 枚数: ${ALL_CARDS[upperCardId].count}`);
             } else {
                 console.error(`カードデータが見つかりません: ${upperCardId}`);
             }
         });
-        
-        console.log('初期化されたサプライ:', this.supply);
     }
     
     // 王国カードをランダムに選ぶ
@@ -96,7 +94,6 @@ class Game {
             selectedCards.push(cardId.toLowerCase());
         }
         
-        console.log('選択された王国カード:', selectedCards);
         return selectedCards;
     }
     

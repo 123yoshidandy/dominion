@@ -25,22 +25,14 @@ class UIModal {
                     <option value="4">4人</option>
                 </select>
                 
-                <div id="player-names">
-                    <div class="player-input">
-                        <label for="player-1">プレイヤー1: </label>
-                        <input type="text" id="player-1" value="プレイヤー1">
-                    </div>
-                    <div class="player-input">
-                        <label for="player-2">プレイヤー2: </label>
-                        <input type="text" id="player-2" value="プレイヤー2">
-                    </div>
-                </div>
+                <div id="player-names"></div>
                 
                 <button id="start-game-btn">ゲーム開始</button>
             </div>
         `;
         
         this.elements.modalBody.innerHTML = setupHtml;
+        this.updatePlayerNameInputs(2);
         
         // プレイヤー数変更時のイベント
         const playerCountSelect = document.getElementById('player-count');
@@ -68,7 +60,10 @@ class UIModal {
             html += `
                 <div class="player-input">
                     <label for="player-${i}">プレイヤー${i}: </label>
-                    <input type="text" id="player-${i}" value="プレイヤー${i}">
+                    <input type="text" id="player-${i}" value="${i === 1 ? 'プレイヤー1' : `CPU${i - 1}`}">
+                    <label class="cpu-toggle">
+                        <input type="checkbox" id="player-${i}-cpu" ${i === 1 ? '' : 'checked'}> CPU
+                    </label>
                 </div>
             `;
         }

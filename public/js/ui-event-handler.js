@@ -15,6 +15,8 @@ class UIEventHandler {
     
     // カードプレイ処理
     handleCardPlay(cardIndex) {
+        if (this.gameController.isCpuTurn()) return;
+        
         const gameState = this.gameController.getGameState();
         if (!gameState) return;
         
@@ -36,6 +38,8 @@ class UIEventHandler {
     
     // 購入フェーズへの移行処理
     handleEnterBuyPhase() {
+        if (this.gameController.isCpuTurn()) return;
+        
         // 財宝カードをアニメーションするためのカード要素を取得
         const treasureCards = Array.from(this.elements.handCards.querySelectorAll('.card'))
             .filter((card, index) => {
@@ -74,6 +78,8 @@ class UIEventHandler {
     
     // カード購入処理
     handleCardPurchase(cardId) {
+        if (this.gameController.isCpuTurn()) return;
+        
         const gameState = this.gameController.getGameState();
         if (!gameState || gameState.phase !== 'buy') return;
         
@@ -109,6 +115,8 @@ class UIEventHandler {
     
     // ターン終了処理
     handleEndTurn() {
+        if (this.gameController.isCpuTurn()) return;
+        
         const gameState = this.gameController.getGameState();
         if (!gameState) return;
         
@@ -157,7 +165,11 @@ class UIEventHandler {
         
         for (let i = 1; i <= playerCount; i++) {
             const nameInput = document.getElementById(`player-${i}`);
-            playerNames.push(nameInput.value || `プレイヤー${i}`);
+            const cpuCheckbox = document.getElementById(`player-${i}-cpu`);
+            playerNames.push({
+                name: nameInput.value || `プレイヤー${i}`,
+                isCPU: cpuCheckbox.checked
+            });
         }
         
         // ゲームを初期化

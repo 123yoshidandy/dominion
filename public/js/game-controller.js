@@ -5,6 +5,7 @@
 
 import Game from './game.js';
 import GameActionHandler from './game-action-handler.js';
+import { runCpuStep } from './cpu-player.js';
 
 class GameController {
     constructor() {
@@ -58,14 +59,16 @@ class GameController {
         
         // カード捨てる選択用のコールバック
         this.game.setCallback('onDiscardPrompt', (data) => {
-            if (this.uiController) {
+            // CPUの選択は runCpuStep で解決するので、人間のときだけモーダルを表示する
+            if (this.uiController && !data.player.isCPU) {
                 this.uiController.showDiscardModal(data.player, data.cardId, data.callback);
             }
         });
         
         // カード廃棄選択用のコールバック
         this.game.setCallback('onTrashPrompt', (data) => {
-            if (this.uiController) {
+            // CPUの選択は runCpuStep で解決するので、人間のときだけモーダルを表示する
+            if (this.uiController && !data.player.isCPU) {
                 this.uiController.showTrashModal(data.player, data.maxCount, data.callback);
             }
         });
@@ -116,6 +119,18 @@ class GameController {
         return this.actionHandler.resolvePrompt(selectedIndices);
     }
 
+    // 現在のプレイヤーがCPUで、まだゲームが続いているか
+    isCpuTurn() {
+        if (!this.game || this.game.phase === 'end') return false;
+        return this.game.getCurrentPlayer().isCPU;
+    }
+    
+    // CPUの手番を1手進める
+    runCpuStep() {
+        if (!this.game) return;
+        runCpuStep(this.game);
+    }
+    
     // カード選択待ちかどうか
     hasPendingPrompt() {
         return !!(this.game && this.game.pendingPrompt);

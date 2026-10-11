@@ -632,3 +632,17 @@ h3 {
         width: 150px;
     }
 }
+/* ゲーム設定画面のプレイヤー入力欄 */
+.player-input {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0;
+}
+
+.cpu-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+}

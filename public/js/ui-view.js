@@ -39,7 +39,8 @@ class UIView {
         if (gameState.phase === 'end') {
             statusText = 'ゲーム終了';
         } else {
-            statusText = `${currentPlayer.name}のターン - ${this.getPhaseText(gameState.phase)}`;
+            const cpuLabel = currentPlayer.isCPU ? '（CPU）' : '';
+            statusText = `${currentPlayer.name}${cpuLabel}のターン - ${this.getPhaseText(gameState.phase)}`;
         }
         
         this.elements.gameStatus.textContent = statusText;
@@ -203,7 +204,7 @@ class UIView {
             
             html += `
                 <div class="${playerClass}">
-                    <div class="player-name">${player.name}</div>
+                    <div class="player-name">${player.name}${player.isCPU ? ' (CPU)' : ''}</div>
                     <div class="player-deck">山札: ${player.deck.length}枚</div>
                     <div class="player-hand">手札: ${player.hand.length}枚</div>
                     <div class="player-discard">捨て札: ${player.discard.length}枚</div>
@@ -303,13 +304,16 @@ class UIView {
     updateGameControls(gameState) {
         const currentPlayer = gameState.players[gameState.currentPlayerIndex];
         
+        // CPUの手番中は人間の操作ボタンを無効にする
+        const isCpuTurn = currentPlayer.isCPU;
+        
         // ターン終了ボタン
-        this.elements.endTurnBtn.disabled = gameState.phase === 'end';
+        this.elements.endTurnBtn.disabled = gameState.phase === 'end' || isCpuTurn;
         
         // アクションボタン
         let actionButtonsHtml = '';
         
-        if (gameState.phase === 'action') {
+        if (gameState.phase === 'action' && !isCpuTurn) {
             actionButtonsHtml += `
                 <button id="buy-phase-btn" ${currentPlayer.actions <= 0 ? '' : 'class="highlight"'}>購入フェーズへ</button>
             `;
