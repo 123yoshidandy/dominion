@@ -89,15 +89,16 @@ class UIView {
         const supply = gameState.supply;
         const currentPlayer = gameState.players[gameState.currentPlayerIndex];
 
-        // 購入フェーズの人間のプレイヤーが買えるカードを強調する
-        const canBuy = (card) => gameState.phase === 'buy' && !currentPlayer.isCPU &&
-            currentPlayer.buys > 0 && currentPlayer.coins >= card.cost;
+        // 人間の購入フェーズでは、コインが足りず買えないカードをグレーアウトする
+        // （アクションフェーズやCPUの手番では、すべて通常の表示にする）
+        const isHumanBuying = gameState.phase === 'buy' && !currentPlayer.isCPU && currentPlayer.buys > 0;
+        const isUnaffordable = (card) => isHumanBuying && currentPlayer.coins < card.cost;
 
         const tilesHtml = (cardIds) => cardIds
             .filter(cardId => supply[cardId] !== undefined)
             .map(cardId => {
                 const card = ALL_CARDS[cardId.toUpperCase()];
-                return this.createSupplyCardHtml(card, supply[cardId], canBuy(card));
+                return this.createSupplyCardHtml(card, supply[cardId], isUnaffordable(card));
             })
             .join('');
 
@@ -133,8 +134,8 @@ class UIView {
     }
 
     // サプライカードのHTML生成
-    createSupplyCardHtml(card, count, affordable) {
-        const stateClass = count <= 0 ? 'empty' : (affordable ? 'affordable' : '');
+    createSupplyCardHtml(card, count, unaffordable) {
+        const stateClass = count <= 0 ? 'empty' : (unaffordable ? 'unaffordable' : '');
 
         // カードIDは小文字に変換して一貫性を保つ
         const cardId = card.id.toLowerCase();

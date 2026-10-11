@@ -413,12 +413,16 @@ button.primary {
     color: var(--ink-muted);
 }
 
-.supply-tile.affordable {
-    box-shadow: 0 0 0 2px var(--gold), 0 0 14px rgba(230, 184, 79, 0.55);
+/* 購入フェーズでコインが足りず買えないカードはグレーアウトする */
+.supply-tile.unaffordable {
+    opacity: 0.5;
+    filter: grayscale(0.85);
 }
 
+/* 売り切れは、買えないカードよりさらに薄くして区別する */
 .supply-tile.empty {
-    opacity: 0.35;
+    opacity: 0.3;
+    filter: grayscale(1);
 }
 
 /* ===== 手札・場札などの通常カード ===== */
