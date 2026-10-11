@@ -7,6 +7,8 @@ import UIView from './ui-view.js';
 import UIModal from './ui-modal.js';
 import UIEventHandler from './ui-event-handler.js';
 import { ALL_CARDS } from './card-data.js';
+import OnlineGameController from './online-controller.js';
+import { getServerUrl } from './online-config.js';
 
 // 表示設定はブラウザに保存し、次回以降も引き継ぐ
 const SETTINGS_KEY = 'dominion.settings';
@@ -20,8 +22,8 @@ class UIController {
     static CPU_STEP_DELAY_MS = 450;
 
     constructor(gameController) {
-        this.gameController = gameController;
-        this.gameController.setUIController(this);
+        this.localController = gameController; // ローカル対戦のコントローラー（オンラインから戻るときに使う）
+        this.useController(gameController);
         this.settings = this.loadSettings();
         
         // DOM要素の参照を保持
@@ -116,6 +118,98 @@ class UIController {
         this.eventHandler.startGame();
     }
     
+    // 画面が使うコントローラー（ローカル対戦／オンライン対戦）を切り替える
+    useController(controller) {
+        this.gameController = controller;
+        controller.setUIController(this);
+    }
+    
+    isOnline() {
+        return this.gameController instanceof OnlineGameController;
+    }
+    
+    // ===== オンライン対戦 =====
+    
+    showOnlineMenu(options = {}) {
+        this.modal.showOnlineMenu(options);
+    }
+    
+    // オンライン対戦のコントローラーに切り替える（まだなら作る）
+    useOnlineController() {
+        if (!this.isOnline()) {
+            this.useController(new OnlineGameController(getServerUrl(), {
+                onLobby: (lobby) => this.handleLobby(lobby),
+                onError: (message) => this.handleOnlineError(message),
+                onConnectionChange: (connected) => {
+                    if (!connected) this.showToast('サーバーとの接続が切れました。再接続しています…');
+                }
+            }));
+        }
+        return this.gameController;
+    }
+    
+    // 部屋を作る・部屋に入る・前の部屋に戻る。つながらなければオンラインのメニューにエラーを出す
+    async enterOnlineRoom(action) {
+        try {
+            await action(this.useOnlineController());
+        } catch (error) {
+            this.showOnlineMenu({ error: error.message });
+        }
+    }
+    
+    createOnlineRoom(name) {
+        return this.enterOnlineRoom(controller => controller.createRoom(name));
+    }
+    
+    joinOnlineRoom(roomCode, name) {
+        return this.enterOnlineRoom(controller => controller.joinRoom(roomCode, name));
+    }
+    
+    resumeOnlineRoom() {
+        return this.enterOnlineRoom(controller => controller.resume());
+    }
+    
+    // ロビーの状態が届いた。ロビーにいる間はロビーの画面を出す（ゲーム中は接続状況の更新だけなので何もしない）
+    handleLobby(lobby) {
+        if (lobby.status !== 'lobby') return;
+        this.resetForNewGame();
+        this.modal.showLobby(lobby, { isHost: this.gameController.isHost() });
+    }
+    
+    // サーバーから受け付けられなかった操作の理由が届いた
+    handleOnlineError(message) {
+        if (this.modal.kind === 'online-menu' || !this.gameController.lobby) {
+            this.showOnlineMenu({ error: message });
+            return;
+        }
+        // 答えた選択が受け付けられなかったときは、次に届く状態で選択を出し直す
+        this.shownPromptId = null;
+        this.showToast(message);
+    }
+    
+    // オンライン対戦をやめて、ローカル対戦の設定画面に戻る
+    leaveOnline() {
+        if (this.isOnline()) this.gameController.leave();
+        this.useController(this.localController);
+        this.resetForNewGame();
+        this.showGameSetup();
+    }
+    
+    // 画面の下に短いお知らせを出す
+    showToast(message) {
+        let toast = document.getElementById('toast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'toast';
+            toast.className = 'toast';
+            document.body.appendChild(toast);
+        }
+        toast.textContent = message;
+        toast.classList.add('visible');
+        clearTimeout(this.toastTimer);
+        this.toastTimer = setTimeout(() => toast.classList.remove('visible'), 3000);
+    }
+    
     // 新しいゲームを始める前に、前のゲームの表示を片付ける
     resetForNewGame() {
         this.view.reset();
@@ -130,6 +224,10 @@ class UIController {
         const view = this.gameController.getView();
         if (!view) return;
         
+        // オンライン対戦でゲームが始まった・ゲーム中の部屋に戻ったら、ロビーや参加の画面を閉じる
+        if (['lobby', 'online-menu'].includes(this.modal.kind)) this.modal.closeModal();
+        
+        this.eventHandler.clearPendingActions();
         this.view.updateGameView(view);
         this.syncLogs(view);
         this.syncPrompt(view);
@@ -158,7 +256,10 @@ class UIController {
     syncResult(view) {
         if (!view.result || this.isResultShown) return;
         this.isResultShown = true;
-        this.modal.showGameResults(view.result);
+        this.modal.showGameResults(view.result, {
+            online: this.isOnline(),
+            isHost: this.isOnline() && this.gameController.isHost()
+        });
     }
 
     // CPUにやることがあれば、ログを追えるよう少し間を置いて1手進める

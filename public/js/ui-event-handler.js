@@ -17,8 +17,12 @@ class UIEventHandler {
     
     constructor(uiController) {
         this.uiController = uiController;
-        this.gameController = uiController.gameController;
         this.elements = uiController.elements;
+    }
+    
+    // ローカル対戦とオンライン対戦でコントローラーが切り替わるので、毎回 UIController から取る
+    get gameController() {
+        return this.uiController.gameController;
     }
     
     // カードプレイ処理
@@ -31,7 +35,9 @@ class UIEventHandler {
             card && card.isType(CARD_TYPES.ACTION);
 
         // 今プレイできないカードはタップしても何もしない（説明は長押しで表示する）
-        if (!canPlay) return;
+        // アニメーション中や返事を待つ間の連打で、別のカードまでプレイしないようにする
+        if (!canPlay || this.isActionPending) return;
+        this.isActionPending = true;
 
         // カード要素を取得（手札は並び替えて表示しているので、画面上の位置ではなく手札の番号で探す）
         const cardElement = this.elements.handCards.querySelector(`[data-card-index="${cardIndex}"]`);
@@ -39,16 +45,20 @@ class UIEventHandler {
 
         // 場札の着地点へアニメーションで移動させてからプレイする
         cardAnimator.playCard(cardElement, target, () => {
-            this.gameController.send({ type: 'play', cardIndex });
+            // 受け付けられなければ描き直されないので、ここで次の操作を受け付けるようにする
+            if (!this.gameController.send({ type: 'play', cardIndex })) this.clearPendingActions();
         });
     }
     
     // 購入フェーズへの移行処理
     handleEnterBuyPhase() {
         const view = this.gameController.getView();
-        if (!view || !view.isMyTurn) return;
+        if (!view || !view.isMyTurn || view.phase !== 'action' || this.isActionPending) return;
+        this.isActionPending = true;
         const hand = view.me.hand;
-        const enterBuyPhase = () => this.gameController.send({ type: 'buyPhase' });
+        const enterBuyPhase = () => {
+            if (!this.gameController.send({ type: 'buyPhase' })) this.clearPendingActions();
+        };
         
         // 財宝カードをアニメーションするためのカード要素を取得（要素の data-card-index で手札と対応させる）
         const treasureCards = Array.from(this.elements.handCards.querySelectorAll('.card'))
@@ -89,21 +99,21 @@ class UIEventHandler {
         if (!view || !view.isMyTurn || view.phase !== 'buy') return;
         
         const currentPlayer = view.me;
+        const card = ALL_CARDS[cardId.toUpperCase()];
+        
+        // 返事を待っている購入の分も差し引いて、購入回数とコインが足りなければ何もしない
+        // （アニメーション中の連打や、オンライン対戦で結果が届く前のタップで二重に買わないように）
+        const pending = this.pendingPurchases ?? { count: 0, cost: 0 };
+        if (!card || (view.supply[cardId] ?? 0) <= 0 ||
+            currentPlayer.buys - pending.count <= 0 || currentPlayer.coins - pending.cost < card.cost) {
+            return;
+        }
+        this.pendingPurchases = { count: pending.count + 1, cost: pending.cost + card.cost };
         
         // 購入回数を使い切ったときのターン終了は、描き直すときに endTurnIfNoBuysLeft で判定する
         const purchase = () => {
             this.gameController.send({ type: 'buy', cardId });
         };
-        
-        // カード情報を取得して購入可能かチェック
-        const upperCardId = cardId.toUpperCase();
-        const card = ALL_CARDS[upperCardId];
-        
-        if (!card || currentPlayer.coins < card.cost) {
-            // 購入できない場合（コスト不足）はアニメーションしない
-            purchase();
-            return;
-        }
         
         // 購入するカード要素を取得
         const cardElement = Array.from(this.elements.supplyPiles.querySelectorAll('.card'))
@@ -150,6 +160,12 @@ class UIEventHandler {
             }
             return targets.get(cardId);
         };
+    }
+    
+    // 新しい状態が届いたら、返事待ちの操作（プレイ・購入フェーズへ・購入）はなくなる
+    clearPendingActions() {
+        this.isActionPending = false;
+        this.pendingPurchases = null;
     }
     
     // 自分の購入フェーズで購入回数を使い切っていたら、購入したカードが見える程度に間を置いてターンを終える

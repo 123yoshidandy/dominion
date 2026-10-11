@@ -1450,3 +1450,125 @@ button.primary.secondary {
         height: 88px;
     }
 }
+
+/* ===== オンライン対戦 ===== */
+.online-form,
+.lobby {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.online-form input[type="text"] {
+    min-width: 0;
+    width: 100%;
+}
+
+.online-join {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+}
+
+.online-join input {
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+}
+
+.online-error {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: #c0392b;
+}
+
+/* 文字だけのボタン（戻る・部屋を出る） */
+.link-button {
+    align-self: center;
+    padding: 6px 8px;
+    border: none;
+    background: none;
+    font: inherit;
+    font-size: 14px;
+    color: var(--ink);
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.lobby-code {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--paper-dim);
+}
+
+.lobby-code b {
+    font-size: 24px;
+    letter-spacing: 0.2em;
+}
+
+.lobby-players {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.lobby-players li {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 4px;
+    border-bottom: 1px solid #e3dac6;
+    font-weight: 700;
+}
+
+.lobby-players .link-button {
+    margin-left: auto;
+}
+
+.host-badge,
+.offline-badge {
+    padding: 1px 6px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+    background: #8b6b4a;
+}
+
+.offline-badge {
+    background: #c0392b;
+}
+
+.lobby-note {
+    margin: 0;
+    font-size: 14px;
+}
+
+/* 画面の下に出す短いお知らせ */
+.toast {
+    position: fixed;
+    left: 50%;
+    bottom: 16px;
+    z-index: 2000;
+    max-width: calc(100% - 32px);
+    padding: 10px 16px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
+    background: rgba(30, 30, 30, 0.9);
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, 8px);
+    transition: opacity 0.2s, transform 0.2s;
+}
+
+.toast.visible {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}

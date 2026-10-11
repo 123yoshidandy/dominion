@@ -3,10 +3,21 @@
  * ゲーム内のモーダルダイアログ表示を担当
  */
 
+import { loadOnlineSession } from './online-controller.js';
+
+// 使うカードの選択肢（設定とオンラインのロビーで共通）
+const CARD_SET_OPTIONS = [['base', '基本'], ['seaside', '海辺'], ['base+seaside', '基本＋海辺']];
+
+// 利用者が入力した文字をそのまま HTML に入れないようにする
+const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+}[char]));
+
 class UIModal {
     constructor(uiController) {
         this.uiController = uiController;
         this.elements = uiController.elements;
+        this.kind = null; // 開いている画面の種類（'online-menu' / 'lobby' など）
     }
 
     // カードのHTML生成は画面表示と共通にする
@@ -35,15 +46,14 @@ class UIModal {
                 <label class="field">
                     <span>使うカード</span>
                     <select id="card-sets">
-                        ${[['base', '基本'], ['seaside', '海辺'], ['base+seaside', '基本＋海辺']]
-                            .map(([value, label]) => `<option value="${value}" ${this.uiController.settings.cardSets === value ? 'selected' : ''}>${label}</option>`)
-                            .join('')}
+                        ${this.createCardSetOptionsHtml(this.uiController.settings.cardSets)}
                     </select>
                 </label>
 
                 ${this.createStackHandToggleHtml('setup-stack-hand')}
 
                 <button id="start-game-btn" class="primary">ゲーム開始</button>
+                <button id="online-btn" class="primary secondary">オンラインで遊ぶ</button>
             </div>
         `;
 
@@ -68,9 +78,132 @@ class UIModal {
         startGameBtn.addEventListener('click', () => {
             this.uiController.startGame();
         });
+        document.getElementById('online-btn').addEventListener('click', () => this.showOnlineMenu());
 
         // モーダルを表示
-        this.openModal();
+        this.openModal({ kind: 'setup' });
+    }
+    
+    createCardSetOptionsHtml(selected) {
+        return CARD_SET_OPTIONS
+            .map(([value, label]) => `<option value="${value}" ${selected === value ? 'selected' : ''}>${label}</option>`)
+            .join('');
+    }
+    
+    // ===== オンライン対戦 =====
+    
+    // 名前を入れて、部屋を作るか部屋コードで参加する
+    showOnlineMenu({ roomCode = '', error = '' } = {}) {
+        const session = loadOnlineSession();
+        this.elements.modalTitle.textContent = 'オンライン対戦';
+        this.elements.modalBody.innerHTML = `
+            <div class="setup-form online-form">
+                <label class="field">
+                    <span>名前</span>
+                    <input type="text" id="online-name" maxlength="12" value="${escapeHtml(session?.name ?? '')}" placeholder="表示する名前">
+                </label>
+                <button id="create-room-btn" class="primary">部屋を作る</button>
+                <div class="online-join">
+                    <input type="text" id="room-code" maxlength="5" value="${escapeHtml(roomCode)}" placeholder="部屋コード" autocapitalize="characters" autocomplete="off">
+                    <button id="join-room-btn" class="primary secondary">参加する</button>
+                </div>
+                ${session && !roomCode ? `<button id="resume-room-btn" class="primary secondary">前の部屋（${escapeHtml(session.roomCode)}）に戻る</button>` : ''}
+                ${error ? `<p class="online-error">${escapeHtml(error)}</p>` : ''}
+                <button id="back-to-local-btn" class="link-button">ひとりで遊ぶ（CPU対戦）に戻る</button>
+            </div>
+        `;
+        
+        const nameInput = document.getElementById('online-name');
+        const name = () => nameInput.value.trim();
+        const requireName = () => {
+            if (name()) return true;
+            nameInput.focus();
+            nameInput.placeholder = '名前を入れてください';
+            return false;
+        };
+        
+        document.getElementById('create-room-btn').addEventListener('click', () => {
+            if (requireName()) this.uiController.createOnlineRoom(name());
+        });
+        document.getElementById('join-room-btn').addEventListener('click', () => {
+            const code = document.getElementById('room-code').value.trim().toUpperCase();
+            if (requireName() && code) this.uiController.joinOnlineRoom(code, name());
+        });
+        document.getElementById('resume-room-btn')?.addEventListener('click', () => this.uiController.resumeOnlineRoom());
+        document.getElementById('back-to-local-btn').addEventListener('click', () => this.uiController.leaveOnline());
+        
+        this.openModal({ closable: false, kind: 'online-menu' });
+    }
+    
+    // ロビー：参加者と使うカードを確認し、部屋を作った人がゲームを始める
+    showLobby(lobby, { isHost }) {
+        const shareUrl = `${location.origin}${location.pathname}?room=${lobby.roomCode}`;
+        const cardSets = lobby.cardSets.join('+');
+        const cardSetLabel = CARD_SET_OPTIONS.find(([value]) => value === cardSets)?.[1] ?? cardSets;
+        
+        this.elements.modalTitle.textContent = 'オンライン対戦の部屋';
+        this.elements.modalBody.innerHTML = `
+            <div class="setup-form lobby">
+                <div class="lobby-code">
+                    <span>部屋コード</span>
+                    <b>${escapeHtml(lobby.roomCode)}</b>
+                    <button id="share-room-btn" class="primary secondary">招待URLを共有</button>
+                </div>
+                <ul class="lobby-players">
+                    ${lobby.players.map(player => `
+                        <li>
+                            <span class="lobby-player-name">${escapeHtml(player.name)}</span>
+                            ${player.isCPU ? '<span class="cpu-badge">CPU</span>' : ''}
+                            ${player.seat === 0 ? '<span class="host-badge">部屋を作った人</span>' : ''}
+                            ${player.connected ? '' : '<span class="offline-badge">切断中</span>'}
+                            ${isHost && player.isCPU ? `<button class="link-button" data-remove-seat="${player.seat}">外す</button>` : ''}
+                        </li>
+                    `).join('')}
+                </ul>
+                ${isHost ? `
+                    <label class="field">
+                        <span>使うカード</span>
+                        <select id="lobby-card-sets">${this.createCardSetOptionsHtml(cardSets)}</select>
+                    </label>
+                    <button id="add-cpu-btn" class="primary secondary" ${lobby.players.length >= 4 ? 'disabled' : ''}>CPUを追加</button>
+                    <button id="start-online-btn" class="primary" ${lobby.players.length < 2 ? 'disabled' : ''}>ゲーム開始</button>
+                ` : `
+                    <p class="lobby-note">使うカード：${escapeHtml(cardSetLabel)}</p>
+                    <p class="lobby-note">部屋を作った人がゲームを始めるのを待っています</p>
+                `}
+                <button id="leave-room-btn" class="link-button">部屋を出る</button>
+            </div>
+        `;
+        
+        const controller = this.uiController.gameController;
+        document.getElementById('share-room-btn').addEventListener('click', () => this.shareRoom(shareUrl));
+        document.getElementById('leave-room-btn').addEventListener('click', () => this.uiController.leaveOnline());
+        if (isHost) {
+            document.getElementById('lobby-card-sets').addEventListener('change', (event) => {
+                controller.setCardSets(event.target.value.split('+'));
+            });
+            document.getElementById('add-cpu-btn').addEventListener('click', () => controller.addCpu());
+            document.getElementById('start-online-btn').addEventListener('click', () => controller.startGame());
+            this.elements.modalBody.querySelectorAll('[data-remove-seat]').forEach(button => {
+                button.addEventListener('click', () => controller.removePlayer(Number(button.dataset.removeSeat)));
+            });
+        }
+        
+        this.openModal({ closable: false, kind: 'lobby' });
+    }
+    
+    // 招待URLを共有する（スマホでは共有メニュー、使えなければコピー）
+    async shareRoom(url) {
+        try {
+            if (navigator.share) {
+                await navigator.share({ title: 'ドミニオンの部屋', url });
+                return;
+            }
+            await navigator.clipboard.writeText(url);
+            this.uiController.showToast('招待URLをコピーしました');
+        } catch {
+            this.uiController.showToast(url);
+        }
     }
 
     // プレイヤー名入力欄を更新
@@ -115,17 +248,19 @@ class UIModal {
         this.elements.modalTitle.textContent = '設定';
         this.elements.modalBody.innerHTML = this.createStackHandToggleHtml('settings-stack-hand');
         this.setupStackHandToggle('settings-stack-hand');
-        this.openModal();
+        this.openModal({ kind: 'settings' });
     }
     
     // モーダルを開く（closable が false なら×を出さず、答えるまで閉じられないようにする）
-    openModal({ closable = true } = {}) {
+    openModal({ closable = true, kind = null } = {}) {
+        this.kind = kind;
         this.elements.modalClose.style.display = closable ? '' : 'none';
         this.elements.gameModal.style.display = 'flex';
     }
     
     // モーダルを閉じる
     closeModal() {
+        this.kind = null;
         this.elements.gameModal.style.display = 'none';
     }
     
@@ -159,7 +294,7 @@ class UIModal {
             this.showSelectPrompt(prompt);
         }
         
-        this.openModal({ closable: false });
+        this.openModal({ closable: false, kind: 'prompt' });
     }
     
     // 答えをゲームに渡す。受け付けられなかったときは同じ選択を出し直して、ゲームが止まらないようにする
@@ -243,7 +378,8 @@ class UIModal {
     }
     
     // ゲーム結果表示
-    showGameResults(result) {
+    // online なら、部屋を作った人はロビーに戻せる（他の人はそれを待つ）
+    showGameResults(result, { online = false, isHost = false } = {}) {
         this.elements.modalTitle.textContent = 'ゲーム終了';
 
         let html = '<div class="game-results">';
@@ -251,24 +387,35 @@ class UIModal {
         result.forEach((score, index) => {
             html += `<div class="result-row ${index === 0 ? 'winner' : ''}">
                 <span class="rank">${index + 1}位</span>
-                <span class="player-name">${score.name}</span>
+                <span class="player-name">${escapeHtml(score.name)}</span>
                 <span class="points">${score.points}点</span>
             </div>`;
         });
 
-        html += '<button id="new-game-btn" class="primary">新しいゲームを始める</button>';
+        if (!online) {
+            html += '<button id="new-game-btn" class="primary">新しいゲームを始める</button>';
+        } else if (isHost) {
+            html += '<button id="back-to-lobby-btn" class="primary">部屋に戻る（もう一度遊ぶ）</button>';
+        } else {
+            html += '<p class="lobby-note">部屋を作った人が部屋に戻るのを待っています</p>';
+        }
+        if (online) {
+            html += '<button id="leave-room-btn" class="link-button">部屋を出る</button>';
+        }
         html += '</div>';
 
         this.elements.modalBody.innerHTML = html;
 
-        // 新しいゲームボタンのイベント
-        const newGameBtn = document.getElementById('new-game-btn');
-        newGameBtn.addEventListener('click', () => {
+        document.getElementById('new-game-btn')?.addEventListener('click', () => {
             this.closeModal();
             this.showGameSetup();
         });
+        document.getElementById('back-to-lobby-btn')?.addEventListener('click', () => {
+            this.uiController.gameController.backToLobby();
+        });
+        document.getElementById('leave-room-btn')?.addEventListener('click', () => this.uiController.leaveOnline());
 
-        this.openModal();
+        this.openModal({ closable: !online, kind: 'result' });
     }
 }
 
