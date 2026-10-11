@@ -105,16 +105,17 @@ class UIModal {
         this.openModal();
     }
     
-    // モーダルを開く
-    openModal() {
+    // モーダルを開く（closable が false なら×を出さず、答えるまで閉じられないようにする）
+    openModal({ closable = true } = {}) {
+        this.elements.modalClose.style.display = closable ? '' : 'none';
         this.elements.gameModal.style.display = 'flex';
     }
-
+    
     // モーダルを閉じる
     closeModal() {
         this.elements.gameModal.style.display = 'none';
     }
-
+    
     // カードの説明を表示する（count を渡すとサプライの残り枚数も出す）
     showCardDetail(card, { count } = {}) {
         this.elements.modalTitle.textContent = card.name;
@@ -132,79 +133,102 @@ class UIModal {
         this.openModal();
     }
     
-    // 手札からカードを選ぶ画面のHTML（カード自体をタップして選択する）
-    createCardSelectionHtml(player) {
-        // 手札と同じ順に並べる（1枚ずつ選ぶので重ねる設定は使わない）
-        const cardsHtml = this.view.getSortedHandIndices(player.hand).map(index =>
-            this.view.createCardHtml(player.hand[index], `data-index="${index}"`, 'selectable')
-        ).join('');
-
-        return `<div class="card-selection">${cardsHtml}</div>`;
+    // 選択待ちの画面。必ず答える必要があるので×は出さない
+    showPrompt(prompt) {
+        // 手番ではないプレイヤーが答える選択（民兵の攻撃など）は、誰が答えるのかを明示する
+        const current = this.uiController.gameController.getCurrentPlayer();
+        const who = prompt.player !== current ? `${prompt.player.name}：` : '';
+        this.elements.modalTitle.textContent = `${who}${prompt.title}`;
+        
+        if (prompt.type === 'confirm') {
+            this.showConfirmPrompt(prompt);
+        } else {
+            this.showSelectPrompt(prompt);
+        }
+        
+        this.openModal({ closable: false });
     }
-
-    // カードのタップで選択を切り替える（canSelect が false なら追加で選べない）
-    setupCardSelection(canSelect = () => true) {
-        const cards = this.elements.modalBody.querySelectorAll('.card-selection .card');
+    
+    // 答えをゲームに渡す。受け付けられなかったときは同じ選択を出し直して、ゲームが止まらないようにする
+    answerPrompt(prompt, answer) {
+        this.closeModal();
+        if (!this.uiController.gameController.resolvePrompt(answer)) {
+            this.showPrompt(prompt);
+        }
+    }
+    
+    // はい／いいえの選択（対象のカードがあれば大きく表示する）
+    showConfirmPrompt(prompt) {
+        this.elements.modalBody.innerHTML = `
+            <p class="prompt-text">${prompt.message}</p>
+            ${prompt.card ? `<div class="prompt-card">${this.view.createCardHtml(prompt.card, '', 'large')}</div>` : ''}
+            <div class="prompt-footer prompt-buttons">
+                <button id="prompt-no" class="primary secondary">${prompt.noLabel}</button>
+                <button id="prompt-yes" class="primary">${prompt.yesLabel}</button>
+            </div>
+        `;
+        
+        document.getElementById('prompt-yes').addEventListener('click', () => this.answerPrompt(prompt, true));
+        document.getElementById('prompt-no').addEventListener('click', () => this.answerPrompt(prompt, false));
+    }
+    
+    // カードを min〜max 枚選ぶ選択。枚数が条件を満たすまで決定ボタンは押せない
+    showSelectPrompt(prompt) {
+        const { cards, min, max } = prompt;
+        
+        // 手札から選ぶときは手札と同じ順に並べる（data-index は元の番号のまま）
+        const order = cards === prompt.player.hand
+            ? this.view.getSortedHandIndices(cards)
+            : cards.map((card, index) => index);
+        const range = min === max ? `${min}枚` : (min === 0 ? `最大${max}枚` : `${min}〜${max}枚`);
+        
+        this.elements.modalBody.innerHTML = `
+            <p class="prompt-text">${prompt.message}</p>
+            <div class="card-selection">
+                ${order.map(index => this.view.createCardHtml(cards[index], `data-index="${index}"`, 'selectable')).join('')}
+            </div>
+            <div class="prompt-footer">
+                <button id="prompt-confirm" class="primary"></button>
+            </div>
+        `;
+        
+        const confirmBtn = document.getElementById('prompt-confirm');
+        const update = () => {
+            const count = this.getSelectedIndices().length;
+            confirmBtn.textContent = `${prompt.confirmLabel}（${count}枚 / ${range}）`;
+            confirmBtn.disabled = count < min || count > max;
+        };
+        
+        this.setupCardSelection(max, update);
+        update();
+        
+        confirmBtn.addEventListener('click', () => this.answerPrompt(prompt, this.getSelectedIndices()));
+    }
+    
+    // カードのタップで選択を切り替える。1枚だけ選ぶときは、別のカードをタップすると選び直しになる
+    setupCardSelection(max, onChange) {
+        const cards = Array.from(this.elements.modalBody.querySelectorAll('.card-selection .card'));
         cards.forEach(card => {
             card.addEventListener('click', () => {
-                if (!card.classList.contains('selected') && !canSelect()) return;
-                card.classList.toggle('selected');
+                if (card.classList.contains('selected')) {
+                    card.classList.remove('selected');
+                } else if (max === 1) {
+                    cards.forEach(other => other.classList.remove('selected'));
+                    card.classList.add('selected');
+                } else if (this.getSelectedIndices().length < max) {
+                    card.classList.add('selected');
+                }
+                onChange();
             });
         });
     }
-
+    
     // 選択されたカードのインデックス
     getSelectedIndices() {
         return Array.from(this.elements.modalBody.querySelectorAll('.card-selection .card.selected'))
             .map(card => parseInt(card.getAttribute('data-index')));
     }
-
-    // カード捨て選択モーダル表示
-    showDiscardModal(player, cardId, callback) {
-        this.elements.modalTitle.textContent = 'カードを捨てる';
-
-        let html = `<p class="prompt-text">${cardId === 'cellar' ? '捨てるカードをタップして選んでください。選んだ枚数だけカードを引きます。' : '捨てるカードをタップして選んでください。'}</p>`;
-        html += this.createCardSelectionHtml(player);
-        html += '<button id="confirm-discard" class="primary">確定</button>';
-
-        this.elements.modalBody.innerHTML = html;
-        this.setupCardSelection();
-
-        // 確定ボタンのイベント
-        const confirmBtn = document.getElementById('confirm-discard');
-        confirmBtn.addEventListener('click', () => {
-            const selectedIndices = this.getSelectedIndices();
-            this.closeModal();
-            this.uiController.gameController.resolvePrompt(selectedIndices);
-        });
-
-        this.openModal();
-    }
-
-    // カード廃棄選択モーダル表示
-    showTrashModal(player, maxCount, callback) {
-        this.elements.modalTitle.textContent = 'カードを廃棄する';
-
-        let html = `<p class="prompt-text">廃棄するカードをタップして選んでください（最大${maxCount}枚）。</p>`;
-        html += this.createCardSelectionHtml(player);
-        html += '<button id="confirm-trash" class="primary">確定</button>';
-
-        this.elements.modalBody.innerHTML = html;
-
-        // 最大選択数を制限
-        this.setupCardSelection(() => this.getSelectedIndices().length < maxCount);
-
-        // 確定ボタンのイベント
-        const confirmBtn = document.getElementById('confirm-trash');
-        confirmBtn.addEventListener('click', () => {
-            const selectedIndices = this.getSelectedIndices();
-            this.closeModal();
-            this.uiController.gameController.resolvePrompt(selectedIndices);
-        });
-
-        this.openModal();
-    }
-
+    
     // ゲーム結果表示
     showGameResults(scores) {
         this.elements.modalTitle.textContent = 'ゲーム終了';

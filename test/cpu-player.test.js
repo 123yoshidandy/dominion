@@ -1,24 +1,19 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import Game from '../public/js/game.js';
-import Card from '../public/js/card.js';
-import { ALL_CARDS } from '../public/js/card-data.js';
 import {
     chooseActionCard,
     chooseCardToBuy,
-    choosePromptSelection,
+    choosePromptAnswer,
     runCpuStep
 } from '../public/js/cpu-player.js';
-
-// カードIDの配列から手札を作る
-const makeCards = (ids) => ids.map(id => new Card(ALL_CARDS[id]));
+import { createGame, makeCards } from './helpers.js';
 
 describe('CPUプレイヤー', () => {
     let game;
     let cpu;
 
     beforeEach(() => {
-        game = new Game([{ name: 'CPU1', isCPU: true }, { name: 'CPU2', isCPU: true }]);
-        game.setup();
+        game = createGame([{ name: 'CPU1', isCPU: true }, { name: 'CPU2', isCPU: true }]);
         cpu = game.getCurrentPlayer();
     });
 
@@ -71,13 +66,15 @@ describe('CPUプレイヤー', () => {
     describe('カード選択', () => {
         it('地下室では勝利点と呪いを捨てる', () => {
             cpu.hand = makeCards(['ESTATE', 'COPPER', 'CURSE', 'DUCHY']);
-            const selection = choosePromptSelection({ type: 'discard', player: cpu });
+            const selection = choosePromptAnswer(
+                { type: 'select', purpose: 'cellar-discard', player: cpu, cards: cpu.hand, min: 0, max: 4 }, game);
             expect(selection).toEqual([0, 2, 3]);
         });
 
         it('礼拝堂では呪いと屋敷だけを最大枚数まで廃棄する', () => {
             cpu.hand = makeCards(['ESTATE', 'DUCHY', 'CURSE', 'ESTATE', 'ESTATE', 'COPPER']);
-            const selection = choosePromptSelection({ type: 'trash', player: cpu, maxCount: 3 });
+            const selection = choosePromptAnswer(
+                { type: 'select', purpose: 'chapel-trash', player: cpu, cards: cpu.hand, min: 0, max: 3 }, game);
             expect(selection).toEqual([0, 2, 3]);
         });
     });

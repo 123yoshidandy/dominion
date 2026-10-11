@@ -982,6 +982,22 @@ button.primary {
     height: 20px;
 }
 
+/* 選択待ち：はい／いいえのボタンは横に並べ、「いいえ」側は控えめにする */
+.prompt-card {
+    display: flex;
+    justify-content: center;
+}
+
+.prompt-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+button.primary.secondary {
+    color: var(--ink);
+    background: var(--paper-dim);
+}
+
 /* 設定のスイッチ */
 .setting-toggle {
     display: flex;
@@ -1023,8 +1039,31 @@ button.primary {
     padding-top: 4px;
 }
 
+/* 選ぶ前に効果を読めるよう、選択画面のカードは説明文の長さに合わせて伸ばす */
 .card-selection .card {
     width: auto;
+    height: auto;
+    min-height: 128px;
+}
+
+.card-selection .card .card-description {
+    overflow: visible;
+}
+
+/* 候補が多くてスクロールしても、決定ボタンはシートの下端に見えたままにする
+   （シートの下の余白まで背景で覆い、後ろのカードが透けたりはみ出したりしないようにする） */
+.prompt-footer {
+    position: sticky;
+    bottom: -18px;
+    z-index: 1;
+    margin: 0 -16px -18px;
+    padding: 4px 16px 18px;
+    background: var(--paper);
+    box-shadow: 0 -8px 12px -8px rgba(0, 0, 0, 0.25);
+}
+
+.prompt-footer button.primary {
+    margin-top: 10px;
 }
 
 .card.selectable.selected {
@@ -1362,6 +1401,12 @@ button.primary {
 
     #modal-title {
         margin-bottom: 8px;
+    }
+
+    .prompt-footer {
+        bottom: -12px;
+        margin-bottom: -12px;
+        padding-bottom: 12px;
     }
 
     .card.large {

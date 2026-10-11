@@ -16,9 +16,12 @@ class Card {
             this.value = cardData.value;
         }
         
-        // 勝利点カード特有のプロパティ
+        // 勝利点カード特有のプロパティ（庭園のようにデッキによって変わるものは pointsFor で計算する）
         if (cardData.points !== undefined) {
             this.points = cardData.points;
+        }
+        if (cardData.pointsFor) {
+            this.pointsFor = cardData.pointsFor;
         }
         
         // アクションカード特有のプロパティ
@@ -43,11 +46,19 @@ class Card {
         return this.types.includes(type);
     }
     
-    // カードをプレイする
+    // カードをプレイする（祝宴のように自分自身を扱う効果のため、カード自身も渡す）
     play(player, game) {
         if (this.onPlay) {
-            this.onPlay(player, game);
+            this.onPlay(player, game, this);
         }
+    }
+    
+    // このカードの勝利点（allCards はプレイヤーが持つすべてのカード）
+    getVictoryPoints(allCards) {
+        if (this.pointsFor) {
+            return this.pointsFor(allCards);
+        }
+        return this.points ?? 0;
     }
     
     // 攻撃に対する反応を処理する

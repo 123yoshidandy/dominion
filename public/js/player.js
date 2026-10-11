@@ -42,29 +42,28 @@ class Player {
         }
     }
     
+    // 山札の一番上のカードを取り出す。山札が空なら捨て札をシャッフルして山札にする（どちらも空なら null）
+    takeTopCard() {
+        if (this.deck.length === 0) {
+            if (this.discard.length === 0) {
+                return null;
+            }
+            this.deck = [...this.discard];
+            this.discard = [];
+            this.shuffleDeck();
+        }
+        return this.deck.shift();
+    }
+    
     // カードを引く（指定枚数）
     drawCards(count) {
         const drawnCards = [];
         
         for (let i = 0; i < count; i++) {
-            if (this.deck.length === 0) {
-                // 山札が空の場合、捨て札を山札に戻してシャッフル
-                if (this.discard.length === 0) {
-                    // 捨て札も空なら引けない
-                    break;
-                }
-                
-                this.deck = [...this.discard];
-                this.discard = [];
-                this.shuffleDeck();
-            }
-            
-            // 山札の一番上のカードを手札に加える
-            if (this.deck.length > 0) {
-                const card = this.deck.shift();
-                this.hand.push(card);
-                drawnCards.push(card);
-            }
+            const card = this.takeTopCard();
+            if (!card) break;
+            this.hand.push(card);
+            drawnCards.push(card);
         }
         
         return drawnCards;
@@ -163,9 +162,7 @@ class Player {
         const allCards = [...this.hand, ...this.deck, ...this.discard, ...this.playArea];
         
         allCards.forEach(card => {
-            if (card.points !== undefined) {
-                points += card.points;
-            }
+            points += card.getVictoryPoints(allCards);
         });
         
         return points;

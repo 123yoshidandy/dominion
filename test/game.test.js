@@ -1,10 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import Game from '../public/js/game.js';
-import Card from '../public/js/card.js';
-import { ALL_CARDS } from '../public/js/card-data.js';
-
-// カードIDの配列から手札を作る
-const makeCards = (ids) => ids.map(id => new Card(ALL_CARDS[id]));
+import { createGame, makeCards } from './helpers.js';
 
 describe('Game', () => {
     let game;
@@ -12,8 +7,7 @@ describe('Game', () => {
     let opponent;
 
     beforeEach(() => {
-        game = new Game(['A', 'B']);
-        game.setup();
+        game = createGame(['A', 'B']);
         player = game.getCurrentPlayer();
         opponent = game.players.find(p => p !== player);
     });
@@ -65,7 +59,8 @@ describe('Game', () => {
             player.deck = makeCards(['GOLD', 'GOLD']);
 
             game.playActionCard(0);
-            expect(game.pendingPrompt.type).toBe('discard');
+            expect(game.pendingPrompt.type).toBe('select');
+            expect(game.pendingPrompt.purpose).toBe('cellar-discard');
 
             // 屋敷2枚を捨てる
             game.resolvePrompt([0, 1]);
@@ -91,10 +86,11 @@ describe('Game', () => {
             player.hand = makeCards(['CHAPEL', 'ESTATE', 'ESTATE', 'ESTATE', 'COPPER', 'COPPER']);
 
             game.playActionCard(0);
-            expect(game.pendingPrompt.type).toBe('trash');
+            expect(game.pendingPrompt.purpose).toBe('chapel-trash');
 
-            // 5枚選んでも4枚までしか廃棄されない
-            game.resolvePrompt([0, 1, 2, 3, 4]);
+            // 5枚選ぶと受け付けず、4枚なら廃棄される
+            expect(game.resolvePrompt([0, 1, 2, 3, 4])).toBe(false);
+            expect(game.resolvePrompt([0, 1, 2, 3])).toBe(true);
 
             expect(game.trash).toHaveLength(4);
             expect(player.hand).toHaveLength(1);

@@ -5,7 +5,7 @@
 
 import Game from './game.js';
 import GameActionHandler from './game-action-handler.js';
-import { runCpuStep } from './cpu-player.js';
+import { runCpuStep, hasCpuPrompt } from './cpu-player.js';
 
 class GameController {
     constructor() {
@@ -57,23 +57,14 @@ class GameController {
             }
         });
         
-        // カード捨てる選択用のコールバック
-        this.game.setCallback('onDiscardPrompt', (data) => {
-            // CPUの選択は runCpuStep で解決するので、人間のときだけモーダルを表示する
-            if (this.uiController && !data.player.isCPU) {
-                this.uiController.showDiscardModal(data.player, data.cardId, data.callback);
-            }
-        });
-        
-        // カード廃棄選択用のコールバック
-        this.game.setCallback('onTrashPrompt', (data) => {
-            // CPUの選択は runCpuStep で解決するので、人間のときだけモーダルを表示する
-            if (this.uiController && !data.player.isCPU) {
-                this.uiController.showTrashModal(data.player, data.maxCount, data.callback);
+        // プレイヤーの選択待ちのコールバック（CPUの選択は runCpuStep で答えるので、人間のときだけ画面を出す）
+        this.game.setCallback('onPrompt', (prompt) => {
+            if (this.uiController && !prompt.player.isCPU) {
+                this.uiController.showPrompt(prompt);
             }
         });
     }
-    
+
     // アクションカードをプレイ
     playActionCard(cardIndex) {
         return this.actionHandler.playActionCard(cardIndex);
@@ -125,15 +116,18 @@ class GameController {
         return this.game.getCurrentPlayer().isCPU;
     }
     
+    // CPUがやることがあるか（CPUの手番、または人間の手番中にCPUが答える選択待ちがある）
+    // 人間の選択待ちのあいだは、答えが出るまでCPUは待つ
+    hasCpuWork() {
+        if (!this.game || this.game.phase === 'end') return false;
+        if (this.game.pendingPrompt) return hasCpuPrompt(this.game);
+        return this.game.getCurrentPlayer().isCPU;
+    }
+    
     // CPUの手番を1手進める
     runCpuStep() {
         if (!this.game) return;
         runCpuStep(this.game);
-    }
-    
-    // カード選択待ちかどうか
-    hasPendingPrompt() {
-        return !!(this.game && this.game.pendingPrompt);
     }
 }
 

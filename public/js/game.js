@@ -17,6 +17,7 @@ class Game {
         this.logs = [];      // ゲームログ
         this.callbacks = {}; // コールバック関数
         this.pendingPrompt = null; // プレイヤーの選択待ち（地下室・礼拝堂など）
+        this.effectQueue = [];     // カード効果のまだ実行していない手順（選択待ちの後に続きを進める）
         
         // プレイヤーの作成（名前の文字列か { name, isCPU } を受け付ける）
         playerNames.forEach((config, index) => {
@@ -73,7 +74,9 @@ class Game {
             // 小文字のIDでサプライに追加し、大文字のIDでカードデータを参照
             const upperCardId = cardId.toUpperCase();
             if (ALL_CARDS[upperCardId]) {
-                this.supply[cardId] = ALL_CARDS[upperCardId].count;
+                // 庭園など勝利点の王国カードは、公領・属州と同じ枚数にする
+                const isVictory = ALL_CARDS[upperCardId].types.includes(CARD_TYPES.VICTORY);
+                this.supply[cardId] = isVictory ? victoryCardCount : ALL_CARDS[upperCardId].count;
             } else {
                 console.error(`カードデータが見つかりません: ${upperCardId}`);
             }
@@ -167,6 +170,7 @@ class Game {
         player.actions--;
         this.log(`${player.name}は${card.name}をプレイしました`);
         player.playCard(cardIndex, this);
+        this.processEffects();
 
         this.notifyStateChanged();
 
@@ -342,89 +346,151 @@ class Game {
         }
     }
     
-    // 他のプレイヤーに攻撃効果を適用
+    // ===== カード効果の手順 =====
+    // 効果は「手順」の列として処理し、プレイヤーの選択待ちの間は止めて、答えが出たら続きを進める
+    
+    // 手順を列の先頭に積む（渡した順に、残っている手順より先に実行される）
+    runNext(...steps) {
+        this.effectQueue.unshift(...steps);
+    }
+    
+    // 選択待ちになるか、手順がなくなるまで効果を進める
+    processEffects() {
+        while (!this.pendingPrompt && this.effectQueue.length > 0) {
+            const step = this.effectQueue.shift();
+            step();
+        }
+    }
+    
+    // 指定したプレイヤーの次の席から順に並べた、他のプレイヤー
+    getOtherPlayers(player) {
+        const start = this.players.indexOf(player);
+        return this.players
+            .map((_, i) => this.players[(start + 1 + i) % this.players.length])
+            .slice(0, -1);
+    }
+    
+    // 他のプレイヤーに攻撃効果を適用する（1人ずつ順番に。選択待ちになればそこで止まる）
     attackOtherPlayers(attacker, attackEffect) {
-        this.players.forEach(player => {
-            // 攻撃者以外のプレイヤーに効果を適用
-            if (player.id !== attacker.id) {
-                // お堀などのリアクションカードがあるかチェック
-                const isProtected = player.hand.some(card => {
-                    if (card.isReaction) {
-                        // リアクションカードを使うか確認
-                        if (this.promptReaction(player, card, attacker)) {
-                            return card.react(player, this, attacker);
-                        }
-                    }
-                    return false;
-                });
-                
-                // 守られていなければ攻撃効果を適用
-                if (!isProtected) {
-                    attackEffect(player);
-                }
+        this.runNext(...this.getOtherPlayers(attacker).map(target => () => {
+            if (!this.isProtectedFromAttack(target, attacker)) {
+                attackEffect(target);
+            }
+        }));
+    }
+    
+    // お堀などのリアクションで攻撃を防げるか（リアクションカードを持っていれば常に公開する）
+    isProtectedFromAttack(target, attacker) {
+        const reaction = target.hand.find(card => card.isReaction);
+        return reaction ? reaction.react(target, this, attacker) : false;
+    }
+    
+    // 手札の指定したカードを捨て札にする（大きい番号から抜いて、番号がずれないようにする）
+    discardFromHand(player, indices) {
+        [...indices].sort((a, b) => b - a).forEach(index => player.discardCard(index));
+    }
+    
+    // 手札の指定したカードを廃棄し、廃棄したカードを返す
+    trashFromHand(player, indices) {
+        return [...indices]
+            .sort((a, b) => b - a)
+            .map(index => player.trashCard(index))
+            .filter(Boolean)
+            .map(card => {
+                this.trash.push(card);
+                return card;
+            });
+    }
+    
+    // ===== プレイヤーの選択 =====
+    
+    // cards の中から min〜max 枚を選ばせる。callback には選んだ cards のインデックスの配列が渡る
+    promptSelect({ player, cards, min = 0, max = cards.length, title, message, confirmLabel = '決定', purpose, callback }) {
+        this.setPrompt({
+            type: 'select',
+            player,
+            cards,
+            min: Math.min(min, cards.length),
+            max: Math.min(max, cards.length),
+            title,
+            message,
+            confirmLabel,
+            purpose,
+            callback
+        });
+    }
+    
+    // はい／いいえで答えさせる。callback には真偽値が渡る
+    promptConfirm({ player, card = null, title, message, yesLabel = 'はい', noLabel = 'いいえ', purpose, callback }) {
+        this.setPrompt({ type: 'confirm', player, card, title, message, yesLabel, noLabel, purpose, callback });
+    }
+    
+    // サプライからコスト maxCost 以下のカードを1枚選んで獲得させる（filter でカードの種類を絞れる）
+    promptGain({ player, maxCost, filter = () => true, destination = 'discard', title, message, purpose = 'gain' }) {
+        const candidates = Object.keys(this.supply)
+            .filter(cardId => this.supply[cardId] > 0)
+            .map(cardId => ALL_CARDS[cardId.toUpperCase()])
+            .filter(data => data && data.cost <= maxCost && filter(data))
+            .sort((a, b) => b.cost - a.cost);
+        
+        if (candidates.length === 0) {
+            this.log(`${player.name}が獲得できるカードはありませんでした`);
+            return;
+        }
+        
+        this.promptSelect({
+            player,
+            cards: candidates.map(data => new Card(data)),
+            min: 1,
+            max: 1,
+            title,
+            message,
+            confirmLabel: '獲得する',
+            purpose,
+            callback: ([index]) => {
+                const data = candidates[index];
+                this.gainCardFromSupply(player, data.id, destination);
+                this.log(`${player.name}は${data.name}を獲得しました`);
             }
         });
     }
     
-    // プレイヤーにリアクションカードの使用を確認
-    promptReaction(player, card, attacker) {
-        // 実際の実装ではUIと連携して確認ダイアログを表示する
-        // ここではシンプルに常に使用すると仮定
-        return true;
+    // 選択待ちにしてUIに知らせる。答えは resolvePrompt で受け取る
+    setPrompt(prompt) {
+        this.pendingPrompt = prompt;
+        
+        if (this.callbacks.onPrompt) {
+            this.callbacks.onPrompt(prompt);
+        }
     }
     
-    // 地下室などで捨てるカードを選ぶプロンプト
-    promptDiscardForBenefit(player, cardId, callback) {
-        this.pendingPrompt = { type: 'discard', player, cardId, callback };
-
-        // 選択待ちをUIに通知する。結果は resolvePrompt で受け取る
-        if (this.callbacks.onDiscardPrompt) {
-            this.callbacks.onDiscardPrompt(this.pendingPrompt);
-        }
-    }
-
-    // 礼拝堂などで廃棄するカードを選ぶプロンプト
-    promptTrash(player, maxCount, callback) {
-        this.pendingPrompt = { type: 'trash', player, maxCount, callback };
-
-        // 選択待ちをUIに通知する。結果は resolvePrompt で受け取る
-        if (this.callbacks.onTrashPrompt) {
-            this.callbacks.onTrashPrompt(this.pendingPrompt);
-        }
-    }
-
-    // 選択待ちを、選ばれた手札のインデックスで解決する
-    resolvePrompt(selectedIndices) {
+    // 選択待ちに答える。select はインデックスの配列、confirm は真偽値
+    // 枚数が条件に合わない答えは受け付けずに false を返す
+    resolvePrompt(answer) {
         const prompt = this.pendingPrompt;
         if (!prompt) return false;
-
-        const { player } = prompt;
-
-        // 不正なインデックスと重複を除き、大きい順に処理する（手札から抜いてもずれないように）
-        let indices = [...new Set(selectedIndices)]
-            .filter(index => index >= 0 && index < player.hand.length);
-        if (prompt.type === 'trash') {
-            indices = indices.slice(0, prompt.maxCount);
+        
+        if (prompt.type === 'select') {
+            const indices = [...new Set(answer)]
+                .filter(index => Number.isInteger(index) && index >= 0 && index < prompt.cards.length);
+            
+            if (indices.length < prompt.min || indices.length > prompt.max) {
+                this.log(prompt.min === prompt.max
+                    ? `${prompt.min}枚選んでください`
+                    : `${prompt.min}〜${prompt.max}枚選んでください`);
+                return false;
+            }
+            
+            this.pendingPrompt = null;
+            prompt.callback(indices);
+        } else {
+            this.pendingPrompt = null;
+            prompt.callback(Boolean(answer));
         }
-        indices.sort((a, b) => b - a);
-
-        this.pendingPrompt = null;
-
-        if (prompt.type === 'discard') {
-            indices.forEach(index => player.discardCard(index));
-            prompt.callback(indices.length);
-        } else if (prompt.type === 'trash') {
-            indices.forEach(index => {
-                const trashedCard = player.trashCard(index);
-                if (trashedCard) {
-                    this.trash.push(trashedCard);
-                }
-            });
-            prompt.callback(indices.length);
-        }
-
+        
+        this.processEffects();
         this.notifyStateChanged();
-
+        
         return true;
     }
     

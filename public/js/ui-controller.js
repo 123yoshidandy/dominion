@@ -57,13 +57,9 @@ class UIController {
     // UIの初期設定
     setupUI() {
         // モーダルを閉じるイベントを設定
+        // 選択待ちの画面には×を出さない（答えるまで閉じられない）ので、ここでは閉じるだけ
         this.elements.modalClose.addEventListener('click', () => {
             this.modal.closeModal();
-
-            // カード選択中に閉じた場合は「何も選ばない」として解決し、ゲームが止まらないようにする
-            if (this.gameController.hasPendingPrompt()) {
-                this.gameController.resolvePrompt([]);
-            }
         });
         
         // 設定ボタンのイベントを設定
@@ -127,9 +123,9 @@ class UIController {
         this.scheduleCpuStep();
     }
 
-    // CPUの手番なら、ログを追えるよう少し間を置いて1手進める
+    // CPUにやることがあれば、ログを追えるよう少し間を置いて1手進める
     scheduleCpuStep() {
-        if (this.cpuTimer || !this.gameController.isCpuTurn()) return;
+        if (this.cpuTimer || !this.gameController.hasCpuWork()) return;
 
         this.cpuTimer = setTimeout(() => {
             this.cpuTimer = null;
@@ -144,14 +140,9 @@ class UIController {
         this.view.addLogEntry(logEntry);
     }
     
-    // カード捨て選択モーダル表示
-    showDiscardModal(player, cardId, callback) {
-        this.modal.showDiscardModal(player, cardId, callback);
-    }
-    
-    // カード廃棄選択モーダル表示
-    showTrashModal(player, maxCount, callback) {
-        this.modal.showTrashModal(player, maxCount, callback);
+    // プレイヤーの選択待ちを表示する
+    showPrompt(prompt) {
+        this.modal.showPrompt(prompt);
     }
     
     // ゲーム結果表示
