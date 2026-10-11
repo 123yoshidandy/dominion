@@ -115,12 +115,6 @@ const CARD_ART = {
         <circle cx="29" cy="24" r="1.2" fill="#f1c40f"/>
         <circle cx="39" cy="27" r="1.2" fill="#27ae60"/>
     `),
-    woodcutter: svg(`
-        <rect x="6" y="20" width="30" height="8" rx="4" fill="#a0703c"/>
-        <ellipse cx="36" cy="24" rx="3" ry="4" fill="#d9b07a" stroke="#8b5a2b"/>
-        <line x1="15" y1="5" x2="32" y2="19" stroke="#8b5a2b" stroke-width="3" stroke-linecap="round"/>
-        <path d="M10 3 L19 6 L14 13 Q8 9 10 3 Z" fill="#9aa3ad" stroke="#5d646d"/>
-    `),
     cellar: svg(`
         <path d="M14 5 h20 q4 11 0 22 h-20 q-4 -11 0 -22z" fill="#a0703c" stroke="#6b4423" stroke-width="1.5"/>
         <path d="M20 5 q-2 11 0 22 M28 5 q2 11 0 22" fill="none" stroke="#6b4423" stroke-width="0.8"/>
@@ -153,14 +147,62 @@ const CARD_ART = {
         <path d="M8 8 l0.8 2 l2 0.8 l-2 0.8 l-0.8 2 l-0.8 -2 l-2 -0.8 l2 -0.8z" fill="#f7dc6f"/>
     `),
 
-    // ===== 基本セット初版の追加分 =====
-    chancellor: svg(`
-        <rect x="11" y="7" width="24" height="19" rx="1.5" fill="#f5ecd7" stroke="#8b6b4a"/>
-        <rect x="9" y="5" width="28" height="4" rx="2" fill="#e6d6b0" stroke="#8b6b4a"/>
-        <rect x="9" y="24" width="28" height="4" rx="2" fill="#e6d6b0" stroke="#8b6b4a"/>
-        <path d="M15 13 h16 M15 16.5 h16 M15 20 h10" stroke="#a89474" stroke-width="1"/>
-        <path d="M44 2 Q36 8 31 21 L32.5 21.5 Q39 10 44 2 Z" fill="#fdfefe" stroke="#7f8c8d" stroke-width="0.8"/>
+    // ===== 基本セット第2版の追加分 =====
+    harbinger: svg(`
+        <path d="M6 13 L22 15 L36 7 L36 25 L22 17 L6 19 Z" fill="#e6b84f" stroke="#a87b1f" stroke-width="1"/>
+        <ellipse cx="36" cy="16" rx="3" ry="9" fill="#c9971f" stroke="#a87b1f"/>
+        <rect x="3" y="13.5" width="4" height="5" rx="1" fill="#a87b1f"/>
+        <path d="M41 9 l4 -3 M42 16 h5 M41 23 l4 3" stroke="#f7dc6f" stroke-width="1.5" stroke-linecap="round"/>
     `),
+    merchant: svg(`
+        <line x1="24" y1="4" x2="24" y2="28" stroke="#8b5a2b" stroke-width="2"/>
+        <rect x="17" y="27" width="14" height="3" rx="1" fill="#8b5a2b"/>
+        <line x1="10" y1="8" x2="38" y2="8" stroke="#8b5a2b" stroke-width="2"/>
+        <path d="M10 8 L5 18 h10 Z M38 8 L33 18 h10 Z" fill="none" stroke="#7f8c8d" stroke-width="0.8"/>
+        <path d="M4 18 h12 a6 3 0 0 1 -12 0 Z M32 18 h12 a6 3 0 0 1 -12 0 Z" fill="#c9971f"/>
+        <circle cx="10" cy="15" r="3" fill="#c9ced6" stroke="#7e858f"/>
+        <circle cx="38" cy="15" r="3" fill="#c9ced6" stroke="#7e858f"/>
+    `),
+    vassal: svg(`
+        <path d="M14 5 h16 v10 c0 7 -4 11 -8 13 c-4 -2 -8 -6 -8 -13 z" fill="#2e86c1" stroke="#1b4f72" stroke-width="1.2"/>
+        <path d="M22 8 v17 M16 14 h12" stroke="#f5ecd7" stroke-width="1.6"/>
+        <line x1="36" y1="4" x2="36" y2="26" stroke="#bdc3c7" stroke-width="2.4"/>
+        <rect x="32" y="24" width="8" height="2" fill="#8b5a2b"/>
+        <rect x="35" y="26" width="2" height="4" fill="#8b5a2b"/>
+    `),
+    poacher: svg(`
+        ${ground('#6f9a55')}
+        <path d="M10 4 Q22 16 10 28" fill="none" stroke="#8b5a2b" stroke-width="2.2"/>
+        <line x1="10" y1="4" x2="10" y2="28" stroke="#d9c39a" stroke-width="0.8"/>
+        <line x1="10" y1="16" x2="34" y2="16" stroke="#6b4423" stroke-width="1.4"/>
+        <path d="M34 13 L39 16 L34 19 Z" fill="#7f8c8d"/>
+        <path d="M38 6 l2 -4 M40 6 l3 -3 M40 8 l4 -1" stroke="#8b5a2b" stroke-width="1.2" stroke-linecap="round"/>
+    `),
+    bandit: svg(`
+        <circle cx="18" cy="15" r="10" fill="#e0b48a"/>
+        <path d="M8 13 h20 v4 h-20 z" fill="#2b2620"/>
+        <circle cx="14" cy="15" r="1.3" fill="#fdfefe"/>
+        <circle cx="22" cy="15" r="1.3" fill="#fdfefe"/>
+        <path d="M8 7 Q18 0 28 7 Z" fill="#7b3f2a"/>
+        <circle cx="37" cy="22" r="7" fill="#f2c14e" stroke="#b8860b" stroke-width="1.5"/>
+        <circle cx="37" cy="22" r="4" fill="none" stroke="#fff1b8"/>
+    `),
+    sentry: svg(`
+        ${ground('#9c9c8c')}
+        <rect x="12" y="8" width="16" height="20" fill="#a6a08f" stroke="#6b6555"/>
+        <path d="M10 4 h4 v4 h3 v-4 h4 v4 h3 v-4 h4 v6 h-18 z" fill="#b8b2a0" stroke="#6b6555" stroke-width="0.8"/>
+        <rect x="18" y="13" width="4" height="6" rx="2" fill="#2b2620"/>
+        <line x1="36" y1="4" x2="36" y2="30" stroke="#8b5a2b" stroke-width="1.8"/>
+        <path d="M36 0 l2.5 5 h-5 z" fill="#bdc3c7"/>
+    `),
+    artisan: svg(`
+        <path d="M24 10 q-10 2 -10 10 q0 8 10 8 q10 0 10 -8 q0 -8 -10 -10 z" fill="#c0623b" stroke="#7b3f2a"/>
+        <rect x="20" y="6" width="8" height="5" rx="1.5" fill="#c0623b" stroke="#7b3f2a"/>
+        <path d="M16 19 h16" stroke="#f5ecd7" stroke-width="1.2"/>
+        <line x1="40" y1="8" x2="34" y2="26" stroke="#8b5a2b" stroke-width="2.2" stroke-linecap="round"/>
+        <rect x="35.5" y="3" width="9" height="5" rx="1" fill="#7f8c8d" transform="rotate(18 40 5.5)"/>
+    `),
+
     workshop: svg(`
         <rect x="5" y="18" width="38" height="4" fill="#a0703c"/>
         <rect x="8" y="22" width="3" height="8" fill="#8b5a2b"/>
@@ -176,15 +218,6 @@ const CARD_ART = {
         <rect x="31" y="4" width="6" height="9" rx="3" fill="#8b5a2b"/>
         <rect x="33" y="13" width="2" height="5" fill="#6b4423"/>
         <rect x="29" y="18" width="10" height="4" rx="1" fill="#c0392b"/>
-    `),
-    feast: svg(`
-        <ellipse cx="22" cy="24" rx="17" ry="4.5" fill="#ecf0f1" stroke="#95a5a6"/>
-        <ellipse cx="21" cy="18" rx="10" ry="6.5" fill="#c97b3a"/>
-        <ellipse cx="18" cy="16" rx="4" ry="2" fill="#e09a5a"/>
-        <path d="M29 15 l5 -4" stroke="#f5ecd7" stroke-width="2.5" stroke-linecap="round"/>
-        <path d="M38 9 h7 l-1 6 a2.5 2.5 0 0 1 -5 0 z" fill="#c9971f"/>
-        <rect x="40.6" y="17" width="1.8" height="6" fill="#c9971f"/>
-        <rect x="38.5" y="23" width="6" height="1.5" rx="0.7" fill="#c9971f"/>
     `),
     gardens: svg(`
         ${ground('#7fb069')}
@@ -220,20 +253,6 @@ const CARD_ART = {
         </g>
         <path d="M30 6 L42 6 L38 14 Z" fill="#bdc3c7" stroke="#7f8c8d" stroke-width="0.8"/>
         <line x1="36" y1="6" x2="40" y2="1" stroke="#8b5a2b" stroke-width="2.4" stroke-linecap="round"/>
-    `),
-    spy: svg(`
-        <circle cx="20" cy="14" r="9" fill="#d6eaf8" stroke="#5d646d" stroke-width="2.5"/>
-        <path d="M15 11 a6 6 0 0 1 6 -3" fill="none" stroke="#fdfefe" stroke-width="1.5" stroke-linecap="round"/>
-        <line x1="27" y1="21" x2="36" y2="29" stroke="#5d646d" stroke-width="4" stroke-linecap="round"/>
-        <circle cx="20" cy="14" r="2.6" fill="#2b2620"/>
-    `),
-    thief: svg(`
-        <path d="M5 13 Q24 7 43 13 L41 21 Q24 25 7 21 Z" fill="#2b2620"/>
-        <ellipse cx="17" cy="16" rx="4.5" ry="3" fill="#dce8f5"/>
-        <ellipse cx="31" cy="16" rx="4.5" ry="3" fill="#dce8f5"/>
-        <circle cx="18" cy="16" r="1.5" fill="#2b2620"/>
-        <circle cx="32" cy="16" r="1.5" fill="#2b2620"/>
-        <path d="M43 13 l3 -3 M43 17 l4 0" stroke="#2b2620" stroke-width="1.5"/>
     `),
     throne_room: svg(`
         <rect x="15" y="3" width="18" height="18" rx="3" fill="#a8432f" stroke="#c9971f" stroke-width="1.5"/>
@@ -274,12 +293,6 @@ const CARD_ART = {
         <path d="M26 25 l2.5 -2.5 l2.5 2.5 l-2.5 2.5 z" fill="#d6eaf8"/>
         <path d="M8 6 Q20 0 32 6" fill="none" stroke="#7f8c8d" stroke-width="3" stroke-linecap="round"/>
         <line x1="20" y1="3.5" x2="30" y2="17" stroke="#8b5a2b" stroke-width="2.5" stroke-linecap="round"/>
-    `),
-    adventurer: svg(`
-        <path d="M6 5 L17 8 L29 4 L42 7 L42 28 L29 25 L17 29 L6 26 Z" fill="#f5e6c4" stroke="#a0703c"/>
-        <path d="M17 8 v21 M29 4 v21" stroke="#d9c39a" stroke-width="0.8"/>
-        <path d="M10 22 Q16 12 24 18 T36 12" fill="none" stroke="#a0703c" stroke-width="1.2" stroke-dasharray="2 1.5"/>
-        <path d="M34 9 l4 4 M38 9 l-4 4" stroke="#c0392b" stroke-width="1.8" stroke-linecap="round"/>
     `),
 };
 

@@ -3,12 +3,12 @@ import { KINGDOM_CARD_IDS } from '../public/js/card-data.js';
 import { runCpuStep, hasCpuPrompt } from '../public/js/cpu-player.js';
 import { createGame, makeCards } from './helpers.js';
 
-// 25種すべてをサプライに入れたいテスト用（サプライの枚数を見るテストで使う）
+// 26種すべてをサプライに入れたいテスト用（サプライの枚数を見るテストで使う）
 const ALL_KINGDOM = KINGDOM_CARD_IDS.map(id => id.toLowerCase());
 
 const ids = (cards) => cards.map(card => card.id);
 
-describe('基本セットの王国カード', () => {
+describe('基本セット第2版の王国カード', () => {
     let game;
     let player;
     let opponent;
@@ -34,15 +34,62 @@ describe('基本セットの王国カード', () => {
         expect(game.supply.gardens).toBe(game.supply.duchy);
     });
 
-    describe('宰相', () => {
-        it('財宝+2を得て、選べば山札をすべて捨て札にする', () => {
-            play(['CHANCELLOR']);
+    describe('前駆者', () => {
+        it('1枚引いてアクション+1、捨て札から選んだカードを山札の上に置く', () => {
+            player.discard = makeCards(['ESTATE', 'GOLD']);
+            play(['HARBINGER']);
+            expect(player.actions).toBe(1);
+            expect(game.pendingPrompt.purpose).toBe('harbinger');
+
+            game.resolvePrompt([1]);
+            expect(player.deck[0].id).toBe('gold');
+            expect(ids(player.discard)).toEqual(['estate']);
+        });
+
+        it('選ばなくてもよい', () => {
+            player.discard = makeCards(['ESTATE']);
+            play(['HARBINGER']);
+            expect(game.resolvePrompt([])).toBe(true);
+            expect(ids(player.discard)).toEqual(['estate']);
+        });
+    });
+
+    describe('商人', () => {
+        it('最初の銀貨をプレイしたときだけ財宝+1を得る', () => {
+            player.deck = makeCards(['SILVER']);
+            play(['MERCHANT', 'SILVER', 'COPPER']);
+            expect(player.actions).toBe(1);
+
+            game.enterBuyPhase();
+            // 銀貨2枚(4) + 銅貨(1) + 商人(1)
+            expect(player.coins).toBe(6);
+        });
+
+        it('次のターンには効果が残らない', () => {
+            play(['MERCHANT']);
+            game.endTurn();
+            expect(player.merchantBonus).toBe(0);
+            expect(player.hasPlayedSilver).toBe(false);
+        });
+    });
+
+    describe('家臣', () => {
+        it('財宝+2を得て、山札の一番上を捨て札にする', () => {
+            play(['VASSAL']);
             expect(player.coins).toBe(2);
-            expect(game.pendingPrompt.purpose).toBe('chancellor');
+            expect(ids(player.discard)).toEqual(['copper']);
+            expect(game.pendingPrompt).toBeNull();
+        });
+
+        it('捨てたのがアクションカードなら、アクションを使わずにプレイできる', () => {
+            player.deck = makeCards(['SMITHY', 'COPPER', 'COPPER', 'COPPER']);
+            play(['VASSAL']);
+            expect(game.pendingPrompt.purpose).toBe('vassal-play');
 
             game.resolvePrompt(true);
-            expect(player.deck).toHaveLength(0);
-            expect(player.discard).toHaveLength(5);
+            expect(ids(player.playArea)).toEqual(['vassal', 'smithy']);
+            expect(player.hand).toHaveLength(3);
+            expect(player.discard).toHaveLength(0);
         });
     });
 
@@ -71,18 +118,6 @@ describe('基本セットの王国カード', () => {
             opponent.hand = makeCards(['COPPER', 'COPPER']);
             play(['BUREAUCRAT']);
             expect(opponent.hand).toHaveLength(2);
-        });
-    });
-
-    describe('祝宴', () => {
-        it('自身を廃棄して、コスト5以下のカードを獲得する', () => {
-            play(['FEAST']);
-            expect(ids(game.trash)).toEqual(['feast']);
-            expect(game.pendingPrompt.cards.every(card => card.cost <= 5)).toBe(true);
-
-            const lab = game.pendingPrompt.cards.findIndex(card => card.id === 'laboratory');
-            game.resolvePrompt([lab]);
-            expect(ids(player.discard)).toContain('laboratory');
         });
     });
 
@@ -120,17 +155,46 @@ describe('基本セットの王国カード', () => {
     });
 
     describe('金貸し', () => {
-        it('銅貨を1枚廃棄して財宝+3を得る', () => {
+        it('選べば銅貨を1枚廃棄して財宝+3を得る', () => {
             play(['MONEYLENDER', 'COPPER', 'COPPER']);
+            expect(game.pendingPrompt.purpose).toBe('moneylender');
+            game.resolvePrompt(true);
             expect(player.coins).toBe(3);
             expect(ids(player.hand)).toEqual(['copper']);
             expect(ids(game.trash)).toEqual(['copper']);
+        });
+
+        it('廃棄しないこともできる', () => {
+            play(['MONEYLENDER', 'COPPER']);
+            game.resolvePrompt(false);
+            expect(player.coins).toBe(0);
+            expect(ids(player.hand)).toEqual(['copper']);
         });
 
         it('銅貨がなければ何も起きない', () => {
             play(['MONEYLENDER', 'SILVER']);
             expect(player.coins).toBe(0);
             expect(game.trash).toHaveLength(0);
+        });
+    });
+
+    describe('密猟者', () => {
+        it('1枚引いてアクション+1・財宝+1。空のサプライの山がなければ捨てない', () => {
+            play(['POACHER', 'ESTATE']);
+            expect(player.coins).toBe(1);
+            expect(player.actions).toBe(1);
+            expect(player.hand).toHaveLength(2);
+            expect(game.pendingPrompt).toBeNull();
+        });
+
+        it('空のサプライの山1つにつき手札を1枚捨てる', () => {
+            game.supply.curse = 0;
+            game.supply.smithy = 0;
+            play(['POACHER', 'ESTATE', 'SILVER']);
+            expect(game.pendingPrompt.min).toBe(2);
+
+            game.resolvePrompt([0, 2]);
+            expect(player.hand).toHaveLength(1);
         });
     });
 
@@ -147,50 +211,6 @@ describe('基本セットの王国カード', () => {
         });
     });
 
-    describe('密偵', () => {
-        it('自分、相手の順に山札の一番上を見て、捨て札にするか戻すかを決める', () => {
-            play(['SPY']);
-            expect(player.actions).toBe(1);
-
-            // 自分の山札（銅貨）は戻す
-            expect(game.pendingPrompt.purpose).toBe('spy-self');
-            game.resolvePrompt(false);
-            expect(player.deck[0].id).toBe('copper');
-
-            // 相手の山札（銀貨）は捨て札にする
-            expect(game.pendingPrompt.purpose).toBe('spy-other');
-            expect(game.pendingPrompt.card.id).toBe('silver');
-            game.resolvePrompt(true);
-            expect(ids(opponent.discard)).toEqual(['silver']);
-            expect(game.pendingPrompt).toBeNull();
-        });
-    });
-
-    describe('泥棒', () => {
-        it('相手の財宝を廃棄させ、獲得を選べば自分のものにする', () => {
-            play(['THIEF']);
-            // 相手の山札の上2枚は銀貨と屋敷
-            expect(ids(opponent.discard)).toEqual(['estate']);
-            expect(game.pendingPrompt.purpose).toBe('thief-gain');
-
-            game.resolvePrompt(true);
-            expect(ids(player.discard)).toEqual(['silver']);
-            expect(game.trash).toHaveLength(0);
-        });
-
-        it('種類の違う財宝が2枚出たら、廃棄させるカードを選ぶ', () => {
-            opponent.deck = makeCards(['COPPER', 'GOLD']);
-            play(['THIEF']);
-            expect(game.pendingPrompt.purpose).toBe('thief-trash');
-
-            const gold = game.pendingPrompt.cards.findIndex(card => card.id === 'gold');
-            game.resolvePrompt([gold]);
-            game.resolvePrompt(false);
-            expect(ids(game.trash)).toEqual(['gold']);
-            expect(ids(opponent.discard)).toEqual(['copper']);
-        });
-    });
-
     describe('玉座の間', () => {
         it('選んだアクションカードを2回プレイする', () => {
             player.deck = makeCards(Array(8).fill('COPPER'));
@@ -200,13 +220,52 @@ describe('基本セットの王国カード', () => {
             expect(ids(player.playArea)).toEqual(['throne_room', 'smithy']);
         });
 
-        it('祝宴なら、廃棄は1回だけで2枚獲得する', () => {
-            play(['THRONE_ROOM', 'FEAST']);
+        it('選ばなくてもよい', () => {
+            play(['THRONE_ROOM', 'SMITHY']);
+            expect(game.resolvePrompt([])).toBe(true);
+            expect(ids(player.hand)).toEqual(['smithy']);
+        });
+
+        it('職人なら、獲得と山札に置くのを2回ずつ順番に行う', () => {
+            play(['THRONE_ROOM', 'ARTISAN', 'ESTATE']);
             game.resolvePrompt([0]);
-            game.resolvePrompt([game.pendingPrompt.cards.findIndex(card => card.id === 'silver')]);
-            game.resolvePrompt([game.pendingPrompt.cards.findIndex(card => card.id === 'silver')]);
-            expect(ids(game.trash)).toEqual(['feast']);
-            expect(ids(player.discard).filter(id => id === 'silver')).toHaveLength(2);
+            const gain = () => game.resolvePrompt([game.pendingPrompt.cards.findIndex(card => card.id === 'silver')]);
+
+            gain();
+            expect(game.pendingPrompt.purpose).toBe('artisan-topdeck');
+            game.resolvePrompt([ids(player.hand).indexOf('estate')]);
+            gain();
+            game.resolvePrompt([ids(player.hand).indexOf('silver')]);
+            expect(ids(player.deck).slice(0, 2)).toEqual(['silver', 'estate']);
+            expect(ids(player.hand)).toEqual(['silver']);
+        });
+    });
+
+    describe('山賊', () => {
+        it('金貨を獲得し、相手は銅貨以外の財宝を廃棄して残りを捨て札にする', () => {
+            play(['BANDIT']);
+            expect(ids(player.discard)).toEqual(['gold']);
+            // 相手の山札の上2枚は銀貨と屋敷
+            expect(ids(game.trash)).toEqual(['silver']);
+            expect(ids(opponent.discard)).toEqual(['estate']);
+        });
+
+        it('銅貨は廃棄しない', () => {
+            opponent.deck = makeCards(['COPPER', 'COPPER']);
+            play(['BANDIT']);
+            expect(game.trash).toHaveLength(0);
+            expect(ids(opponent.discard)).toEqual(['copper', 'copper']);
+        });
+
+        it('銅貨以外の財宝が2種類出たら、攻撃を受けた側が廃棄するカードを選ぶ', () => {
+            opponent.deck = makeCards(['SILVER', 'GOLD']);
+            play(['BANDIT']);
+            expect(game.pendingPrompt.player).toBe(opponent);
+            expect(game.pendingPrompt.purpose).toBe('bandit-trash');
+
+            game.resolvePrompt([0]);
+            expect(ids(game.trash)).toEqual(['silver']);
+            expect(ids(opponent.discard)).toEqual(['gold']);
         });
     });
 
@@ -242,15 +301,55 @@ describe('基本セットの王国カード', () => {
             game.resolvePrompt([cards.findIndex(card => card.id === 'silver')]);
             expect(ids(player.hand).sort()).toEqual(['estate', 'silver']);
         });
+
+        it('廃棄しなくてもよい', () => {
+            play(['MINE', 'COPPER']);
+            expect(game.resolvePrompt([])).toBe(true);
+            expect(game.pendingPrompt).toBeNull();
+            expect(ids(player.hand)).toEqual(['copper']);
+        });
     });
 
-    describe('冒険者', () => {
-        it('財宝が2枚出るまで公開し、財宝は手札に、それ以外は捨て札にする', () => {
-            player.deck = makeCards(['ESTATE', 'COPPER', 'SMITHY', 'SILVER', 'GOLD']);
-            play(['ADVENTURER']);
-            expect(ids(player.hand)).toEqual(['copper', 'silver']);
-            expect(ids(player.discard).sort()).toEqual(['estate', 'smithy']);
-            expect(ids(player.deck)).toEqual(['gold']);
+    describe('衛兵', () => {
+        it('上2枚を廃棄・捨て札・山札に戻すに振り分ける', () => {
+            player.deck = makeCards(['COPPER', 'ESTATE', 'SILVER', 'GOLD']);
+            play(['SENTRY']);
+            expect(player.actions).toBe(1);
+            // 1枚引いた後の上2枚は屋敷と銀貨
+            expect(ids(game.pendingPrompt.cards)).toEqual(['estate', 'silver']);
+
+            game.resolvePrompt([0]);
+            expect(ids(game.trash)).toEqual(['estate']);
+            expect(game.pendingPrompt.purpose).toBe('sentry-discard');
+            game.resolvePrompt([]);
+            expect(ids(player.deck)).toEqual(['silver', 'gold']);
+        });
+
+        it('2枚とも戻すときは、一番上に置くカードを選ぶ', () => {
+            player.deck = makeCards(['COPPER', 'ESTATE', 'SILVER']);
+            play(['SENTRY']);
+            game.resolvePrompt([]);
+            game.resolvePrompt([]);
+            expect(game.pendingPrompt.purpose).toBe('sentry-top');
+
+            game.resolvePrompt([1]);
+            expect(ids(player.deck)).toEqual(['silver', 'estate']);
+        });
+    });
+
+    describe('職人', () => {
+        it('コスト5以下のカードを手札に獲得し、手札のカードを1枚山札の上に置く', () => {
+            play(['ARTISAN', 'ESTATE']);
+            const { cards } = game.pendingPrompt;
+            expect(cards.every(card => card.cost <= 5)).toBe(true);
+
+            game.resolvePrompt([cards.findIndex(card => card.id === 'laboratory')]);
+            expect(ids(player.hand)).toEqual(['estate', 'laboratory']);
+            expect(game.pendingPrompt.purpose).toBe('artisan-topdeck');
+
+            game.resolvePrompt([0]);
+            expect(player.deck[0].id).toBe('estate');
+            expect(ids(player.hand)).toEqual(['laboratory']);
         });
     });
 
@@ -268,8 +367,8 @@ describe('基本セットの王国カード', () => {
 });
 
 describe('全カードでのCPU同士の試合', () => {
-    // 25種を3組に分け、どのカードも試合に出るようにする
-    const groups = [ALL_KINGDOM.slice(0, 10), ALL_KINGDOM.slice(10, 20), ALL_KINGDOM.slice(15, 25)];
+    // 26種を3組に分け、どのカードも試合に出るようにする
+    const groups = [ALL_KINGDOM.slice(0, 10), ALL_KINGDOM.slice(10, 20), ALL_KINGDOM.slice(16, 26)];
 
     const playOut = (kingdom) => {
         const game = createGame([{ name: 'CPU1', isCPU: true }, { name: 'CPU2', isCPU: true }], kingdom);

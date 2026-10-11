@@ -304,17 +304,12 @@ class Game {
         }
         
         // 3つ以上の山札が空になったらゲーム終了
-        let emptyPiles = 0;
-        for (const cardId in this.supply) {
-            if (this.supply[cardId] <= 0) {
-                emptyPiles++;
-                if (emptyPiles >= 3) {
-                    return true;
-                }
-            }
-        }
-        
-        return false;
+        return this.countEmptySupplyPiles() >= 3;
+    }
+    
+    // 空になったサプライの山の数
+    countEmptySupplyPiles() {
+        return Object.values(this.supply).filter(count => count <= 0).length;
     }
     
     // ゲーム終了処理

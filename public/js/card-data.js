@@ -82,7 +82,7 @@ export const BASIC_CARDS = {
     }
 };
 
-// 王国カードデータ（基本セット初版の25種）
+// 王国カードデータ（基本セット第2版の26種）
 // onPlay(player, game, card) の中で選択が必要なときは game.promptSelect / promptConfirm / promptGain を使い、
 // 続きの処理はそのコールバックに書く。攻撃や繰り返しは game.attackOtherPlayers / game.runNext で手順として積む
 const isAction = (card) => card.isType(CARD_TYPES.ACTION);
@@ -157,30 +157,83 @@ export const KINGDOM_CARDS = {
     },
 
     // ===== コスト3 =====
-    CHANCELLOR: {
-        id: 'chancellor',
-        name: '宰相',
+    HARBINGER: {
+        id: 'harbinger',
+        name: '前駆者',
         cost: 3,
         types: [CARD_TYPES.ACTION],
-        description: '財宝 +2。山札をすべて捨て札にしてもよい',
+        description: 'カードを1枚引く。アクション +1。捨て札の中からカードを1枚選び、山札の上に置いてもよい',
+        count: 10,
+        onPlay: (player, game) => {
+            player.drawCards(1);
+            player.actions += 1;
+            game.log(`${player.name}はカードを1枚引き、アクション+1を得ました`);
+            if (player.discard.length === 0) return;
+
+            const cards = [...player.discard];
+            game.promptSelect({
+                player,
+                cards,
+                max: 1,
+                title: '前駆者',
+                message: '山札の上に置くカードを捨て札から選んでください（選ばなくてもかまいません）。',
+                confirmLabel: '山札の上に置く',
+                purpose: 'harbinger',
+                callback: ([index]) => {
+                    if (index === undefined) return;
+                    const card = cards[index];
+                    player.discard.splice(player.discard.indexOf(card), 1);
+                    player.deck.unshift(card);
+                    game.log(`${player.name}は捨て札の${card.name}を山札の上に置きました`);
+                }
+            });
+        }
+    },
+    MERCHANT: {
+        id: 'merchant',
+        name: '商人',
+        cost: 3,
+        types: [CARD_TYPES.ACTION],
+        description: 'カードを1枚引く。アクション +1。このターンに最初に銀貨をプレイしたとき、財宝 +1',
+        count: 10,
+        onPlay: (player, game) => {
+            player.drawCards(1);
+            player.actions += 1;
+            player.merchantBonus += 1;
+            game.log(`${player.name}はカードを1枚引き、アクション+1を得ました`);
+        }
+    },
+    VASSAL: {
+        id: 'vassal',
+        name: '家臣',
+        cost: 3,
+        types: [CARD_TYPES.ACTION],
+        description: '財宝 +2。山札の一番上を捨て札にする。それがアクションカードなら、プレイしてもよい',
         count: 10,
         onPlay: (player, game) => {
             player.coins += 2;
             game.log(`${player.name}は財宝+2を得ました`);
-            if (player.deck.length === 0) return;
-            
+            const card = player.takeTopCard();
+            if (!card) return;
+
+            player.discard.push(card);
+            game.log(`${player.name}は山札の一番上の${card.name}を捨て札にしました`);
+            if (!isAction(card)) return;
+
             game.promptConfirm({
                 player,
-                title: '宰相',
-                message: `山札（${player.deck.length}枚）をすべて捨て札にしますか？`,
-                yesLabel: '捨て札にする',
-                noLabel: 'そのまま',
-                purpose: 'chancellor',
-                callback: (yes) => {
-                    if (!yes) return;
-                    player.discard.push(...player.deck);
-                    player.deck = [];
-                    game.log(`${player.name}は山札をすべて捨て札にしました`);
+                card,
+                title: '家臣',
+                message: `捨て札にした${card.name}をプレイしますか？（アクションは使いません）`,
+                yesLabel: 'プレイする',
+                noLabel: 'プレイしない',
+                purpose: 'vassal-play',
+                callback: (play) => {
+                    if (!play) return;
+                    player.discard.splice(player.discard.indexOf(card), 1);
+                    player.playArea.push(card);
+                    game.log(`${player.name}は${card.name}をプレイしました`);
+                    card.play(player, game);
                 }
             });
         }
@@ -196,19 +249,6 @@ export const KINGDOM_CARDS = {
             player.drawCards(1);
             player.actions += 2;
             game.log(`${player.name}はカードを1枚引き、アクション+2を得ました`);
-        }
-    },
-    WOODCUTTER: {
-        id: 'woodcutter',
-        name: '木こり',
-        cost: 3,
-        types: [CARD_TYPES.ACTION],
-        description: '購入 +1。財宝 +2',
-        count: 10,
-        onPlay: (player, game) => {
-            player.buys += 1;
-            player.coins += 2;
-            game.log(`${player.name}は購入+1、財宝+2を得ました`);
         }
     },
     WORKSHOP: {
@@ -250,29 +290,6 @@ export const KINGDOM_CARDS = {
                 const [card] = target.hand.splice(index, 1);
                 target.deck.unshift(card);
                 game.log(`${target.name}は${card.name}を公開し、山札の上に置きました`);
-            });
-        }
-    },
-    FEAST: {
-        id: 'feast',
-        name: '祝宴',
-        cost: 4,
-        types: [CARD_TYPES.ACTION],
-        description: 'このカードを廃棄する。コスト5以下のカードを1枚獲得する',
-        count: 10,
-        onPlay: (player, game, card) => {
-            // 玉座の間で2回目にプレイしたときは、すでに廃棄済みなので獲得だけ行う
-            const index = player.playArea.indexOf(card);
-            if (index >= 0) {
-                player.playArea.splice(index, 1);
-                game.trash.push(card);
-                game.log(`${player.name}は祝宴を廃棄しました`);
-            }
-            game.promptGain({
-                player,
-                maxCost: 5,
-                title: '祝宴',
-                message: 'コスト5以下のカードを1枚獲得してください。'
             });
         }
     },
@@ -321,17 +338,58 @@ export const KINGDOM_CARDS = {
         name: '金貸し',
         cost: 4,
         types: [CARD_TYPES.ACTION],
-        description: '手札の銅貨を1枚廃棄する。廃棄したら財宝 +3',
+        description: '手札の銅貨を1枚廃棄してもよい。廃棄したら財宝 +3',
         count: 10,
         onPlay: (player, game) => {
-            const index = player.hand.findIndex(card => card.id === 'copper');
-            if (index < 0) {
+            if (!player.hand.some(card => card.id === 'copper')) {
                 game.log(`${player.name}の手札に銅貨がありませんでした`);
                 return;
             }
-            game.trashFromHand(player, [index]);
-            player.coins += 3;
-            game.log(`${player.name}は銅貨を廃棄し、財宝+3を得ました`);
+            game.promptConfirm({
+                player,
+                title: '金貸し',
+                message: '手札の銅貨を1枚廃棄して、財宝+3を得ますか？',
+                yesLabel: '廃棄する',
+                noLabel: '廃棄しない',
+                purpose: 'moneylender',
+                callback: (yes) => {
+                    if (!yes) return;
+                    game.trashFromHand(player, [player.hand.findIndex(card => card.id === 'copper')]);
+                    player.coins += 3;
+                    game.log(`${player.name}は銅貨を廃棄し、財宝+3を得ました`);
+                }
+            });
+        }
+    },
+    POACHER: {
+        id: 'poacher',
+        name: '密猟者',
+        cost: 4,
+        types: [CARD_TYPES.ACTION],
+        description: 'カードを1枚引く。アクション +1。財宝 +1。空のサプライの山1つにつき、手札を1枚捨てる',
+        count: 10,
+        onPlay: (player, game) => {
+            player.drawCards(1);
+            player.actions += 1;
+            player.coins += 1;
+            game.log(`${player.name}はカードを1枚引き、アクション+1、財宝+1を得ました`);
+
+            const discardCount = Math.min(game.countEmptySupplyPiles(), player.hand.length);
+            if (discardCount === 0) return;
+            game.promptSelect({
+                player,
+                cards: player.hand,
+                min: discardCount,
+                max: discardCount,
+                title: '密猟者',
+                message: `空のサプライの山があるため、捨てるカードを${discardCount}枚選んでください。`,
+                confirmLabel: '捨てる',
+                purpose: 'discard-down',
+                callback: (indices) => {
+                    game.discardFromHand(player, indices);
+                    game.log(`${player.name}は手札を${indices.length}枚捨てました`);
+                }
+            });
         }
     },
     REMODEL: {
@@ -380,130 +438,12 @@ export const KINGDOM_CARDS = {
             game.log(`${player.name}はカードを3枚引きました`);
         }
     },
-    SPY: {
-        id: 'spy',
-        name: '密偵',
-        cost: 4,
-        types: [CARD_TYPES.ACTION],
-        description: 'カードを1枚引く。アクション +1。各プレイヤー（自分も含む）は山札の一番上を公開し、あなたが捨て札にするか戻すかを決める',
-        isAttack: true,
-        count: 10,
-        onPlay: (player, game) => {
-            player.drawCards(1);
-            player.actions += 1;
-            game.log(`${player.name}はカードを1枚引き、アクション+1を得ました`);
-            
-            const revealTop = (target) => {
-                const card = target.takeTopCard();
-                if (!card) {
-                    game.log(`${target.name}の山札にはカードがありませんでした`);
-                    return;
-                }
-                game.log(`${target.name}の山札の一番上は${card.name}でした`);
-                game.promptConfirm({
-                    player,
-                    card,
-                    title: '密偵',
-                    message: `${target.name}の山札の一番上は${card.name}です。捨て札にしますか？`,
-                    yesLabel: '捨て札にする',
-                    noLabel: '山札に戻す',
-                    purpose: target === player ? 'spy-self' : 'spy-other',
-                    callback: (discard) => {
-                        if (discard) {
-                            target.discard.push(card);
-                            game.log(`${target.name}の${card.name}は捨て札になりました`);
-                        } else {
-                            target.deck.unshift(card);
-                            game.log(`${target.name}の${card.name}は山札に戻されました`);
-                        }
-                    }
-                });
-            };
-            
-            // 自分の山札を先に見てから、他のプレイヤー（お堀で防げる）を席順に見る
-            game.runNext(
-                () => revealTop(player),
-                ...game.getOtherPlayers(player).map(target => () => {
-                    if (!game.isProtectedFromAttack(target, player)) {
-                        revealTop(target);
-                    }
-                })
-            );
-        }
-    },
-    THIEF: {
-        id: 'thief',
-        name: '泥棒',
-        cost: 4,
-        types: [CARD_TYPES.ACTION],
-        description: '他のプレイヤーは山札の上から2枚を公開する。その中の財宝1枚をあなたが選んで廃棄させ、廃棄したカードを獲得してもよい。残りは捨て札にする',
-        isAttack: true,
-        count: 10,
-        onPlay: (player, game) => {
-            game.attackOtherPlayers(player, (target) => {
-                const revealed = [target.takeTopCard(), target.takeTopCard()].filter(Boolean);
-                if (revealed.length === 0) {
-                    game.log(`${target.name}の山札にはカードがありませんでした`);
-                    return;
-                }
-                game.log(`${target.name}は${revealed.map(card => card.name).join('と')}を公開しました`);
-                
-                const treasures = revealed.filter(isTreasure);
-                const discardOthers = (stolen) => {
-                    revealed.filter(card => card !== stolen).forEach(card => target.discard.push(card));
-                };
-                
-                if (treasures.length === 0) {
-                    discardOthers(null);
-                    return;
-                }
-                
-                // 選んだ財宝を廃棄し、獲得するかを決めさせる
-                const steal = (stolen) => {
-                    discardOthers(stolen);
-                    game.trash.push(stolen);
-                    game.log(`${target.name}の${stolen.name}を廃棄しました`);
-                    game.promptConfirm({
-                        player,
-                        card: stolen,
-                        title: '泥棒',
-                        message: `廃棄した${stolen.name}を獲得しますか？`,
-                        yesLabel: '獲得する',
-                        noLabel: '獲得しない',
-                        purpose: 'thief-gain',
-                        callback: (gain) => {
-                            if (!gain) return;
-                            game.trash.splice(game.trash.indexOf(stolen), 1);
-                            player.discard.push(stolen);
-                            game.log(`${player.name}は${stolen.name}を獲得しました`);
-                        }
-                    });
-                };
-                
-                if (treasures.length === 1 || treasures[0].id === treasures[1].id) {
-                    steal(treasures[0]);
-                    return;
-                }
-                game.promptSelect({
-                    player,
-                    cards: treasures,
-                    min: 1,
-                    max: 1,
-                    title: '泥棒',
-                    message: `${target.name}の財宝から、廃棄させるカードを選んでください。`,
-                    confirmLabel: '廃棄させる',
-                    purpose: 'thief-trash',
-                    callback: ([index]) => steal(treasures[index])
-                });
-            });
-        }
-    },
     THRONE_ROOM: {
         id: 'throne_room',
         name: '玉座の間',
         cost: 4,
         types: [CARD_TYPES.ACTION],
-        description: '手札のアクションカードを1枚選び、2回プレイする',
+        description: '手札のアクションカードを1枚選び、2回プレイしてもよい',
         count: 10,
         onPlay: (player, game) => {
             const actionCards = player.hand.filter(isAction);
@@ -514,13 +454,13 @@ export const KINGDOM_CARDS = {
             game.promptSelect({
                 player,
                 cards: actionCards,
-                min: 1,
                 max: 1,
                 title: '玉座の間',
-                message: '2回プレイするアクションカードを選んでください。',
+                message: '2回プレイするアクションカードを選んでください（選ばなくてもかまいません）。',
                 confirmLabel: '2回プレイする',
                 purpose: 'throne-room',
                 callback: ([index]) => {
+                    if (index === undefined) return;
                     const chosen = actionCards[index];
                     player.hand.splice(player.hand.indexOf(chosen), 1);
                     player.playArea.push(chosen);
@@ -538,6 +478,53 @@ export const KINGDOM_CARDS = {
     },
 
     // ===== コスト5 =====
+    BANDIT: {
+        id: 'bandit',
+        name: '山賊',
+        cost: 5,
+        types: [CARD_TYPES.ACTION],
+        description: '金貨を1枚獲得する。他のプレイヤーは山札の上から2枚を公開し、銅貨以外の財宝を1枚廃棄して、残りを捨て札にする',
+        isAttack: true,
+        count: 10,
+        onPlay: (player, game) => {
+            if (game.gainCardFromSupply(player, 'gold')) {
+                game.log(`${player.name}は金貨を獲得しました`);
+            }
+            game.attackOtherPlayers(player, (target) => {
+                const revealed = [target.takeTopCard(), target.takeTopCard()].filter(Boolean);
+                if (revealed.length === 0) {
+                    game.log(`${target.name}の山札にはカードがありませんでした`);
+                    return;
+                }
+                game.log(`${target.name}は${revealed.map(card => card.name).join('と')}を公開しました`);
+                
+                const trashTreasure = (trashed) => {
+                    revealed.filter(card => card !== trashed).forEach(card => target.discard.push(card));
+                    if (!trashed) return;
+                    game.trash.push(trashed);
+                    game.log(`${target.name}は${trashed.name}を廃棄しました`);
+                };
+                
+                const treasures = revealed.filter(card => isTreasure(card) && card.id !== 'copper');
+                if (treasures.length <= 1 || treasures[0].id === treasures[1].id) {
+                    trashTreasure(treasures[0] ?? null);
+                    return;
+                }
+                // 廃棄する財宝は攻撃を受けたプレイヤーが選ぶ
+                game.promptSelect({
+                    player: target,
+                    cards: treasures,
+                    min: 1,
+                    max: 1,
+                    title: '山賊',
+                    message: '廃棄する財宝を1枚選んでください。もう1枚は捨て札になります。',
+                    confirmLabel: '廃棄する',
+                    purpose: 'bandit-trash',
+                    callback: ([index]) => trashTreasure(treasures[index])
+                });
+            });
+        }
+    },
     COUNCIL_ROOM: {
         id: 'council_room',
         name: '議事堂',
@@ -653,7 +640,7 @@ export const KINGDOM_CARDS = {
         name: '鉱山',
         cost: 5,
         types: [CARD_TYPES.ACTION],
-        description: '手札の財宝を1枚廃棄する。廃棄した財宝よりコストが最大3多い財宝を1枚獲得し、手札に加える',
+        description: '手札の財宝を1枚廃棄してもよい。廃棄した財宝よりコストが最大3多い財宝を1枚獲得し、手札に加える',
         count: 10,
         onPlay: (player, game) => {
             const treasures = player.hand.filter(isTreasure);
@@ -664,13 +651,13 @@ export const KINGDOM_CARDS = {
             game.promptSelect({
                 player,
                 cards: treasures,
-                min: 1,
                 max: 1,
                 title: '鉱山',
-                message: '廃棄する財宝を1枚選んでください。',
+                message: '廃棄する財宝を1枚選んでください（選ばなくてもかまいません）。',
                 confirmLabel: '廃棄する',
                 purpose: 'mine-trash',
                 callback: ([index]) => {
+                    if (index === undefined) return;
                     const trashed = treasures[index];
                     game.trashFromHand(player, [player.hand.indexOf(trashed)]);
                     game.log(`${player.name}は${trashed.name}を廃棄しました`);
@@ -682,6 +669,83 @@ export const KINGDOM_CARDS = {
                         title: '鉱山',
                         message: `コスト${trashed.cost + 3}以下の財宝を1枚選んでください。手札に加えます。`
                     });
+                }
+            });
+        }
+    },
+    SENTRY: {
+        id: 'sentry',
+        name: '衛兵',
+        cost: 5,
+        types: [CARD_TYPES.ACTION],
+        description: 'カードを1枚引く。アクション +1。山札の上から2枚を見て、好きな枚数を廃棄・捨て札にし、残りを好きな順で山札の上に戻す',
+        count: 10,
+        onPlay: (player, game) => {
+            player.drawCards(1);
+            player.actions += 1;
+            game.log(`${player.name}はカードを1枚引き、アクション+1を得ました`);
+            const revealed = [player.takeTopCard(), player.takeTopCard()].filter(Boolean);
+            if (revealed.length === 0) return;
+            
+            // 選ばれなかったカードを残す
+            const without = (cards, indices) => cards.filter((card, index) => !indices.includes(index));
+            
+            // 残ったカードを山札の上に戻す（2枚なら一番上に置くカードを選ぶ）
+            const putBack = (cards) => {
+                if (cards.length === 0) return;
+                if (cards.length === 1 || cards[0].id === cards[1].id) {
+                    player.deck.unshift(...cards);
+                    game.log(`${player.name}はカードを${cards.length}枚山札の上に戻しました`);
+                    return;
+                }
+                game.promptSelect({
+                    player,
+                    cards,
+                    min: 1,
+                    max: 1,
+                    title: '衛兵',
+                    message: '山札の一番上に置くカードを選んでください。もう1枚はその下に置きます。',
+                    confirmLabel: '一番上に置く',
+                    purpose: 'sentry-top',
+                    callback: ([index]) => {
+                        player.deck.unshift(cards[index], cards[1 - index]);
+                        game.log(`${player.name}はカードを2枚山札の上に戻しました`);
+                    }
+                });
+            };
+            
+            const chooseDiscard = (cards) => {
+                if (cards.length === 0) return;
+                game.promptSelect({
+                    player,
+                    cards,
+                    title: '衛兵',
+                    message: '捨て札にするカードを選んでください。残りは山札の上に戻します。',
+                    confirmLabel: '捨て札にする',
+                    purpose: 'sentry-discard',
+                    callback: (indices) => {
+                        indices.forEach(index => player.discard.push(cards[index]));
+                        if (indices.length > 0) {
+                            game.log(`${player.name}は${indices.map(index => cards[index].name).join('と')}を捨て札にしました`);
+                        }
+                        putBack(without(cards, indices));
+                    }
+                });
+            };
+            
+            game.promptSelect({
+                player,
+                cards: revealed,
+                title: '衛兵',
+                message: '山札の上から見たカードです。廃棄するカードを選んでください。',
+                confirmLabel: '廃棄する',
+                purpose: 'sentry-trash',
+                callback: (indices) => {
+                    indices.forEach(index => game.trash.push(revealed[index]));
+                    if (indices.length > 0) {
+                        game.log(`${player.name}は${indices.map(index => revealed[index].name).join('と')}を廃棄しました`);
+                    }
+                    chooseDiscard(without(revealed, indices));
                 }
             });
         }
@@ -708,26 +772,40 @@ export const KINGDOM_CARDS = {
     },
 
     // ===== コスト6 =====
-    ADVENTURER: {
-        id: 'adventurer',
-        name: '冒険者',
+    ARTISAN: {
+        id: 'artisan',
+        name: '職人',
         cost: 6,
         types: [CARD_TYPES.ACTION],
-        description: '財宝が2枚出るまで山札を公開し、その財宝を手札に加える。他の公開したカードは捨て札にする',
+        description: 'コスト5以下のカードを1枚獲得し、手札に加える。手札のカードを1枚、山札の上に置く',
         count: 10,
         onPlay: (player, game) => {
-            const found = [];
-            const others = [];
-            while (found.length < 2) {
-                const card = player.takeTopCard();
-                if (!card) break;
-                (isTreasure(card) ? found : others).push(card);
-            }
-            player.hand.push(...found);
-            player.discard.push(...others);
-            game.log(found.length > 0
-                ? `${player.name}は${found.map(card => card.name).join('と')}を手札に加えました`
-                : `${player.name}は財宝を見つけられませんでした`);
+            game.promptGain({
+                player,
+                maxCost: 5,
+                destination: 'hand',
+                title: '職人',
+                message: 'コスト5以下のカードを1枚選んでください。手札に加えます。'
+            });
+            // 獲得が終わってから、手札のカードを山札の上に置く
+            game.runNext(() => {
+                if (player.hand.length === 0) return;
+                game.promptSelect({
+                    player,
+                    cards: player.hand,
+                    min: 1,
+                    max: 1,
+                    title: '職人',
+                    message: '山札の上に置くカードを手札から1枚選んでください。',
+                    confirmLabel: '山札の上に置く',
+                    purpose: 'artisan-topdeck',
+                    callback: ([index]) => {
+                        const [card] = player.hand.splice(index, 1);
+                        player.deck.unshift(card);
+                        game.log(`${player.name}は${card.name}を山札の上に置きました`);
+                    }
+                });
+            });
         }
     }
 };

@@ -7,12 +7,14 @@
 import { CARD_TYPES } from './card-data.js';
 
 // アクションを増やすカード（何枚プレイしても他のアクションを妨げない）の優先順
-const NON_TERMINAL_PRIORITY = ['village', 'festival', 'laboratory', 'market', 'spy', 'cellar'];
+const NON_TERMINAL_PRIORITY = [
+    'village', 'festival', 'laboratory', 'market', 'sentry', 'poacher', 'harbinger', 'merchant', 'cellar'
+];
 
 // アクションを増やさないカード（ターミナル）の優先順
 const TERMINAL_PRIORITY = [
-    'witch', 'council_room', 'library', 'smithy', 'militia', 'mine', 'moneylender', 'remodel',
-    'bureaucrat', 'thief', 'adventurer', 'chancellor', 'woodcutter', 'workshop', 'feast', 'moat', 'chapel'
+    'witch', 'artisan', 'council_room', 'library', 'bandit', 'smithy', 'militia', 'mine', 'moneylender',
+    'remodel', 'bureaucrat', 'vassal', 'workshop', 'moat', 'chapel'
 ];
 
 // 玉座の間は他のアクションカードがあるときに最優先でプレイする
@@ -88,7 +90,7 @@ export function chooseCardToBuy(player, game) {
         const actions = ['laboratory', 'market', 'festival'];
         if (canAddTerminal) {
             if (available('curse')) actions.unshift('witch');
-            actions.push('council_room', 'library');
+            actions.push('council_room', 'library', 'bandit');
         }
         return pick([...actions, 'silver']);
     }
@@ -104,14 +106,16 @@ export function chooseCardToBuy(player, game) {
     return null;
 }
 
+// カードを手元に残す価値の目安
+function keepValue(card) {
+    if (card.isType(CARD_TYPES.CURSE)) return -2;
+    if (card.isType(CARD_TYPES.VICTORY) && !card.isType(CARD_TYPES.ACTION)) return -1;
+    if (card.isType(CARD_TYPES.TREASURE)) return card.value * 2;
+    return card.cost; // アクションはコストを価値の目安にする
+}
+
 // 手札を残す価値の低い順に並べたインデックス（民兵で捨てるカードを選ぶのに使う）
 function indicesByKeepValue(cards) {
-    const keepValue = (card) => {
-        if (card.isType(CARD_TYPES.CURSE)) return -2;
-        if (card.isType(CARD_TYPES.VICTORY) && !card.isType(CARD_TYPES.ACTION)) return -1;
-        if (card.isType(CARD_TYPES.TREASURE)) return card.value * 2;
-        return card.cost; // アクションはコストを価値の目安にする
-    };
     return cards.map((card, index) => index).sort((a, b) => keepValue(cards[a]) - keepValue(cards[b]));
 }
 
@@ -160,11 +164,11 @@ function chooseSelection(prompt, game) {
         }
 
         case 'mine-trash': {
-            // 銀貨→金貨、銅貨→銀貨の順に優先する
+            // 銀貨→金貨、銅貨→銀貨の順に優先する（金貨しかなければ廃棄しない）
             const silver = indexOf(card => card.id === 'silver');
             if (silver >= 0) return [silver];
             const copper = indexOf(card => card.id === 'copper');
-            return [copper >= 0 ? copper : 0];
+            return copper >= 0 ? [copper] : [];
         }
 
         case 'throne-room': {
@@ -174,9 +178,36 @@ function chooseSelection(prompt, game) {
             return [notThrone ?? best[0]];
         }
 
-        case 'thief-trash': {
-            const highest = cards.map((card, index) => index).sort((a, b) => cards[b].cost - cards[a].cost);
-            return [highest[0]];
+        case 'bandit-trash': {
+            // 攻撃を受けた側なので、失って痛くない安い方を廃棄する
+            const cheapest = cards.map((card, index) => index).sort((a, b) => cards[a].cost - cards[b].cost);
+            return [cheapest[0]];
+        }
+
+        case 'harbinger': {
+            // 捨て札の中で一番価値の高いカードを山札に戻す（銅貨以下なら戻さない）
+            const best = indicesByKeepValue(cards).reverse()[0];
+            const COPPER_VALUE = 2;
+            return keepValue(cards[best]) > COPPER_VALUE ? [best] : [];
+        }
+
+        case 'sentry-trash':
+            return cards.map((card, index) => (['curse', 'estate'].includes(card.id) ? index : -1)).filter(index => index >= 0);
+
+        case 'sentry-discard':
+            // 勝利点と銅貨は引きたくないので捨てる
+            return cards.map((card, index) => (isJunk(card) || card.id === 'copper' ? index : -1)).filter(index => index >= 0);
+
+        case 'sentry-top':
+            return [indicesByKeepValue(cards).reverse()[0]];
+
+        case 'artisan-topdeck': {
+            // アクションが残っていなければ、手札のアクションカードを次のターンに回す
+            if (prompt.player.actions <= 0) {
+                const action = indexOf(card => card.isType(CARD_TYPES.ACTION));
+                if (action >= 0) return [action];
+            }
+            return [indicesByKeepValue(cards)[0]];
         }
 
         case 'gain':
@@ -190,22 +221,15 @@ function chooseSelection(prompt, game) {
 
 // はい／いいえの選択に対する答え
 function chooseConfirm(prompt) {
-    const { card, player } = prompt;
+    const { player } = prompt;
 
     switch (prompt.purpose) {
-        case 'chancellor':
+        case 'moneylender':
+        case 'vassal-play':
             return true;
         case 'library-skip':
             // アクションが残っていないなら、引いたアクションカードは脇に置いて別のカードを引く
             return player.actions <= 0;
-        case 'spy-self':
-            // 自分の山札は、不要なカードや銅貨なら捨てて引き直す
-            return isJunk(card) || card.id === 'copper';
-        case 'spy-other':
-            // 相手の山札は、良いカード（勝利点・呪い以外）なら捨てさせる
-            return !isJunk(card);
-        case 'thief-gain':
-            return card.id !== 'copper';
         default:
             return false;
     }

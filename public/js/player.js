@@ -18,6 +18,8 @@ class Player {
         this.actions = 0;    // アクション数
         this.buys = 0;       // 購入数
         this.coins = 0;      // コイン数
+        this.merchantBonus = 0;      // このターンにプレイした商人の数（最初の銀貨で財宝+1ずつ）
+        this.hasPlayedSilver = false; // このターンに銀貨をプレイしたか
     }
     
     // 初期デッキを作成
@@ -133,6 +135,15 @@ class Player {
             const card = this.hand.splice(index, 1)[0];
             this.playArea.push(card);
             this.coins += card.value;
+            
+            // 商人：このターン最初の銀貨で、プレイした商人1枚につき財宝+1
+            if (card.id === 'silver' && !this.hasPlayedSilver) {
+                this.hasPlayedSilver = true;
+                if (this.merchantBonus > 0) {
+                    this.coins += this.merchantBonus;
+                    game?.log(`${this.name}は商人の効果で財宝+${this.merchantBonus}を得ました`);
+                }
+            }
         });
         
         return treasureIndices.length;
@@ -152,6 +163,8 @@ class Player {
         this.actions = 1;
         this.buys = 1;
         this.coins = 0;
+        this.merchantBonus = 0;
+        this.hasPlayedSilver = false;
     }
     
     // プレイヤーの勝利点を計算
