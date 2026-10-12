@@ -4,7 +4,7 @@
 
 import Card from './card.js';
 import Player from './player.js';
-import { ALL_CARDS, BASIC_CARDS, CARD_TYPES, CARD_SETS, KINGDOM_CARDS, REWARD_CARD_IDS, getKingdomCardIds } from './card-data.js';
+import { ALL_CARDS, BASIC_CARDS, CARD_TYPES, CARD_SETS, KINGDOM_CARDS, REWARD_CARD_IDS, RUINS_CARD_IDS, getKingdomCardIds } from './card-data.js';
 import { createRandom, createSeed } from './random.js';
 
 // 1ターンの間だけ続く効果の記録（ターンの開始で作り直す）
@@ -13,6 +13,7 @@ const createTurnState = () => ({
     crossroadsPlayed: 0,  // プレイした岐路の数
     foolsGoldPlayed: 0,   // プレイした愚者の黄金の数
     actionGains: 0,       // 獲得したアクションカードの数（大釜）
+    buyPhaseGains: 0,     // 購入フェーズに獲得したカードの数（隠遁者）
     costReduction: 0,     // カードのコストの軽減（橋・名声）
     tiara: false,         // 獲得したカードを山札の上に置いてもよい（ティアラ）
     collections: 0,       // アクションカードを獲得するたびに得る勝利点トークン（収集品）
@@ -32,16 +33,19 @@ class Game {
     // cardSets は王国カードを選ぶセット。kingdom を渡すとその王国カードで遊ぶ
     // bane（魔女娘の災いカード）・ferryman（渡し守の山）・colonies（白金貨と植民地を使うか）も指定できる（テスト用）
     // seed が同じなら、同じ操作をすれば必ず同じ結果になる
-    constructor(playerNames, { cardSets = Object.values(CARD_SETS), kingdom = null, bane = null, ferryman = null, colonies = null, seed = createSeed() } = {}) {
+    constructor(playerNames, { cardSets = Object.values(CARD_SETS), kingdom = null, bane = null, ferryman = null, colonies = null, shelters = null, seed = createSeed() } = {}) {
         this.cardSets = cardSets;
         this.kingdom = kingdom;
-        this.options = { bane, ferryman, colonies };
+        this.options = { bane, ferryman, colonies, shelters };
         this.seed = seed;
         this.random = createRandom(seed);
         this.commands = []; // 受け付けた操作の記録（Game.replay で再現できる）
         this.players = [];
         this.supply = {};   // サプライパイル
-        this.nonSupply = {}; // サプライ外の山（褒賞・渡し守の山）
+        this.nonSupply = {}; // サプライ外の山（褒賞・渡し守の山・略奪品など）
+        this.pileCards = {}; // 中身が1種類でない山（騎士・廃墟）の、上から順のカードID。一番上だけを獲得できる
+        this.pileOf = {};    // 中身が1種類でない山に入っているカードのID → 山のID
+        this.useShelters = false; // 屋敷の代わりに避難所で始めるか
         this.trash = [];    // 廃棄置き場
         this.bane = null;   // 魔女娘の災いカード
         this.ferrymanPile = null; // 渡し守で獲得するカード
@@ -59,6 +63,7 @@ class Game {
         this.regularTurnPlayer = null; // 追加のターンでない、ふつうの手番のプレイヤー（次の手番はこの左隣）
         this.lastError = null;     // 直前に受け付けなかった操作の理由
         this.promptCount = 0;      // これまでの選択待ちの数（画面で同じ選択を出し直さないための番号）
+        this.turnCount = 0;        // これまでのターンの数（追加のターンも数える）
         this.turnState = createTurnState();
 
         // プレイヤーの作成（名前の文字列か { name, isCPU } を受け付ける）
@@ -77,7 +82,7 @@ class Game {
 
         // 各プレイヤーの初期デッキを作成して5枚引く
         this.players.forEach(player => {
-            player.createInitialDeck();
+            player.createInitialDeck({ shelters: this.useShelters });
             player.drawCards(5);
             // パン屋：各プレイヤーは財源を1つ持って始める
             if (this.isInSupply('baker')) player.coffers += 1;
@@ -88,6 +93,7 @@ class Game {
 
         this.log('ゲームが開始されました');
         if (this.useColonies) this.log('白金貨と植民地を使います');
+        if (this.useShelters) this.log('屋敷の代わりに避難所を使います');
         if (this.bane) this.log(`魔女娘の災いカードは${ALL_CARDS[this.bane.toUpperCase()].name}です`);
         if (this.ferrymanPile) this.log(`渡し守で獲得するカードは${ALL_CARDS[this.ferrymanPile.toUpperCase()].name}です`);
         this.startTurn(this.getCurrentPlayer(), { regular: true });
@@ -154,6 +160,28 @@ class Game {
             this.supply.colony = victoryCardCount;
         }
 
+        // 避難所：王国カードを1枚選び、それが暗黒時代のカードなら、初期デッキの屋敷の代わりに避難所を使う
+        this.useShelters = this.options.shelters ??
+            (kingdomIds.length > 0 &&
+             ALL_CARDS[kingdomIds[Math.floor(this.random() * kingdomIds.length)].toUpperCase()]?.set === CARD_SETS.DARK_AGES);
+
+        // 中身が1種類でない山（騎士など）は、中のカードを混ぜて置く
+        kingdomIds.forEach(cardId => {
+            const data = ALL_CARDS[cardId.toUpperCase()];
+            if (data?.pileCards) this.setupMixedPile(cardId, this.shuffle([...data.pileCards]));
+        });
+        // 略奪者など：廃墟の山（5種類を混ぜ、プレイヤー数-1 の10倍の枚数）
+        if (kingdomIds.some(cardId => ALL_CARDS[cardId.toUpperCase()]?.types.includes(CARD_TYPES.LOOTER))) {
+            const ruins = this.shuffle(RUINS_CARD_IDS.flatMap(cardId => Array(10).fill(cardId)));
+            this.setupMixedPile('ruins', ruins.slice(0, (this.players.length - 1) * 10));
+        }
+        // サプライ外の山（略奪品・狂人・傭兵など）
+        kingdomIds.forEach(cardId => {
+            Object.entries(ALL_CARDS[cardId.toUpperCase()]?.nonSupplyPiles ?? {}).forEach(([pileId, count]) => {
+                this.nonSupply[pileId] = count;
+            });
+        });
+
         // 錬金術：コストにポーションのあるカードがあれば、ポーションをサプライに置く
         if (Object.keys(this.supply).some(cardId => this.getPotionCost(cardId) > 0)) {
             this.supply.potion = ALL_CARDS.POTION.count;
@@ -168,6 +196,38 @@ class Game {
     // サプライにある（最初にあった）カードか
     isInSupply(cardId) {
         return this.supply[cardId] !== undefined;
+    }
+
+    // ゲームの乱数で配列を混ぜる
+    shuffle(items) {
+        for (let i = items.length - 1; i > 0; i--) {
+            const j = Math.floor(this.random() * (i + 1));
+            [items[i], items[j]] = [items[j], items[i]];
+        }
+        return items;
+    }
+
+    // 中身が1種類でない山を置く（cardIds は上から順）
+    setupMixedPile(pileId, cardIds) {
+        this.pileCards[pileId] = cardIds;
+        this.supply[pileId] = cardIds.length;
+        cardIds.forEach(cardId => { this.pileOf[cardId] = pileId; });
+    }
+
+    // サプライの山の一番上のカードのID（ふつうの山は山のIDと同じ。空なら null）
+    getPileTop(pileId) {
+        const cards = this.pileCards[pileId];
+        if (!cards) return pileId;
+        return cards[0] ?? null;
+    }
+
+    // カードのIDか山のIDから、山のIDと獲得するカードのIDを求める（中身の混ざった山は一番上のカードだけ）
+    resolvePile(cardId) {
+        const id = cardId.toLowerCase();
+        if (this.pileCards[id]) return { pileId: id, cardId: this.pileCards[id][0] ?? null };
+        const pileId = this.pileOf[id];
+        if (pileId) return { pileId, cardId: this.pileCards[pileId][0] === id ? id : null };
+        return { pileId: id, cardId: id };
     }
 
     // 使っていない王国カードから、条件に合うものをランダムに1種選ぶ（なければ null）
@@ -237,7 +297,7 @@ class Game {
 
     // 今のカードのコスト（橋・街道・石切場・行商人などの軽減を含む）。カード・カードデータ・IDを受け付ける
     getCost(card) {
-        const data = typeof card === 'string' ? ALL_CARDS[card.toUpperCase()] : card;
+        const data = typeof card === 'string' ? ALL_CARDS[(this.getPileTop(card.toLowerCase()) ?? card).toUpperCase()] : card;
         const player = this.getCurrentPlayer();
         const isAction = data.types.includes(CARD_TYPES.ACTION);
         const inPlay = (cardId) => player.playArea.filter(played => played.id === cardId).length;
@@ -255,7 +315,7 @@ class Game {
 
     // コストのポーションの数（錬金術。軽減の効果はポーションには及ばない）
     getPotionCost(card) {
-        const data = typeof card === 'string' ? ALL_CARDS[card.toUpperCase()] : card;
+        const data = typeof card === 'string' ? ALL_CARDS[(this.getPileTop(card.toLowerCase()) ?? card).toUpperCase()] : card;
         return data?.potionCost ?? 0;
     }
 
@@ -507,11 +567,14 @@ class Game {
     }
 
     gainFromPile(piles, player, cardId, destination) {
-        const lowerCardId = cardId.toLowerCase();
-        if (!piles[lowerCardId] || piles[lowerCardId] <= 0) {
+        const resolved = piles === this.supply ? this.resolvePile(cardId) : { pileId: cardId.toLowerCase(), cardId: cardId.toLowerCase() };
+        const { pileId } = resolved;
+        const lowerCardId = resolved.cardId;
+        if (!lowerCardId || !piles[pileId] || piles[pileId] <= 0) {
             return null;
         }
-        piles[lowerCardId]--;
+        piles[pileId]--;
+        if (piles === this.supply && this.pileCards[pileId]) this.pileCards[pileId].shift();
         const recipient = this.redirectGain(player, lowerCardId);
         const card = recipient.gainCard(lowerCardId, recipient === player ? destination : 'discard');
         this.onCardGained(recipient, card);
@@ -535,10 +598,16 @@ class Game {
         return recipient;
     }
 
-    // 獲得したカードをサプライに戻す（交易商で銀貨と交換するとき）
+    // カードを山に戻す（交易商で銀貨と交換するとき・狂人・略奪品など）。中身の混ざった山には一番上に戻す
     returnToSupply(player, card) {
         if (!player.removeCard(card)) return false;
-        if (this.supply[card.id] !== undefined) this.supply[card.id]++;
+        const pileId = this.pileOf[card.id] ?? card.id;
+        if (this.supply[pileId] !== undefined) {
+            this.supply[pileId]++;
+            if (this.pileCards[pileId]) this.pileCards[pileId].unshift(card.id);
+        } else if (this.nonSupply[pileId] !== undefined) {
+            this.nonSupply[pileId]++;
+        }
         return true;
     }
 
@@ -551,6 +620,7 @@ class Game {
             if (this.phase === 'buy' && card.isType(CARD_TYPES.VICTORY)) {
                 player.gainedVictoryInBuyPhase = true;
             }
+            if (this.phase === 'buy') this.turnState.buyPhaseGains++;
         }
 
         this.players.forEach(owner => {
@@ -702,14 +772,13 @@ class Game {
             return false;
         }
 
-        // ALL_CARDSには大文字のID、サプライには小文字のIDで参照する
-        const upperCardId = cardId.toUpperCase();
-        const lowerCardId = cardId.toLowerCase();
-
-        if (!this.supply[lowerCardId] || this.supply[lowerCardId] <= 0) {
+        // ALL_CARDSには大文字のID、サプライには小文字のIDで参照する（中身の混ざった山は一番上のカード）
+        const { pileId, cardId: topCardId } = this.resolvePile(cardId);
+        if (!topCardId || !this.supply[pileId] || this.supply[pileId] <= 0) {
             this.reject('選択されたカードはサプライにありません');
             return false;
         }
+        const upperCardId = topCardId.toUpperCase();
 
         const data = ALL_CARDS[upperCardId];
 
@@ -797,6 +866,10 @@ class Game {
         this.turnState.cleanupStarted = true;
         this.phase = 'cleanup';
         this.runNext(
+            // 購入フェーズの終わりの効果（隠遁者）
+            ...player.playArea.filter(card => card.onEndOfBuyPhase).map(card => () => {
+                if (player.playArea.includes(card)) card.onEndOfBuyPhase(player, this, card);
+            }),
             () => this.promptScheme(player),
             // 場から捨て札にするときの効果（錬金術師・薬草商）。持続で場に残るカードには起きない
             ...player.playArea.filter(card => card.onCleanup).map(card => () => {
@@ -907,6 +980,7 @@ class Game {
     // regular はふつうの手番（追加のターンでない）か
     startTurn(player, { regular = false } = {}) {
         if (regular) this.regularTurnPlayer = player;
+        this.turnCount++;
         player.actions = 1;
         player.buys = 1;
         player.gainedThisTurn = [];
@@ -1087,6 +1161,28 @@ class Game {
         return reaction ? reaction.react(target, this, attacker) : false;
     }
 
+    // カードをプレイする直前に起きる効果（浮浪児：場の浮浪児を廃棄して傭兵を獲得してもよい）
+    getBeforePlaySteps(player, card) {
+        if (!card.isType(CARD_TYPES.ATTACK)) return [];
+        return player.playArea
+            .filter(other => other !== card && other.onOtherAttackPlayed)
+            .map(other => () => {
+                if (player.playArea.includes(other)) other.onOtherAttackPlayed(player, this, other, card);
+            });
+    }
+
+    // 廃棄置き場か、支配のターン中に脇に置いた廃棄のカードから取り出す（城砦・墓暴きなど）
+    takeFromTrash(card) {
+        for (const pile of [this.trash, this.possessionTrash]) {
+            const index = pile.indexOf(card);
+            if (index >= 0) {
+                pile.splice(index, 1);
+                return true;
+            }
+        }
+        return false;
+    }
+
     // カードを廃棄する（遊牧民・小道など、廃棄したときの効果も起こす）
     trashCard(player, card) {
         // 支配のターン中に廃棄された手番のプレイヤーのカードは、脇に置いてターンの終わりに捨て札に戻す
@@ -1095,9 +1191,15 @@ class Game {
         } else {
             this.trash.push(card);
         }
-        if (card.onTrash) {
-            this.runNext(() => card.onTrash(player, this, card));
-        }
+        const steps = [];
+        if (card.onTrash) steps.push(() => card.onTrash(player, this, card));
+        // 自分のカードが廃棄されたときの手札のリアクション（市場広場）。同じカードは1回だけ聞く
+        uniqueById(player.hand.filter(handCard => handCard.onOwnCardTrashed && handCard !== card)).forEach(reaction => {
+            steps.push(() => {
+                if (player.hand.includes(reaction)) reaction.onOwnCardTrashed(player, this, reaction, card);
+            });
+        });
+        this.runNext(...steps);
     }
 
     // カードを捨て札にする（クリーンアップ以外。坑道・織工・小道など、捨てたときの効果も起こす）
@@ -1177,7 +1279,7 @@ class Game {
     getGainableCards({ maxCost = Infinity, minCost = 0, exactCost = null, potion = 0, lessThan = null, filter = () => true } = {}) {
         return Object.keys(this.supply)
             .filter(cardId => this.supply[cardId] > 0)
-            .map(cardId => ALL_CARDS[cardId.toUpperCase()])
+            .map(cardId => ALL_CARDS[this.getPileTop(cardId)?.toUpperCase()])
             .filter(data => {
                 if (!data) return false;
                 const cost = this.getCost(data);
@@ -1225,7 +1327,9 @@ class Game {
 
     // カードを1種指定させる（願いの井戸・職人見習い・軍資金）。サプライのカードから選ぶ。callback にはカードデータが渡る
     promptNameCard({ player, title, message, purpose, exclude = [], callback }) {
+        // 中身の混ざった山は、中のカードをそれぞれ指定できる
         const candidates = Object.keys(this.supply)
+            .flatMap(cardId => (this.pileCards[cardId] ? [...new Set(this.pileCards[cardId])] : [cardId]))
             .filter(cardId => !exclude.includes(cardId))
             .map(cardId => ALL_CARDS[cardId.toUpperCase()])
             .filter(Boolean)

@@ -9,7 +9,8 @@ const SETS = [
     ['prosperity', '繁栄'],
     ['hinterlands', '異郷'],
     ['cornucopia_guilds', '収穫祭＆ギルド'],
-    ['alchemy', '錬金術']
+    ['alchemy', '錬金術'],
+    ['dark_ages', '暗黒時代']
 ];
 
 // CPU同士でゲームを最後まで進める
@@ -30,7 +31,9 @@ describe.each(SETS)('%s（%s）のCPU同士の試合', (set) => {
 
     it('全カードを最初からデッキに入れても、すべてプレイして最後まで進められる', () => {
         // CPUは購入戦略にないカードを買わないので、デッキに入れておいて全カードの効果と選択を通す
-        const playable = makeCards(ids).filter(card => card.onPlay);
+        // 王国カードのほか、そのセットの王国カード以外のカード（騎士・廃墟・褒賞など）もプレイされることを確かめる
+        const extraIds = Object.keys(EXTRA_CARDS).filter(id => EXTRA_CARDS[id].set === set);
+        const playable = makeCards([...ids, ...extraIds]).filter(card => card.onPlay);
         const played = new Set();
 
         for (let round = 0; round < 20; round++) {

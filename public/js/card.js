@@ -29,6 +29,12 @@ class Card {
         if (game?.turnState && this.isType(CARD_TYPES.ACTION)) {
             game.turnState.actionsPlayed++;
         }
+        // プレイする前に起きる効果（浮浪児）があれば、それを先に処理してから効果を使う
+        const before = game?.getBeforePlaySteps?.(player, this) ?? [];
+        if (before.length > 0) {
+            game.runNext(...before, () => this.onPlay?.(player, game, this));
+            return;
+        }
         if (this.onPlay) {
             this.onPlay(player, game, this);
         }

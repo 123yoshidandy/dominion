@@ -12,10 +12,12 @@ const MULTIPLIER_PRIORITY = ['kings_court', 'throne_room', 'coronet'];
 // アクションを増やすカード（何枚プレイしても他のアクションを妨げない）の優先順
 const NON_TERMINAL_PRIORITY = [
     // アクションが2つ以上増える村
-    'village', 'university', 'bazaar', 'fishing_village', 'festival', 'native_village', 'workers_village', 'city', 'shanty_town',
+    'village', 'university', 'necropolis', 'bandit_camp', 'fortress', 'wandering_minstrel', 'dame_molly', 'madman',
+    'bazaar', 'fishing_village', 'festival', 'native_village', 'workers_village', 'city', 'shanty_town',
     'mining_village', 'border_village', 'farmhands', 'plaza', 'crossroads', 'inn', 'candlestick_maker', 'demesne',
     // アクションが1つ増えるカード
-    'scrying_pool', 'familiar', 'alchemist', 'apothecary', 'apprentice', 'grand_market', 'peddler', 'laboratory', 'market', 'treasury', 'highway', 'caravan', 'tide_pools', 'sea_chart',
+    'scrying_pool', 'familiar', 'alchemist', 'apothecary', 'apprentice', 'junk_dealer', 'ironmonger', 'market_square',
+    'mystic', 'sir_bailey', 'urchin', 'sage', 'vagrant', 'rats', 'forager', 'rebuild', 'ruined_village', 'grand_market', 'peddler', 'laboratory', 'market', 'treasury', 'highway', 'caravan', 'tide_pools', 'sea_chart',
     'sentry', 'poacher', 'lighthouse', 'sailor', 'hunting_party', 'baker', 'cartographer', 'ferryman', 'herald',
     'advisor', 'joust', 'menagerie', 'wishing_well', 'mill', 'secret_passage', 'upgrade', 'oasis', 'scheme', 'trail',
     'stables', 'wheelwright', 'farrier', 'hamlet', 'lurker', 'pawn', 'harbinger', 'merchant', 'haven', 'lookout', 'warehouse',
@@ -24,7 +26,7 @@ const NON_TERMINAL_PRIORITY = [
 
 // アクションを増やさないカード（ターミナル）の優先順
 const TERMINAL_PRIORITY = [
-    'possession', 'golem', 'witch', 'sea_witch', 'soothsayer', 'torturer', 'young_witch', 'charlatan', 'witchs_hut', 'margrave', 'minion',
+    'possession', 'golem', 'cultist', 'witch', 'sea_witch', 'soothsayer', 'torturer', 'young_witch', 'charlatan', 'witchs_hut', 'margrave', 'minion',
     'artisan', 'wharf', 'council_room', 'library', 'patrol', 'courtier', 'nobles', 'rabble', 'jester', 'bandit', 'corsair',
     'merchant_ship', 'pirate', 'outpost', 'smithy', 'diplomat', 'guard_dog', 'journeyman', 'carnival', 'vault',
     'magnate', 'housecarl', 'courser', 'renown', 'militia', 'footpad', 'berserker', 'mint', 'cutpurse', 'blockade',
@@ -32,7 +34,12 @@ const TERMINAL_PRIORITY = [
     'swindler', 'ironworks', 'weaver', 'jack_of_all_trades', 'butcher', 'watchtower', 'steward', 'courtyard', 'shop',
     'masquerade', 'salvager', 'mine', 'moneylender', 'spice_merchant', 'bishop', 'trading_post', 'replace', 'expand',
     'forge', 'remake', 'develop', 'trader', 'stonemason', 'infirmary', 'remodel', 'bureaucrat', 'vassal', 'smugglers',
-    'workshop', 'treasure_map', 'island', 'moat', 'chapel', 'tactician', 'herbalist', 'transmute'
+    'workshop', 'treasure_map', 'island', 'moat', 'chapel', 'tactician', 'herbalist', 'transmute',
+    // 暗黒時代
+    'band_of_misfits', 'hunting_grounds', 'altar', 'pillage', 'rogue', 'dame_anna', 'dame_josephine', 'dame_natalie',
+    'dame_sylvia', 'sir_destry', 'sir_martin', 'sir_michael', 'sir_vander', 'count', 'catacombs', 'graverobber',
+    'mercenary', 'marauder', 'death_cart', 'armory', 'procession', 'scavenger', 'hermit', 'squire', 'storeroom',
+    'poor_house', 'beggar', 'abandoned_mine', 'ruined_library', 'ruined_market', 'survivors'
 ];
 
 // ポーションがあるときに買う錬金術のカード（コストの高い順に考える）
@@ -44,8 +51,8 @@ const PLAY_PRIORITY = [...MULTIPLIER_PRIORITY, ...NON_TERMINAL_PRIORITY, ...TERM
 const isJunk = (card) =>
     card.isType(CARD_TYPES.CURSE) || (card.isType(CARD_TYPES.VICTORY) && !card.isType(CARD_TYPES.ACTION) && !card.isType(CARD_TYPES.TREASURE));
 
-// 廃棄したいカード（呪いと屋敷）
-const isTrashTarget = (card) => ['curse', 'estate'].includes(card.id);
+// 廃棄したいカード（呪い・屋敷・廃墟・避難所の納屋と草茂る屋敷）
+const isTrashTarget = (card) => ['curse', 'estate', 'hovel', 'overgrown_estate'].includes(card.id) || card.isType(CARD_TYPES.RUINS);
 
 // プレイヤーが持つすべてのカード
 const allCardsOf = (player) => [...player.hand, ...player.deck, ...player.discard, ...player.playArea];
@@ -73,7 +80,12 @@ function isWorthPlaying(card, player, game) {
         case 'stonemason':
         case 'transmute':
         case 'apprentice':
+        case 'altar':
+        case 'junk_dealer':
+        case 'forager':
             return others.length > 0;
+        case 'procession':
+            return others.some(c => c.isType(CARD_TYPES.ACTION) && !c.isType(CARD_TYPES.DURATION));
         case 'treasure_map':
             return others.some(c => c.id === 'treasure_map');
         case 'outpost':
@@ -166,9 +178,12 @@ export function chooseCardToBuy(player, game) {
     if (coins >= 5) {
         if (provincesLeft <= 5) return pick(['duchy', 'silver']);
 
-        const actions = ['laboratory', 'bazaar', 'market', 'festival', 'city', 'highway', 'hunting_party', 'baker', 'cartographer'];
+        const actions = ['laboratory', 'bazaar', 'market', 'festival', 'city', 'highway', 'hunting_party', 'baker', 'cartographer',
+            'junk_dealer', 'bandit_camp'];
         if (canAddTerminal) {
             if (cursesLeft) actions.unshift('witch', 'sea_witch', 'soothsayer', 'torturer', 'charlatan');
+            if (available('ruins')) actions.unshift('cultist');
+            actions.push('knights', 'rogue');
             actions.push('margrave', 'wharf', 'council_room', 'library', 'courtier', 'bandit', 'merchant_ship', 'rabble');
         }
         return pick([...actions, 'silver']);
@@ -176,7 +191,8 @@ export function chooseCardToBuy(player, game) {
     if (coins >= 3) {
         if (provincesLeft <= 2) return pick(['estate', 'silver']);
         if (coins === 4 && canAddTerminal) {
-            return pick([...(cursesLeft ? ['young_witch'] : []), 'smithy', 'militia', 'monument', 'cutpurse', 'moneylender', 'silver']);
+            return pick([...(cursesLeft ? ['young_witch'] : []), ...(available('ruins') ? ['marauder'] : []), 'smithy', 'militia',
+                'monument', 'cutpurse', 'moneylender', 'silver']);
         }
         return pick(['silver']);
     }
@@ -184,7 +200,18 @@ export function chooseCardToBuy(player, game) {
         return pick(['estate']);
     }
 
-    return null;
+    return chooseWhenStalled(player, game);
+}
+
+// 行き詰まったとき（銀貨の山が空になった・ゲームが長引いた）は、山を減らしてゲームを終わらせるため、
+// 買えるうちで一番高いカードを買う（呪い・廃墟は買わない）
+function chooseWhenStalled(player, game) {
+    const stalled = (game.supply.silver ?? 0) <= 0 || game.turnCount > 60 * game.players.length;
+    if (!stalled) return null;
+    const candidates = game.getGainableCards({ maxCost: player.coins, potion: player.potions ?? 0 })
+        .filter(data => !data.types.includes(CARD_TYPES.CURSE) && !data.types.includes(CARD_TYPES.RUINS));
+    if (candidates.length === 0) return null;
+    return game.resolvePile(candidates[0].id).pileId;
 }
 
 // 購入の前に財源を使う額（あと少しで欲しいカードに届くときだけ使う）
@@ -287,6 +314,56 @@ function chooseSelection(prompt, game) {
         case 'steward-trash':
         case 'trading-post':
             return min <= 1 ? trashOrder(cards) : indicesByKeepValue(cards).slice(0, min);
+
+        case 'knight-trash':
+            // 攻撃を受けた側なので、価値の低い方を廃棄する
+            return [lowest(cards)];
+
+        case 'hermit-trash':
+            return indicesWhere(cards, isTrashTarget).slice(0, 1);
+
+        case 'mercenary-trash': {
+            const junk = indicesWhere(cards, isTrashTarget);
+            return junk.length >= 2 ? junk.slice(0, 2) : [];
+        }
+
+        case 'death-cart': {
+            // 廃墟などの不要なアクションがあればそれを、なければ死の荷車そのものを廃棄して財宝+5を得る
+            const junk = cards.findIndex((card, index) => index > 0 && isTrashTarget(card));
+            return [junk >= 0 ? junk : 0];
+        }
+
+        case 'forager-trash':
+        case 'junk-dealer-trash':
+        case 'altar-trash':
+        case 'rats-trash':
+            return trashOrder(cards);
+
+        case 'storeroom-draw':
+        case 'storeroom-coins':
+            return indicesWhere(cards, isJunk);
+
+        case 'scavenger-topdeck':
+            return [highest(cards)];
+
+        case 'band-of-misfits': {
+            const best = cards.map((card, index) => index).sort((a, b) => playRank(cards[a]) - playRank(cards[b]));
+            return [best[0]];
+        }
+
+        case 'counterfeit':
+            return optionalOne(card => card.id === 'copper');
+
+        case 'procession': {
+            // 廃棄するので、一番安いアクションを選ぶ
+            const cheapest = cards.map((card, index) => index).sort((a, b) => cards[a].cost - cards[b].cost);
+            return [cheapest[0]];
+        }
+
+        case 'rebuild-name': {
+            const province = indexOf(card => card.id === 'province');
+            return [province >= 0 ? province : 0];
+        }
 
         case 'transmute-trash': {
             // 屋敷は金貨に変わるので最優先で廃棄する
@@ -501,6 +578,14 @@ function chooseOption(prompt, game) {
             return [player.actions <= 0 && handHasAction ? 0 : 1];
         case 'secret-passage-position':
             return [options.length - 1];
+        case 'squire':
+            return [player.actions <= 0 && handHasAction ? 0 : 2];
+        case 'count-first':
+            return [handHasJunk(2) ? 0 : 2];
+        case 'count-second':
+            return [(game.supply.province ?? 0) <= 4 ? 2 : 0];
+        case 'graverobber':
+            return [game.trash.some(c => game.getCost(c) >= 3 && game.getCost(c) <= 6) ? 0 : 1];
         default:
             // 想定外の選択（超過支払い・寵臣の攻撃を受けた側など）は先頭から選ぶ
             return options.map((option, index) => index).slice(0, Math.max(min, 1));
@@ -522,7 +607,16 @@ function chooseConfirm(prompt) {
         case 'fools-gold-react':
         case 'clerk-start':
         case 'alchemist-topdeck':
+        case 'beggar-react':
+        case 'market-square':
+        case 'urchin':
+        case 'cultist-play':
+        case 'hovel':
+        case 'catacombs':
             return true;
+        case 'survivors':
+        case 'ironmonger':
+            return Boolean(card) && (isJunk(card) || card.id === 'copper');
         case 'scrying-pool-self':
             // 自分の山札の不要なカードは捨てる
             return Boolean(card) && (isJunk(card) || card.id === 'copper');

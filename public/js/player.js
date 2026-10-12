@@ -73,15 +73,14 @@ class Player {
         ];
     }
     
-    // 初期デッキを作成
-    createInitialDeck() {
+    // 初期デッキを作成（shelters なら屋敷の代わりに避難所の3枚を入れる）
+    createInitialDeck({ shelters = false } = {}) {
         // 初期デッキは銅貨7枚と屋敷3枚
         for (let i = 0; i < 7; i++) {
             this.deck.push(new Card(ALL_CARDS.COPPER));
         }
-        for (let i = 0; i < 3; i++) {
-            this.deck.push(new Card(ALL_CARDS.ESTATE));
-        }
+        const others = shelters ? ['HOVEL', 'NECROPOLIS', 'OVERGROWN_ESTATE'] : ['ESTATE', 'ESTATE', 'ESTATE'];
+        others.forEach(id => this.deck.push(new Card(ALL_CARDS[id])));
         
         // デッキをシャッフル
         this.shuffleDeck();

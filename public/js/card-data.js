@@ -9,6 +9,9 @@ import { PROSPERITY_CARDS, PROSPERITY_BASIC_CARDS } from './card-data-prosperity
 import { HINTERLANDS_CARDS } from './card-data-hinterlands.js';
 import { CORNUCOPIA_GUILDS_CARDS, REWARD_CARDS } from './card-data-cornucopia-guilds.js';
 import { ALCHEMY_CARDS, ALCHEMY_BASIC_CARDS } from './card-data-alchemy.js';
+import {
+    DARK_AGES_CARDS, KNIGHT_CARDS, RUINS_CARDS, SHELTER_CARDS, DARK_AGES_NON_SUPPLY_CARDS, RUINS_PILE
+} from './card-data-dark-ages.js';
 
 export { CARD_TYPES, CARD_SETS };
 
@@ -825,15 +828,20 @@ export const KINGDOM_CARDS = {
     ...withSet(PROSPERITY_CARDS, CARD_SETS.PROSPERITY),
     ...withSet(HINTERLANDS_CARDS, CARD_SETS.HINTERLANDS),
     ...withSet(CORNUCOPIA_GUILDS_CARDS, CARD_SETS.CORNUCOPIA_GUILDS),
-    ...withSet(ALCHEMY_CARDS, CARD_SETS.ALCHEMY)
+    ...withSet(ALCHEMY_CARDS, CARD_SETS.ALCHEMY),
+    ...withSet(DARK_AGES_CARDS, CARD_SETS.DARK_AGES)
 };
 
-// 王国カード以外で、一部のゲームだけで使うカード（白金貨・植民地・ポーション・褒賞）
+// 王国カード以外で、一部のゲームだけで使うカード（白金貨・植民地・ポーション・褒賞・騎士・廃墟・避難所など）
 export const EXTRA_CARDS = {
     ...withSet(PROSPERITY_BASIC_CARDS, CARD_SETS.PROSPERITY),
     ...withSet(ALCHEMY_BASIC_CARDS, CARD_SETS.ALCHEMY),
+    ...withSet({ ...KNIGHT_CARDS, ...RUINS_CARDS, ...SHELTER_CARDS, ...DARK_AGES_NON_SUPPLY_CARDS, ...RUINS_PILE }, CARD_SETS.DARK_AGES),
     ...withSet(REWARD_CARDS, CARD_SETS.CORNUCOPIA_GUILDS)
 };
+
+// 廃墟のカードID（小文字。廃墟の山にはこれを10枚ずつ混ぜる）
+export const RUINS_CARD_IDS = Object.values(RUINS_CARDS).map(data => data.id);
 
 // 褒賞のカードID（小文字）
 export const REWARD_CARD_IDS = Object.values(REWARD_CARDS).map(data => data.id);

@@ -53,6 +53,8 @@ export function createGameView(game, viewerId, { logsFrom = 0 } = {}) {
         // 今のコスト（橋・街道などで変わる）
         costs: Object.fromEntries(Object.keys(game.supply).map(cardId => [cardId, game.getCost(cardId)])),
         potionCosts: Object.fromEntries(Object.keys(game.supply).map(cardId => [cardId, game.getPotionCost(cardId)])),
+        // 中身の混ざった山（騎士・廃墟）の一番上のカード（空なら null）
+        pileTops: Object.fromEntries(Object.keys(game.pileCards).map(pileId => [pileId, game.getPileTop(pileId)])),
         bane: game.bane,
         ferrymanPile: game.ferrymanPile,
         nonSupply: { ...game.nonSupply },

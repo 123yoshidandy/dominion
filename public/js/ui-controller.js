@@ -295,7 +295,8 @@ class UIController {
         const view = this.gameController.getView();
         if (!view) return;
         
-        const card = ALL_CARDS[cardId.toUpperCase()];
+        // 中身の混ざった山は、一番上のカードの説明を出す
+        const card = ALL_CARDS[(view.pileTops?.[cardId] ?? cardId).toUpperCase()];
         this.modal.showCardDetail(card, {
             count: view.supply[cardId] ?? view.nonSupply?.[cardId] ?? 0,
             cost: view.costs?.[cardId]

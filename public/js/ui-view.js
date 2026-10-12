@@ -103,10 +103,12 @@ class UIView {
         const tilesHtml = (cardIds) => cardIds
             .filter(cardId => supply[cardId] !== undefined)
             .map(cardId => {
-                const card = ALL_CARDS[cardId.toUpperCase()];
+                // 中身の混ざった山は一番上のカードを見せる（空なら山の名前の札）
+                const card = ALL_CARDS[(view.pileTops?.[cardId] ?? cardId).toUpperCase()];
                 const cost = costOf(cardId);
                 const unaffordable = currentPlayer.coins < cost || (currentPlayer.potions ?? 0) < potionCostOf(cardId);
                 return this.createSupplyCardHtml(card, supply[cardId], isBuying && unaffordable, {
+                    pileId: cardId,
                     cost,
                     isBane: cardId === view.bane
                 });
@@ -179,11 +181,11 @@ class UIView {
         });
     }
 
-    createSupplyCardHtml(card, count, unaffordable, { cost = card.cost, isBane = false, nonSupply = false } = {}) {
+    createSupplyCardHtml(card, count, unaffordable, { pileId = card.id, cost = card.cost, isBane = false, nonSupply = false } = {}) {
         const stateClass = count <= 0 ? 'empty' : (unaffordable ? 'unaffordable' : '');
 
-        // カードIDは小文字に変換して一貫性を保つ
-        const cardId = card.id.toLowerCase();
+        // 購入や説明には山のIDを使う（中身の混ざった山では、見せているカードと山のIDが違う）
+        const cardId = pileId.toLowerCase();
 
         return `
             <div class="card supply-tile ${this.getCardTypeClass(card)} ${stateClass} ${nonSupply ? 'non-supply' : ''}" data-card-id="${cardId}">
@@ -228,7 +230,12 @@ class UIView {
             [CARD_TYPES.DURATION]: '持続',
             [CARD_TYPES.REACTION]: 'リアクション',
             [CARD_TYPES.ATTACK]: 'アタック',
-            [CARD_TYPES.REWARD]: '褒賞'
+            [CARD_TYPES.REWARD]: '褒賞',
+            [CARD_TYPES.KNIGHT]: '騎士',
+            [CARD_TYPES.RUINS]: '廃墟',
+            [CARD_TYPES.SHELTER]: '避難所',
+            [CARD_TYPES.LOOTER]: '略奪者',
+            [CARD_TYPES.COMMAND]: '命令'
         };
 
         return types.map(type => typeMap[type] || type).join(' - ');
