@@ -17,6 +17,7 @@ const RECENT_LOGS = 200; // 参加・再接続したときに送るログの数
 const COMMAND_FIELDS = {
     play: ['cardIndex'],
     buyPhase: [],
+    night: [],
     coffers: ['amount'],
     buy: ['cardId'],
     buyLandscape: ['landscapeId'],

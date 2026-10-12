@@ -6,7 +6,7 @@
 import UIView from './ui-view.js';
 import UIModal from './ui-modal.js';
 import UIEventHandler from './ui-event-handler.js';
-import { ALL_CARDS, CARD_SETS, LANDSCAPES } from './card-data.js';
+import { ALL_CARDS, CARD_SETS, LANDSCAPES, BOONS } from './card-data.js';
 import OnlineGameController from './online-controller.js';
 import { getServerUrl } from './online-config.js';
 
@@ -321,6 +321,16 @@ class UIController {
     // イベントなどの説明を表示する
     showLandscapeDetail(landscapeId) {
         this.modal.showLandscapeDetail(LANDSCAPES[landscapeId.toUpperCase()]);
+    }
+
+    // 祝福の説明を表示する（ドルイド）
+    showBoonDetail(boonId) {
+        this.modal.showLandscapeDetail({ ...BOONS[boonId.toUpperCase()], kind: 'boon' });
+    }
+
+    // 夜フェイズに移る
+    handleEnterNightPhase() {
+        this.eventHandler.handleEnterNightPhase();
     }
 
     handleUseCoffers() {

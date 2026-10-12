@@ -173,6 +173,10 @@ button.primary {
     background: var(--type-treasure);
 }
 
+.status-phase.phase-night {
+    background: #2c3e6b;
+}
+
 #turn-stats {
     display: grid;
     grid-auto-flow: column;
@@ -329,6 +333,7 @@ button.primary {
 .victory-card { --type: var(--type-victory); --type-tint: #e2f0dc; }
 .curse-card { --type: var(--type-curse); --type-tint: #ece2f3; }
 .duration-card { --type: var(--type-duration); --type-tint: #f8e5d0; }
+.night-card { --type: #2c3e6b; --type-tint: #dfe3f0; }
 .ruins-card { --type: #8a6a4a; --type-tint: #efe3d6; }
 .shelter-card { --type: #b5523b; --type-tint: #f5ddd5; }
 

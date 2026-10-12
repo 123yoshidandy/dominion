@@ -20,7 +20,13 @@ export const CARD_TYPES = {
     RESERVE: 'reserve',   // リザーブ（酒場マットに置き、決まったときに呼び出す）
     TRAVELLER: 'traveller', // トラベラー（場から捨て札にするとき、次のカードと交換できる）
     CASTLE: 'castle',     // 城（帝国。城の山は安い順に重ねる）
-    GATHERING: 'gathering' // 集合（帝国。山に勝利点トークンをためる）
+    GATHERING: 'gathering', // 集合（帝国。山に勝利点トークンをためる）
+    NIGHT: 'night',       // 夜（夜想曲。夜フェイズにアクションを使わずにプレイする）
+    HEIRLOOM: 'heirloom', // 家宝（初期デッキの銅貨の代わりに入る）
+    FATE: 'fate',         // 運命（祝福を使う）
+    DOOM: 'doom',         // 呪い（呪詛を使う）
+    SPIRIT: 'spirit',     // 精霊（サプライ外の山）
+    ZOMBIE: 'zombie'      // ゾンビ（最初から廃棄置き場にある）
 };
 
 // 王国カードの収録セット
@@ -34,7 +40,8 @@ export const CARD_SETS = {
     ALCHEMY: 'alchemy',
     DARK_AGES: 'dark_ages',
     ADVENTURES: 'adventures',
-    EMPIRES: 'empires'
+    EMPIRES: 'empires',
+    NOCTURNE: 'nocturne'
 };
 
 // 収録セットの表示名（開始画面とロビーで使う）
@@ -48,7 +55,8 @@ export const CARD_SET_LABELS = {
     alchemy: '錬金術',
     dark_ages: '暗黒時代',
     adventures: '冒険',
-    empires: '帝国'
+    empires: '帝国',
+    nocturne: '夜想曲'
 };
 
 // カードではない横長の札（ランドスケープ）の種類
@@ -59,5 +67,6 @@ export const LANDSCAPE_KINDS = {
 
 export const LANDSCAPE_KIND_LABELS = {
     event: 'イベント',
-    landmark: 'ランドマーク'
+    landmark: 'ランドマーク',
+    boon: '祝福'
 };

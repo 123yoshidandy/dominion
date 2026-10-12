@@ -12,11 +12,13 @@ const MULTIPLIER_PRIORITY = ['kings_court', 'throne_room', 'coronet', 'disciple'
 // アクションを増やすカード（何枚プレイしても他のアクションを妨げない）の優先順
 const NON_TERMINAL_PRIORITY = [
     // アクションが2つ以上増える村
-    'village', 'university', 'port', 'lost_city', 'bustling_village', 'villa', 'city_quarter', 'encampment', 'necropolis', 'bandit_camp', 'fortress', 'wandering_minstrel', 'dame_molly', 'madman',
+    'village', 'university', 'port', 'lost_city', 'bustling_village', 'villa', 'city_quarter', 'encampment', 'blessed_village',
+    'cursed_village', 'necropolis', 'bandit_camp', 'fortress', 'wandering_minstrel', 'dame_molly', 'madman',
     'bazaar', 'fishing_village', 'festival', 'native_village', 'workers_village', 'city', 'shanty_town',
     'mining_village', 'border_village', 'farmhands', 'plaza', 'crossroads', 'inn', 'candlestick_maker', 'demesne',
     // アクションが1つ増えるカード
     'patrician', 'emporium', 'settlers', 'chariot_race', 'groundskeeper', 'archive', 'forum',
+    'will_o_wisp', 'zombie_spy', 'pixie', 'shepherd', 'secret_cave', 'wish',
     'champion', 'page', 'ratcatcher', 'guide', 'magpie', 'dungeon', 'caravan_guard', 'transmogrify', 'royal_carriage',
     'storyteller', 'raze', 'fugitive', 'treasure_hunter', 'artificer', 'peasant',
     'scrying_pool', 'familiar', 'alchemist', 'apothecary', 'apprentice', 'junk_dealer', 'ironmonger', 'market_square',
@@ -47,7 +49,16 @@ const TERMINAL_PRIORITY = [
     'wine_merchant', 'hero', 'warrior', 'soldier', 'gear', 'ranger', 'messenger', 'amulet', 'miser', 'duplicate',
     'distant_lands', 'teacher',
     // 帝国
-    'catapult', 'gladiator', 'engineer', 'temple', 'wild_hunt', 'sacrifice', 'farmers_market', 'small_castle', 'opulent_castle'
+    'catapult', 'gladiator', 'engineer', 'temple', 'wild_hunt', 'sacrifice', 'farmers_market', 'small_castle', 'opulent_castle',
+    // 夜想曲
+    'werewolf', 'tormentor', 'skulk', 'sacred_grove', 'bard', 'tragic_hero', 'pooka', 'necromancer', 'conclave', 'imp', 'fool',
+    'leprechaun', 'tracker', 'druid', 'faithful_hound', 'zombie_apprentice', 'zombie_mason'
+];
+
+// 夜フェイズにプレイする夜のカードの優先順（獲得の数を見るカードは後に）
+const NIGHT_PRIORITY = [
+    'raider', 'vampire', 'werewolf', 'ghost', 'crypt', 'cobbler', 'den_of_sin', 'ghost_town', 'guardian', 'night_watchman',
+    'exorcist', 'bat', 'changeling', 'monastery', 'devils_workshop'
 ];
 
 // 買うカードがないときに使うイベント（安くて損のないもの）
@@ -349,7 +360,43 @@ function chooseSelection(prompt, game) {
         case 'catapult-trash':
         case 'sacrifice-trash':
         case 'ritual-trash':
+        case 'exorcist-trash':
             return trashOrder(cards);
+
+        case 'lost-in-the-woods':
+            return indicesWhere(cards, isJunk).slice(0, 1);
+
+        case 'monastery':
+        case 'bat-trash':
+            return indicesWhere(cards, card => isTrashTarget(card) || card.id === 'copper').slice(0, max);
+
+        case 'cemetery':
+            return indicesWhere(cards, isTrashTarget).slice(0, max);
+
+        case 'crypt':
+            // 銀貨以上の財宝を脇に置き、次のターンから1枚ずつ使う
+            return indicesWhere(cards, card => card.id !== 'copper');
+
+        case 'changeling':
+            return [cards.map((card, index) => index).sort((a, b) => cards[b].cost - cards[a].cost)[0]];
+
+        case 'pooka-trash':
+        case 'earths-gift':
+            return optionalOne(card => card.id === 'copper');
+
+        case 'secret-cave':
+        case 'skys-gift': {
+            const junk = indicesWhere(cards, isJunk);
+            return junk.length >= 3 ? junk.slice(0, 3) : [];
+        }
+
+        case 'play-new-action': {
+            const best = cards.map((card, index) => index).sort((a, b) => playRank(cards[a]) - playRank(cards[b]));
+            return [best[0]];
+        }
+
+        case 'raider-discard':
+            return [lowest(cards)];
 
         case 'temple-trash': {
             const junk = indicesWhere(cards, isTrashTarget).slice(0, 3);
@@ -690,6 +737,8 @@ function chooseOption(prompt, game) {
         case 'amulet':
             return [player.hand.some(isTrashTarget) ? 1 : 2];
         case 'charm':
+        case 'druid':
+        case 'fool':
             return [0];
         case 'wild-hunt':
             return [(game.pileVp.wild_hunt ?? 0) >= 3 && (game.supply.estate ?? 0) > 0 ? 1 : 0];
@@ -741,6 +790,9 @@ function chooseConfirm(prompt) {
         case 'catacombs':
         case 'traveller-exchange':
         case 'encampment-reveal':
+        case 'faithful-hound':
+        case 'blessed-village':
+        case 'sacred-grove':
         case 'take-from-discard':
         case 'gladiator-answer':
         case 'legionary':
@@ -845,6 +897,17 @@ export function runCpuStep(game) {
         // 買うカードがなければ、使えるイベントを買う
         const landscapeId = chooseLandscapeToBuy(player, game);
         if (landscapeId && apply({ type: 'buyLandscape', landscapeId })) return;
+        // 手札に夜のカードがあれば、夜フェイズに移る
+        if (player.hand.some(card => card.isType(CARD_TYPES.NIGHT)) && apply({ type: 'night' })) return;
+        apply({ type: 'endTurn' });
+        return;
+    }
+
+    // 夜フェイズ：夜のカードを優先順にプレイし、なくなったらターンを終える
+    if (game.phase === 'night') {
+        const index = NIGHT_PRIORITY.map(cardId => player.hand.findIndex(card => card.id === cardId)).find(i => i >= 0) ??
+            player.hand.findIndex(card => card.isType(CARD_TYPES.NIGHT));
+        if (index >= 0 && apply({ type: 'play', cardIndex: index })) return;
         apply({ type: 'endTurn' });
     }
 }

@@ -53,6 +53,11 @@ class Player {
         this.debt = 0;                // 負債（返すまでカードやイベントを購入できない）
         this.enchantedVictims = new Set();    // 次のターンまで、最初のアクションが効果を失うプレイヤー（魅了の魔女）
         this.donatePending = false;   // このターンの後に寄付を行う
+
+        // ===== 夜想曲 =====
+        this.states = { deluded: false, envious: false, miserable: 0 }; // 状態（妄想・羨望・不幸。不幸は2で二重の不幸）
+        this.keptBoons = [];          // クリーンアップまで手元に残す祝福
+        this.guarded = false;         // 次のターンまで、他のプレイヤーのアタックの影響を受けない（守護者）
         this.hauntedVictims = new Set();      // 次のターンまで、購入すると手札を山札に置くプレイヤー（幽霊の森）
         this.swampHagVictims = new Map();     // 次のターンまで、購入すると呪いを獲得するプレイヤーと回数（沼の妖婆）
     }
@@ -101,12 +106,13 @@ class Player {
         ];
     }
     
-    // 初期デッキを作成（shelters なら屋敷の代わりに避難所の3枚を入れる）
-    createInitialDeck({ shelters = false } = {}) {
+    // 初期デッキを作成（shelters なら屋敷の代わりに避難所の3枚を入れる。heirlooms の家宝は銅貨の代わりに入れる）
+    createInitialDeck({ shelters = false, heirlooms = [] } = {}) {
         // 初期デッキは銅貨7枚と屋敷3枚
-        for (let i = 0; i < 7; i++) {
+        for (let i = 0; i < 7 - heirlooms.length; i++) {
             this.deck.push(new Card(ALL_CARDS.COPPER));
         }
+        heirlooms.forEach(id => this.deck.push(new Card(ALL_CARDS[id.toUpperCase()])));
         const others = shelters ? ['HOVEL', 'NECROPOLIS', 'OVERGROWN_ESTATE'] : ['ESTATE', 'ESTATE', 'ESTATE'];
         others.forEach(id => this.deck.push(new Card(ALL_CARDS[id])));
         
@@ -235,6 +241,8 @@ class Player {
         allCards.forEach(card => {
             points += card.getVictoryPoints(allCards);
         });
+        // 不幸の状態（不幸は -2、二重の不幸は -4）
+        points -= 2 * this.states.miserable;
         // 酒場マットにあるときだけ勝利点のあるカード（遠隔地）
         this.mats.tavern.forEach(card => {
             points += card.tavernPoints ?? 0;

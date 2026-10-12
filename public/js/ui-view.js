@@ -3,7 +3,7 @@
  * ゲームの状態を画面に表示する機能を提供
  */
 
-import { CARD_TYPES, ALL_CARDS, LANDSCAPES } from './card-data.js';
+import { CARD_TYPES, ALL_CARDS, LANDSCAPES, BOONS } from './card-data.js';
 import { LANDSCAPE_KIND_LABELS } from './card-types.js';
 import { onPress } from './press-handler.js';
 import { getCardArt, CARD_BACK } from './card-art.js';
@@ -13,6 +13,9 @@ import cardAnimator, { STAGGER_MS } from './card-animations.js';
 const VICTORY_SUPPLY_ORDER = ['estate', 'duchy', 'province', 'colony', 'curse'];
 const TREASURE_SUPPLY_ORDER = ['copper', 'silver', 'gold', 'platinum', 'potion'];
 const BASIC_SUPPLY_ORDER = [...VICTORY_SUPPLY_ORDER, ...TREASURE_SUPPLY_ORDER];
+
+// 手札に夜のカードがあるか（夜フェイズに移るボタンを出すか）
+export const hasNightCard = (player) => (player?.hand ?? []).some(card => card.isType(CARD_TYPES.NIGHT));
 
 // 手札の表示順（種類）。同じ種類の中ではコストの高い順に並べる
 const HAND_TYPE_ORDER = [CARD_TYPES.ACTION, CARD_TYPES.TREASURE, CARD_TYPES.VICTORY, CARD_TYPES.CURSE];
@@ -86,6 +89,7 @@ class UIView {
         switch (phase) {
             case 'action': return 'アクション';
             case 'buy': return '購入';
+            case 'night': return '夜';
             case 'cleanup': return 'クリーンアップ';
             default: return phase;
         }
@@ -169,6 +173,17 @@ class UIView {
                     }).join('')}</div>
                 </div>
             ` : ''}
+            ${(view.druidBoons ?? []).length > 0 ? `
+                <div class="supply-group supply-landscapes">
+                    <h3>ドルイドの祝福</h3>
+                    <div class="landscape-grid">${view.druidBoons.map(id => `
+                        <div class="landscape-tile landscape-boon" data-boon-id="${id}">
+                            <span class="landscape-name">${BOONS[id.toUpperCase()].name}</span>
+                            <span class="landscape-kind">祝福</span>
+                        </div>
+                    `).join('')}</div>
+                </div>
+            ` : ''}
             ${nonSupplyIds.length > 0 ? `
                 <div class="supply-group supply-extra">
                     <h3>サプライ外（購入できない）</h3>
@@ -179,12 +194,14 @@ class UIView {
 
         this.fitSupplyTitles();
 
-        // イベントなどもタップで購入、長押しで説明を表示する
+        // イベントなどもタップで購入、長押しで説明を表示する（祝福は説明だけ）
         this.elements.supplyPiles.querySelectorAll('.landscape-tile').forEach(tile => {
             const id = tile.getAttribute('data-landscape-id');
+            const boonId = tile.getAttribute('data-boon-id');
+            const showDetail = () => (boonId ? this.uiController.showBoonDetail(boonId) : this.uiController.showLandscapeDetail(id));
             onPress(tile, {
-                onTap: () => this.uiController.handleLandscapePurchase(id),
-                onLongPress: () => this.uiController.showLandscapeDetail(id)
+                onTap: boonId ? showDetail : () => this.uiController.handleLandscapePurchase(id),
+                onLongPress: showDetail
             });
         });
 
@@ -277,7 +294,17 @@ class UIView {
             [CARD_TYPES.RUINS]: '廃墟',
             [CARD_TYPES.SHELTER]: '避難所',
             [CARD_TYPES.LOOTER]: '略奪者',
-            [CARD_TYPES.COMMAND]: '命令'
+            [CARD_TYPES.COMMAND]: '命令',
+            [CARD_TYPES.RESERVE]: 'リザーブ',
+            [CARD_TYPES.TRAVELLER]: 'トラベラー',
+            [CARD_TYPES.CASTLE]: '城',
+            [CARD_TYPES.GATHERING]: '集合',
+            [CARD_TYPES.NIGHT]: '夜',
+            [CARD_TYPES.HEIRLOOM]: '家宝',
+            [CARD_TYPES.FATE]: '運命',
+            [CARD_TYPES.DOOM]: '呪い',
+            [CARD_TYPES.SPIRIT]: '精霊',
+            [CARD_TYPES.ZOMBIE]: 'ゾンビ'
         };
 
         return types.map(type => typeMap[type] || type).join(' - ');
@@ -328,10 +355,19 @@ class UIView {
             ...(player.journeyFaceUp === false ? ['旅：裏'] : [])
         ];
         const tavern = (player.tavern ?? []).map(card => card.name);
+        // 夜想曲の状態
+        const states = [
+            ...(view.lostInTheWoods === player.id ? ['森で迷う'] : []),
+            ...(player.states?.deluded ? ['妄想'] : []),
+            ...(player.states?.envious ? ['羨望'] : []),
+            ...(player.states?.miserable === 1 ? ['不幸'] : []),
+            ...(player.states?.miserable === 2 ? ['二重の不幸'] : [])
+        ];
         return [
             ...counts,
             ...(tavern.length > 0 ? [`<span>酒場 ${tavern.join('・')}</span>`] : []),
-            ...(tokens.length > 0 ? [`<span>トークン ${tokens.join('、')}</span>`] : [])
+            ...(tokens.length > 0 ? [`<span>トークン ${tokens.join('、')}</span>`] : []),
+            ...(states.length > 0 ? [`<span>状態 ${states.join('・')}</span>`] : [])
         ].join('');
     }
 
@@ -375,13 +411,15 @@ class UIView {
 
         // 今プレイできるアクションカードを強調する
         const canPlayActions = view.isMyTurn && view.phase === 'action' && me.actions > 0;
+        const canPlayNight = view.isMyTurn && view.phase === 'night';
 
         // 手札を種類・コスト順に並べて表示する。重ねたカードは先頭の1枚の番号を持たせ、タップでその1枚をプレイする
         const groups = this.getHandGroups(hand, this.uiController.settings.stackHand);
         
         this.elements.handCards.innerHTML = groups.map(({ card, indices }) => {
             // 相続した屋敷も、そのカードとしてプレイできる
-            const playable = canPlayActions && (card.isType(CARD_TYPES.ACTION) || (card.id === 'estate' && me.inheritance));
+            const playable = (canPlayActions && (card.isType(CARD_TYPES.ACTION) || (card.id === 'estate' && me.inheritance))) ||
+                (canPlayNight && card.isType(CARD_TYPES.NIGHT));
             return this.createCardHtml(card, `data-card-index="${indices[0]}"`, playable ? 'playable' : '', indices.length);
         }).join('');
 
@@ -500,10 +538,18 @@ class UIView {
             actionButtonsHtml += `<button id="coffers-btn">財源を使う（残り${view.me.coffers}）</button>`;
         }
 
+        // 夜のカードが手札にあれば、購入フェーズから夜フェイズに移れる
+        if (['action', 'buy'].includes(view.phase) && view.isMyTurn && hasNightCard(view.me)) {
+            actionButtonsHtml += '<button id="night-btn">夜へ</button>';
+        }
+
         this.elements.actionButtons.innerHTML = actionButtonsHtml;
-        
+
         document.getElementById('coffers-btn')?.addEventListener('click', () => {
             this.uiController.handleUseCoffers();
+        });
+        document.getElementById('night-btn')?.addEventListener('click', () => {
+            this.uiController.handleEnterNightPhase();
         });
 
         // 購入フェーズボタンのイベント

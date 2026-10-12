@@ -62,6 +62,11 @@ export function createGameView(game, viewerId, { logsFrom = 0 } = {}) {
         pileVp: { ...game.pileVp },
         pileDebt: { ...game.pileDebt },
         obelisk: game.landscapeState.obelisk ?? null,
+        // 夜想曲：ドルイドの祝福、森で迷うを持つプレイヤー、祝福・呪詛の山の残り
+        druidBoons: [...(game.druidBoons ?? [])],
+        lostInTheWoods: game.lostInTheWoods?.id ?? null,
+        boonCount: game.boonDeck?.length ?? 0,
+        hexCount: game.hexDeck?.length ?? 0,
         missionTurn: game.missionTurn,
         bane: game.bane,
         ferrymanPile: game.ferrymanPile,
@@ -96,6 +101,7 @@ export function createGameView(game, viewerId, { logsFrom = 0 } = {}) {
                 minusCoinToken: player.minusCoinToken,
                 journeyFaceUp: player.journeyFaceUp,
                 inheritance: player.inheritance,
+                states: { ...player.states },
                 nativeVillageCount: player.mats.nativeVillage.length,
                 setAsideCount: player.setAside.length,
                 // 手札と原住民の村マットの中身は本人だけ

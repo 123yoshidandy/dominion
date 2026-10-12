@@ -8,6 +8,7 @@ import { ALL_CARDS, BASIC_CARDS, CARD_TYPES, CARD_SETS, KINGDOM_CARDS, REWARD_CA
 import { createRandom, createSeed } from './random.js';
 import { putBackInAnyOrder } from './card-helpers.js';
 import { installLandscapes } from './game-landscapes.js';
+import { installNocturne } from './game-nocturne.js';
 
 // 1ターンの間だけ続く効果の記録（ターンの開始で作り直す）
 const createTurnState = () => ({
@@ -30,7 +31,13 @@ const createTurnState = () => ({
     eventsBought: [],     // 購入したイベントのID（1ターンに1回のイベント）
     charms: 0,            // 次にカードを獲得したとき、同じコストの別のカードも獲得してよい回数（魔除け）
     encampments: [],      // クリーンアップの開始時にサプライに戻す、脇に置いた野営地
-    fortuneDoubled: false, // このターンに宝運で財宝を2倍にしたか
+    fortuneDoubled: false, // このターンに富で財宝を2倍にしたか
+    buyPhaseEnded: false, // 購入フェーズの終わりの効果を起こしたか（夜フェイズに移るときとターン終了のどちらか）
+    deluded: false,       // このターンはアクションを購入できない（妄想）
+    envious: false,       // このターンは銀貨と金貨が財宝1（羨望）
+    riverDraw: 0,         // ターンの終わりに引く枚数（川の恵み）
+    hounds: [],           // ターンの終わりに手札に戻す、脇に置いたカード { player, card }（忠犬）
+    necromancerUsed: [],  // このターンに死霊術師でプレイした廃棄置き場のカード（裏向きにする）
     cleanupStarted: false // ターン終了の処理を始めたか
 });
 
@@ -101,7 +108,7 @@ class Game {
 
         // 各プレイヤーの初期デッキを作成して5枚引く
         this.players.forEach(player => {
-            player.createInitialDeck({ shelters: this.useShelters });
+            player.createInitialDeck({ shelters: this.useShelters, heirlooms: this.heirlooms });
             player.drawCards(5);
             // パン屋：各プレイヤーは財源を1つ持って始める
             if (this.isInSupply('baker')) player.coffers += 1;
@@ -205,6 +212,9 @@ class Game {
 
         // イベントなど（カードではない横長の札）
         this.landscapes = this.selectLandscapes();
+
+        // 夜想曲：祝福・呪詛の山、家宝、ゾンビなど
+        this.setupNocturne();
 
         // 錬金術：コストにポーションのあるカードがあれば、ポーションをサプライに置く
         if (Object.keys(this.supply).some(cardId => this.getPotionCost(cardId) > 0)) {
@@ -381,6 +391,8 @@ class Game {
     // 財宝をプレイしたときに得る財宝の数（効果で得る分は除く）
     getTreasureValue(card) {
         if (card.id === 'curse') return this.curseIsTreasure ? 1 : 0;
+        // 羨望：このターン、銀貨と金貨は財宝1
+        if (this.turnState.envious && (card.id === 'silver' || card.id === 'gold')) return 1;
         return card.value ?? 0;
     }
 
@@ -388,6 +400,7 @@ class Game {
     // プレイヤーの操作はすべてここを通す。操作したプレイヤーを確かめ、受け付けた操作だけを記録する
     //   { type: 'play', cardIndex } アクションカードをプレイ
     //   { type: 'buyPhase' }        購入フェーズへ
+    //   { type: 'night' }           夜フェイズへ（夜のカードをプレイする）
     //   { type: 'coffers', amount } 財源を使う
     //   { type: 'buy', cardId }     カードを購入
     //   { type: 'buyLandscape', landscapeId } イベントなどを購入
@@ -406,6 +419,9 @@ class Game {
                 break;
             case 'buyPhase':
                 accepted = isCurrent && this.enterBuyPhase();
+                break;
+            case 'night':
+                accepted = isCurrent && this.enterNightPhase();
                 break;
             case 'coffers':
                 accepted = isCurrent && this.useCoffers(command.amount);
@@ -483,6 +499,9 @@ class Game {
             return false;
         }
 
+        // 夜フェイズには、夜のカードをアクションを使わずにプレイする
+        if (this.phase === 'night') return this.playNightCard(cardIndex);
+
         if (this.phase !== 'action') {
             this.reject('アクションフェーズではありません');
             return false;
@@ -517,6 +536,55 @@ class Game {
         this.notifyStateChanged();
 
         return true;
+    }
+
+    // 夜のカードをプレイする（夜フェイズのみ。アクションは使わない）
+    playNightCard(cardIndex) {
+        const player = this.getCurrentPlayer();
+        const card = player.hand[cardIndex];
+        if (!card || !card.isType(CARD_TYPES.NIGHT)) {
+            this.reject('夜フェイズにプレイできるのは夜のカードです');
+            return false;
+        }
+        this.log(`${player.name}は${card.name}をプレイしました`);
+        player.hand.splice(cardIndex, 1);
+        player.playArea.push(card);
+        this.runNext(() => card.play(player, this));
+        this.processEffects();
+        this.notifyStateChanged();
+        return true;
+    }
+
+    // 夜フェイズに移る（購入フェーズから。購入フェーズの終わりの効果を先に起こす）
+    enterNightPhase() {
+        if (this.isAwaitingPrompt()) return false;
+        if (this.phase === 'action') this.enterBuyPhase();
+        if (this.phase !== 'buy' || this.pendingPrompt) {
+            this.reject('購入フェーズの後に夜フェイズに移れます');
+            return false;
+        }
+        const player = this.getCurrentPlayer();
+        this.runNext(...this.endOfBuyPhaseSteps(player), () => {
+            this.phase = 'night';
+            this.log('夜フェイズに移行しました');
+        });
+        this.processEffects();
+        this.notifyStateChanged();
+        return true;
+    }
+
+    // 購入フェーズの終わりの効果（隠遁者・酒場マットのワイン商）。1ターンに1回だけ起こす
+    endOfBuyPhaseSteps(player) {
+        if (this.turnState.buyPhaseEnded) return [];
+        this.turnState.buyPhaseEnded = true;
+        return [
+            ...player.playArea.filter(card => card.onEndOfBuyPhase).map(card => () => {
+                if (player.playArea.includes(card)) card.onEndOfBuyPhase(player, this, card);
+            }),
+            ...player.mats.tavern.filter(card => card.onEndOfBuyPhaseFromTavern).map(card => () => {
+                if (player.mats.tavern.includes(card)) card.onEndOfBuyPhaseFromTavern(player, this, card);
+            })
+        ];
     }
 
     // アクションを解決し終えた直後：酒場マットのカード（王国の硬貨・王家の馬車）を呼び出せる
@@ -581,6 +649,8 @@ class Game {
         }
 
         const player = this.getCurrentPlayer();
+        // 妄想・羨望の状態を戻して、このターンに効かせる
+        this.applyStatesAtBuyPhase(player);
         const rank = (card) => {
             if (TREASURE_PLAY_FIRST.includes(card.id)) return TREASURE_PLAY_FIRST.indexOf(card.id) - TREASURE_PLAY_FIRST.length;
             if (TREASURE_PLAY_LAST.includes(card.id)) return 1 + TREASURE_PLAY_LAST.indexOf(card.id);
@@ -690,7 +760,9 @@ class Game {
         piles[pileId]--;
         if (piles === this.supply && this.pileCards[pileId]) this.pileCards[pileId].shift();
         const recipient = this.redirectGain(player, lowerCardId);
-        const card = recipient.gainCard(lowerCardId, recipient === player ? destination : 'discard');
+        // 手札に獲得するカード（悪の巣・ゴーストタウン・守護者・夜警）は、行き先の指定がなければ手札に置く
+        const gainToHand = ALL_CARDS[lowerCardId.toUpperCase()]?.gainToHand && destination === 'discard';
+        const card = recipient.gainCard(lowerCardId, gainToHand ? 'hand' : (recipient === player ? destination : 'discard'));
         this.onCardGained(recipient, card);
         return card;
     }
@@ -815,14 +887,18 @@ class Game {
             }));
         }
 
-        // ティアラ・旅の祭り：このターンに獲得したカードを山札の上に置いてもよい
-        if (isCurrent && (this.turnState.tiara || this.turnState.travellingFair)) {
+        // 取り替え子：コスト3以上のカードを獲得したとき、取り替え子と交換してもよい
+        steps.push(() => this.promptChangeling(player, card));
+
+        // ティアラ・旅の祭り・追跡者（場にある間）：獲得したカードを山札の上に置いてもよい
+        const tracker = player.playArea.some(played => played.id === 'tracker');
+        if ((isCurrent && (this.turnState.tiara || this.turnState.travellingFair)) || tracker) {
             steps.push(() => {
                 if (!player.discard.includes(card) && !player.hand.includes(card)) return;
                 this.promptConfirm({
                     player,
                     card,
-                    title: this.turnState.tiara ? 'ティアラ' : '旅の祭り',
+                    title: this.turnState.tiara ? 'ティアラ' : (this.turnState.travellingFair ? '旅の祭り' : '追跡者'),
                     message: `獲得した${card.name}を山札の上に置きますか？`,
                     yesLabel: '山札の上に置く',
                     noLabel: 'そのままにする',
@@ -948,6 +1024,10 @@ class Game {
             this.reject('伝道のターンにはカードを購入できません');
             return false;
         }
+        if (this.turnState.deluded && data.types.includes(CARD_TYPES.ACTION)) {
+            this.reject('妄想の効果で、このターンはアクションカードを購入できません');
+            return false;
+        }
 
         // カードを購入（獲得で起きる効果のログより先に購入を記録する）
         // 購入時の効果（超過支払い・隠し財産など）を先に処理してから獲得する
@@ -1053,13 +1133,8 @@ class Game {
             if (player.setAside.includes(card) && this.returnToSupply(player, card)) this.log(`${player.name}は野営地をサプライに戻しました`);
         });
         this.runNext(
-            // 購入フェーズの終わりの効果（隠遁者・酒場マットのワイン商）
-            ...player.playArea.filter(card => card.onEndOfBuyPhase).map(card => () => {
-                if (player.playArea.includes(card)) card.onEndOfBuyPhase(player, this, card);
-            }),
-            ...player.mats.tavern.filter(card => card.onEndOfBuyPhaseFromTavern).map(card => () => {
-                if (player.mats.tavern.includes(card)) card.onEndOfBuyPhaseFromTavern(player, this, card);
-            }),
+            // 購入フェーズの終わりの効果（夜フェイズに移ったときに起こしていなければ、ここで起こす）
+            ...this.endOfBuyPhaseSteps(player),
             () => this.promptScheme(player),
             // 場から捨て札にするときの効果（錬金術師・薬草商）。持続で場に残るカードには起きない
             ...player.playArea.filter(card => card.onCleanup).map(card => () => {
@@ -1148,6 +1223,20 @@ class Game {
         player.outpostPending = false;
         player.cleanup((takesExtraTurn ? 3 : 5) + this.turnState.expeditionDraw);
         player.gainedLastTurn = player.gainedThisTurn;
+        // 川の恵み：ターンの終わりにカードを引く
+        if (this.turnState.riverDraw > 0) {
+            player.drawCards(this.turnState.riverDraw);
+            this.log(`${player.name}は川の恵みでカードを${this.turnState.riverDraw}枚引きました`);
+        }
+        // 忠犬：脇に置いたカードを、ターンの終わりに手札に戻す
+        this.turnState.hounds.forEach(({ player: owner, card }) => {
+            if (!owner.setAside.includes(card)) return;
+            owner.setAside.splice(owner.setAside.indexOf(card), 1);
+            owner.hand.push(card);
+            this.log(`${owner.name}は忠犬を手札に戻しました`);
+        });
+        // クリーンアップまで残した祝福を捨て札にする
+        this.boonDiscard.push(...player.keptBoons.splice(0));
         // 保存：脇に置いたカードを、引いた後で手札に戻す
         this.turnState.savedCards.forEach(card => {
             if (player.setAside.includes(card)) {
@@ -1295,6 +1384,8 @@ class Game {
             ...player.hand.filter(card => card.onStartOfTurn).map(card => () => {
                 if (player.hand.includes(card)) card.onStartOfTurn(player, this, card);
             }),
+            // 森で迷う：手札を1枚捨てて祝福を受けてもよい
+            () => this.promptLostInTheWoods(player),
             // 酒場マットのカードをターンの開始時に呼び出してもよい（案内人・ネズミ捕り・変容・教師）
             ...uniqueById(player.mats.tavern.filter(card => card.onCallStartOfTurn)).map(card => () => {
                 if (player.mats.tavern.includes(card)) card.onCallStartOfTurn(player, this, card);
@@ -1482,6 +1573,10 @@ class Game {
 
     // 灯台が場にあるか、お堀などのリアクションで攻撃を防げるか（リアクションカードを持っていれば常に公開する）
     isProtectedFromAttack(target, attacker) {
+        if (target.guarded) {
+            this.log(`${target.name}は守護者で${attacker.name}の攻撃を防ぎました`);
+            return true;
+        }
         if (target.playArea.some(card => card.id === 'champion')) {
             this.log(`${target.name}はチャンピオンで${attacker.name}の攻撃を防ぎました`);
             return true;
@@ -1745,8 +1840,9 @@ function uniqueById(cards) {
     });
 }
 
-// イベントなど（カードではない横長の札）の処理を加える
+// イベントなど（カードではない横長の札）と、夜想曲の祝福・呪詛などの処理を加える
 installLandscapes(Game);
+installNocturne(Game);
 
 // クラスをエクスポート
 export default Game;

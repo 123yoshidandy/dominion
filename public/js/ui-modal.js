@@ -339,7 +339,7 @@ class UIModal {
                     <p>${escapeHtml(landscape.description)}</p>
                 </div>
                 <div class="card-detail-info">
-                    <p>コスト <b>${landscape.cost}</b></p>
+                    ${landscape.cost !== undefined ? `<p>コスト <b>${landscape.cost}</b>${landscape.debtCost ? `＋負債${landscape.debtCost}` : ''}</p>` : ''}
                     ${landscape.oncePerTurn ? '<p>1ターンに1回だけ購入できる</p>' : ''}
                     ${landscape.oncePerGame ? '<p>1ゲームに1回だけ購入できる</p>' : ''}
                 </div>

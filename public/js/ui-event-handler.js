@@ -5,6 +5,7 @@
 
 import { CARD_TYPES, ALL_CARDS } from './card-data.js';
 import cardAnimator, { STAGGER_MS } from './card-animations.js';
+import { hasNightCard } from './ui-view.js';
 
 // 場札の小さなカードの大きさと間隔（styles.css の .card.mini・#played-cards と合わせる）
 const MINI_CARD_WIDTH = 76;
@@ -31,9 +32,11 @@ class UIEventHandler {
         if (!view) return;
 
         const card = view.me?.hand[cardIndex];
-        // 相続した屋敷も、そのカードとしてプレイできる
-        const canPlay = view.isMyTurn && view.phase === 'action' && view.me.actions > 0 &&
-            card && (card.isType(CARD_TYPES.ACTION) || (card.id === 'estate' && view.me.inheritance)) && !view.prompt;
+        // 相続した屋敷も、そのカードとしてプレイできる。夜フェイズには夜のカードをプレイできる
+        const canPlayAction = view.phase === 'action' && view.me.actions > 0 &&
+            card && (card.isType(CARD_TYPES.ACTION) || (card.id === 'estate' && view.me.inheritance));
+        const canPlayNight = view.phase === 'night' && card?.isType(CARD_TYPES.NIGHT);
+        const canPlay = view.isMyTurn && (canPlayAction || canPlayNight) && !view.prompt;
 
         // 今プレイできないカードはタップしても何もしない（説明は長押しで表示する）
         // アニメーション中や返事を待つ間の連打で、別のカードまでプレイしないようにする
@@ -148,6 +151,14 @@ class UIEventHandler {
         if (!this.gameController.send({ type: 'buyLandscape', landscapeId })) this.clearPendingActions();
     }
 
+    // 夜フェイズに移る（購入フェーズの後に、手札の夜のカードをプレイする）
+    handleEnterNightPhase() {
+        const view = this.gameController.getView();
+        if (!view || !view.isMyTurn || !['action', 'buy'].includes(view.phase) || view.prompt || this.isActionPending) return;
+        this.isActionPending = true;
+        if (!this.gameController.send({ type: 'night' })) this.clearPendingActions();
+    }
+
     // 財源を1つ使って財宝+1を得る
     handleUseCoffers() {
         const view = this.gameController.getView();
@@ -197,7 +208,8 @@ class UIEventHandler {
     // 画面を描き直すたびに呼ぶ。選択待ち（船乗りなど）の間は終えず、答えた後の描き直しでもう一度判定する
     endTurnIfNoBuysLeft(view) {
         if (this.autoEndTimer || !view.isMyTurn || view.phase !== 'buy') return;
-        if (view.me.buys > 0 || view.prompt) return;
+        // 手札に夜のカードがあれば、夜フェイズに移れるようにターンを終えない
+        if (view.me.buys > 0 || view.prompt || hasNightCard(view.me)) return;
         
         this.autoEndTimer = setTimeout(() => {
             this.autoEndTimer = null;
