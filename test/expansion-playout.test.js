@@ -10,7 +10,8 @@ const SETS = [
     ['hinterlands', '異郷'],
     ['cornucopia_guilds', '収穫祭＆ギルド'],
     ['alchemy', '錬金術'],
-    ['dark_ages', '暗黒時代']
+    ['dark_ages', '暗黒時代'],
+    ['adventures', '冒険']
 ];
 
 // CPU同士でゲームを最後まで進める

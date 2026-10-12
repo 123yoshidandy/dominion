@@ -25,6 +25,8 @@ class Card {
 
     // カードをプレイする（祝宴のように自分自身を扱う効果のため、カード自身も渡す）
     play(player, game) {
+        // 山に置いたトークン（冒険）とチャンピオンのボーナスを最初に得る
+        game?.applyPlayBonuses?.(player, this);
         // このターンにプレイしたアクションの数（共謀者）
         if (game?.turnState && this.isType(CARD_TYPES.ACTION)) {
             game.turnState.actionsPlayed++;

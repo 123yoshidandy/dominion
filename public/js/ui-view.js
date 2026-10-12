@@ -3,7 +3,8 @@
  * ゲームの状態を画面に表示する機能を提供
  */
 
-import { CARD_TYPES, ALL_CARDS } from './card-data.js';
+import { CARD_TYPES, ALL_CARDS, LANDSCAPES } from './card-data.js';
+import { LANDSCAPE_KIND_LABELS } from './card-types.js';
 import { onPress } from './press-handler.js';
 import { getCardArt, CARD_BACK } from './card-art.js';
 import cardAnimator, { STAGGER_MS } from './card-animations.js';
@@ -59,6 +60,7 @@ class UIView {
         this.elements.gameStatus.innerHTML = `
             <span class="status-player">${currentPlayer.name}${cpuLabel}</span>
             ${controller ? `<span class="status-waiting">${controller.name}が支配中</span>` : ''}
+            ${view.missionTurn ? '<span class="status-waiting">伝道のターン（カードは購入できない）</span>' : ''}
             <span class="status-phase phase-${view.phase}">${this.getPhaseText(view.phase)}</span>
             ${view.prompt?.waiting ? `<span class="status-waiting">${view.prompt.playerName}が選択中</span>` : ''}
         `;
@@ -140,6 +142,22 @@ class UIView {
                 <h3>アクション</h3>
                 <div class="supply-grid">${tilesHtml(kingdomCardIds)}</div>
             </div>
+            ${(view.landscapes ?? []).length > 0 ? `
+                <div class="supply-group supply-landscapes">
+                    <h3>イベントなど</h3>
+                    <div class="landscape-grid">${view.landscapes.map(({ id, cost }) => {
+                        const data = LANDSCAPES[id.toUpperCase()];
+                        const unaffordable = isBuying && currentPlayer.coins < cost;
+                        return `
+                            <div class="landscape-tile ${unaffordable ? 'unaffordable' : ''}" data-landscape-id="${id}">
+                                <span class="card-cost">${cost}</span>
+                                <span class="landscape-name">${data.name}</span>
+                                <span class="landscape-kind">${LANDSCAPE_KIND_LABELS[data.kind] ?? ''}</span>
+                            </div>
+                        `;
+                    }).join('')}</div>
+                </div>
+            ` : ''}
             ${nonSupplyIds.length > 0 ? `
                 <div class="supply-group supply-extra">
                     <h3>サプライ外（購入できない）</h3>
@@ -149,6 +167,15 @@ class UIView {
         `;
 
         this.fitSupplyTitles();
+
+        // イベントなどもタップで購入、長押しで説明を表示する
+        this.elements.supplyPiles.querySelectorAll('.landscape-tile').forEach(tile => {
+            const id = tile.getAttribute('data-landscape-id');
+            onPress(tile, {
+                onTap: () => this.uiController.handleLandscapePurchase(id),
+                onLongPress: () => this.uiController.showLandscapeDetail(id)
+            });
+        });
 
         // タップで購入、長押しで説明を表示する（サプライ外の山はタップでも説明を表示する）
         const supplyCards = this.elements.supplyPiles.querySelectorAll('.card');
@@ -257,7 +284,7 @@ class UIView {
                         <span>山札 ${player.deckCount}</span>
                         <span>手札 ${player.handCount}</span>
                         <span>捨て札 ${player.discardCount}</span>
-                        ${this.createMatsHtml(player)}
+                        ${this.createMatsHtml(player, view)}
                     </div>
                 </div>
             `;
@@ -266,16 +293,30 @@ class UIView {
         this.elements.playersInfo.innerHTML = html;
     }
 
-    // 島マット・原住民の村マット・脇に置いたカードの枚数（あるときだけ表示する）
-    createMatsHtml(player) {
-        return [
+    // 島マット・原住民の村マット・脇に置いたカードの枚数、酒場マットのカードとトークン（あるときだけ表示する）
+    createMatsHtml(player, view) {
+        const counts = [
             ['島', player.islandMat.length],
             ['村マット', player.nativeVillageCount],
             ['脇', player.setAsideCount]
         ]
             .filter(([, count]) => count > 0)
-            .map(([label, count]) => `<span>${label} ${count}</span>`)
-            .join('');
+            .map(([label, count]) => `<span>${label} ${count}</span>`);
+        const pileName = (pileId) => ALL_CARDS[(view.pileTops?.[pileId] ?? pileId).toUpperCase()]?.name ?? pileId;
+        const tokenLabels = { plusCard: '+1カード', plusAction: '+1アクション', plusBuy: '+1購入', plusCoin: '+1財宝', minusCost: '-2コスト', trashing: '廃棄' };
+        const tokens = [
+            ...Object.entries(player.pileTokens ?? {}).map(([kind, pileId]) => `${tokenLabels[kind]}→${pileName(pileId)}`),
+            ...(player.minusCardToken ? ['-1カード'] : []),
+            ...(player.minusCoinToken ? ['-1財宝'] : []),
+            ...(player.inheritance ? [`屋敷→${ALL_CARDS[player.inheritance.toUpperCase()]?.name}`] : []),
+            ...(player.journeyFaceUp === false ? ['旅：裏'] : [])
+        ];
+        const tavern = (player.tavern ?? []).map(card => card.name);
+        return [
+            ...counts,
+            ...(tavern.length > 0 ? [`<span>酒場 ${tavern.join('・')}</span>`] : []),
+            ...(tokens.length > 0 ? [`<span>トークン ${tokens.join('、')}</span>`] : [])
+        ].join('');
     }
 
     // 手札を表示する順に並べた、手札のインデックスの配列（手札そのものは並び替えない）
@@ -323,7 +364,8 @@ class UIView {
         const groups = this.getHandGroups(hand, this.uiController.settings.stackHand);
         
         this.elements.handCards.innerHTML = groups.map(({ card, indices }) => {
-            const playable = canPlayActions && card.isType(CARD_TYPES.ACTION);
+            // 相続した屋敷も、そのカードとしてプレイできる
+            const playable = canPlayActions && (card.isType(CARD_TYPES.ACTION) || (card.id === 'estate' && me.inheritance));
             return this.createCardHtml(card, `data-card-index="${indices[0]}"`, playable ? 'playable' : '', indices.length);
         }).join('');
 

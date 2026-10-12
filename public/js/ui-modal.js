@@ -4,7 +4,7 @@
  */
 
 import { loadOnlineSession } from './online-controller.js';
-import { CARD_SETS, CARD_SET_LABELS } from './card-types.js';
+import { CARD_SETS, CARD_SET_LABELS, LANDSCAPE_KIND_LABELS } from './card-types.js';
 
 // 使うカードのセットの表示名（「基本・海辺」のように並べる）
 const cardSetLabel = (sets) => Object.values(CARD_SETS).filter(set => sets.includes(set)).map(set => CARD_SET_LABELS[set]).join('・');
@@ -328,6 +328,26 @@ class UIModal {
         this.openModal();
     }
     
+    // イベントなどの説明を表示する
+    showLandscapeDetail(landscape) {
+        if (!landscape) return;
+        this.elements.modalTitle.textContent = landscape.name;
+        this.elements.modalBody.innerHTML = `
+            <div class="card-detail">
+                <div class="landscape-detail">
+                    <p class="landscape-kind">${LANDSCAPE_KIND_LABELS[landscape.kind] ?? ''}</p>
+                    <p>${escapeHtml(landscape.description)}</p>
+                </div>
+                <div class="card-detail-info">
+                    <p>コスト <b>${landscape.cost}</b></p>
+                    ${landscape.oncePerTurn ? '<p>1ターンに1回だけ購入できる</p>' : ''}
+                    ${landscape.oncePerGame ? '<p>1ゲームに1回だけ購入できる</p>' : ''}
+                </div>
+            </div>
+        `;
+        this.openModal();
+    }
+
     // 選択待ちの画面。必ず答える必要があるので×は出さない
     showPrompt(prompt, view) {
         // 手番ではないプレイヤーが答える選択（民兵の攻撃など）は、誰が答えるのかを明示する

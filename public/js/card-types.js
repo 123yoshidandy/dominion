@@ -16,7 +16,9 @@ export const CARD_TYPES = {
     RUINS: 'ruins',       // 廃墟（略奪者などで獲得させられる）
     SHELTER: 'shelter',   // 避難所（屋敷の代わりに初期デッキに入る）
     LOOTER: 'looter',     // 略奪者（サプライに廃墟の山を置く）
-    COMMAND: 'command'    // 命令（サプライのカードをプレイするカード。命令のカードはプレイできない）
+    COMMAND: 'command',   // 命令（サプライのカードをプレイするカード。命令のカードはプレイできない）
+    RESERVE: 'reserve',   // リザーブ（酒場マットに置き、決まったときに呼び出す）
+    TRAVELLER: 'traveller' // トラベラー（場から捨て札にするとき、次のカードと交換できる）
 };
 
 // 王国カードの収録セット
@@ -28,7 +30,8 @@ export const CARD_SETS = {
     HINTERLANDS: 'hinterlands',
     CORNUCOPIA_GUILDS: 'cornucopia_guilds',
     ALCHEMY: 'alchemy',
-    DARK_AGES: 'dark_ages'
+    DARK_AGES: 'dark_ages',
+    ADVENTURES: 'adventures'
 };
 
 // 収録セットの表示名（開始画面とロビーで使う）
@@ -40,5 +43,15 @@ export const CARD_SET_LABELS = {
     hinterlands: '異郷',
     cornucopia_guilds: '収穫祭＆ギルド',
     alchemy: '錬金術',
-    dark_ages: '暗黒時代'
+    dark_ages: '暗黒時代',
+    adventures: '冒険'
+};
+
+// カードではない横長の札（ランドスケープ）の種類
+export const LANDSCAPE_KINDS = {
+    EVENT: 'event' // イベント：購入して効果を使う
+};
+
+export const LANDSCAPE_KIND_LABELS = {
+    event: 'イベント'
 };

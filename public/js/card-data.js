@@ -12,6 +12,7 @@ import { ALCHEMY_CARDS, ALCHEMY_BASIC_CARDS } from './card-data-alchemy.js';
 import {
     DARK_AGES_CARDS, KNIGHT_CARDS, RUINS_CARDS, SHELTER_CARDS, DARK_AGES_NON_SUPPLY_CARDS, RUINS_PILE
 } from './card-data-dark-ages.js';
+import { ADVENTURES_CARDS, TRAVELLER_CARDS, ADVENTURES_EVENTS } from './card-data-adventures.js';
 
 export { CARD_TYPES, CARD_SETS };
 
@@ -829,7 +830,8 @@ export const KINGDOM_CARDS = {
     ...withSet(HINTERLANDS_CARDS, CARD_SETS.HINTERLANDS),
     ...withSet(CORNUCOPIA_GUILDS_CARDS, CARD_SETS.CORNUCOPIA_GUILDS),
     ...withSet(ALCHEMY_CARDS, CARD_SETS.ALCHEMY),
-    ...withSet(DARK_AGES_CARDS, CARD_SETS.DARK_AGES)
+    ...withSet(DARK_AGES_CARDS, CARD_SETS.DARK_AGES),
+    ...withSet(ADVENTURES_CARDS, CARD_SETS.ADVENTURES)
 };
 
 // 王国カード以外で、一部のゲームだけで使うカード（白金貨・植民地・ポーション・褒賞・騎士・廃墟・避難所など）
@@ -837,7 +839,13 @@ export const EXTRA_CARDS = {
     ...withSet(PROSPERITY_BASIC_CARDS, CARD_SETS.PROSPERITY),
     ...withSet(ALCHEMY_BASIC_CARDS, CARD_SETS.ALCHEMY),
     ...withSet({ ...KNIGHT_CARDS, ...RUINS_CARDS, ...SHELTER_CARDS, ...DARK_AGES_NON_SUPPLY_CARDS, ...RUINS_PILE }, CARD_SETS.DARK_AGES),
+    ...withSet(TRAVELLER_CARDS, CARD_SETS.ADVENTURES),
     ...withSet(REWARD_CARDS, CARD_SETS.CORNUCOPIA_GUILDS)
+};
+
+// イベントなど、カードではない横長の札（ランドスケープ）
+export const LANDSCAPES = {
+    ...withSet(ADVENTURES_EVENTS, CARD_SETS.ADVENTURES)
 };
 
 // 廃墟のカードID（小文字。廃墟の山にはこれを10枚ずつ混ぜる）

@@ -55,6 +55,9 @@ export function createGameView(game, viewerId, { logsFrom = 0 } = {}) {
         potionCosts: Object.fromEntries(Object.keys(game.supply).map(cardId => [cardId, game.getPotionCost(cardId)])),
         // 中身の混ざった山（騎士・廃墟）の一番上のカード（空なら null）
         pileTops: Object.fromEntries(Object.keys(game.pileCards).map(pileId => [pileId, game.getPileTop(pileId)])),
+        // イベントなど（カードではない横長の札）と、そのコスト
+        landscapes: game.landscapes.map(id => ({ id, cost: game.getLandscapeCost(id) })),
+        missionTurn: game.missionTurn,
         bane: game.bane,
         ferrymanPile: game.ferrymanPile,
         nonSupply: { ...game.nonSupply },
@@ -80,6 +83,13 @@ export function createGameView(game, viewerId, { logsFrom = 0 } = {}) {
                 discardTop: topDiscard ? topDiscard.id : null,
                 playArea: cardIds(player.playArea),
                 islandMat: cardIds(player.mats.island), // 島マットは表向きなので誰でも見られる
+                tavern: cardIds(player.mats.tavern),    // 酒場マットも表向き
+                // トークン（冒険）
+                pileTokens: { ...player.pileTokens },
+                minusCardToken: player.minusCardToken,
+                minusCoinToken: player.minusCoinToken,
+                journeyFaceUp: player.journeyFaceUp,
+                inheritance: player.inheritance,
                 nativeVillageCount: player.mats.nativeVillage.length,
                 setAsideCount: player.setAside.length,
                 // 手札と原住民の村マットの中身は本人だけ
@@ -104,6 +114,7 @@ export function hydrateGameView(view) {
         discardTop: toCard(player.discardTop),
         playArea: toCards(player.playArea),
         islandMat: toCards(player.islandMat),
+        tavern: toCards(player.tavern ?? []),
         hand: toCards(player.hand),
         nativeVillage: toCards(player.nativeVillage)
     }));

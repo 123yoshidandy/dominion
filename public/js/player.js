@@ -17,7 +17,7 @@ class Player {
         this.playArea = [];  // プレイエリア
         this.actions = 0;    // アクション数
         this.buys = 0;       // 購入数
-        this.coins = 0;      // コイン数
+        this._coins = 0;     // コイン数（coins で読み書きする。-1 財宝のトークンを反映するため）
         this.potions = 0;    // ポーション（錬金術。ポーションのコストのカードを購入するのに使う）
         this.random = Math.random; // シャッフルに使う乱数（Game がシード付きの乱数に差し替える）
         this.merchantBonus = 0;      // このターンにプレイした商人の数（最初の銀貨で財宝+1ずつ）
@@ -26,7 +26,7 @@ class Player {
         // ===== 海辺 =====
         this.durations = [];          // 次のターンの開始時に効果がある持続カード { card, effect }
         this.setAside = [];           // 停泊所・封鎖で脇に置いたカード
-        this.mats = { island: [], nativeVillage: [] }; // 島マット・原住民の村マット
+        this.mats = { island: [], nativeVillage: [], tavern: [] }; // 島マット・原住民の村マット・酒場マット（冒険）
         this.gainedThisTurn = [];     // このターンに獲得したカードのID（密輸人）
         this.gainedLastTurn = [];     // 直前のターンに獲得したカードのID
         this.gainedVictoryInBuyPhase = false; // 購入フェーズに勝利点カードを獲得したか（宝物庫）
@@ -41,6 +41,28 @@ class Player {
         this.vpTokens = 0;            // 勝利点トークン（司教・記念碑など）
         this.coffers = 0;             // 財源（購入フェーズに使うと財宝+1ずつ）
         this.startOfTurnPlays = [];   // 次のターンの開始時にプレイする、脇に置いたカード（農場労働者）
+
+        // ===== 冒険 =====
+        this.pileTokens = {};         // 山に置いたトークン（plusCard・plusAction・plusBuy・plusCoin・minusCost・trashing → 山のID）
+        this.minusCardToken = false;  // 次にカードを引くとき1枚少なく引く（-1 カードのトークンが山札の上にある）
+        this.minusCoinToken = false;  // 次に財宝を得るとき1少なく得る（-1 財宝のトークンを持っている）
+        this.journeyFaceUp = true;    // 旅のトークンが表か（裏返すたびに変わる）
+        this.inheritance = null;      // 相続で屋敷のトークンを置いたカードのID（屋敷がそのカードとしてプレイできる）
+        this.hauntedVictims = new Set();      // 次のターンまで、購入すると手札を山札に置くプレイヤー（幽霊の森）
+        this.swampHagVictims = new Map();     // 次のターンまで、購入すると呪いを獲得するプレイヤーと回数（沼の妖婆）
+    }
+
+    // コイン（財宝）。増えるときに -1 財宝のトークンがあれば、1少なく得てトークンを戻す
+    get coins() {
+        return this._coins;
+    }
+
+    set coins(value) {
+        if (value > this._coins && this.minusCoinToken) {
+            this.minusCoinToken = false;
+            value -= 1;
+        }
+        this._coins = value;
     }
     
     // カードを手札・山札・捨て札・脇から取り除く（どこにもなければ false）
@@ -56,8 +78,9 @@ class Player {
     }
     
     // 持続カードを登録し、次のターンの開始時まで場に残す（effect が null なら場に残るだけ）
-    addDuration(card, effect) {
-        this.durations.push({ card, effect });
+    // permanent なら、ゲームの終わりまで場に残り、毎ターンの開始時に効果がある（雇人・チャンピオン）
+    addDuration(card, effect, { permanent = false } = {}) {
+        this.durations.push({ card, effect, permanent });
     }
     
     // 持続の効果が残っていて、クリーンアップで場に残すカードか
@@ -69,7 +92,7 @@ class Player {
     getAllCards() {
         return [
             ...this.hand, ...this.deck, ...this.discard, ...this.playArea,
-            ...this.setAside, ...this.mats.island, ...this.mats.nativeVillage
+            ...this.setAside, ...this.mats.island, ...this.mats.nativeVillage, ...this.mats.tavern
         ];
     }
     
@@ -110,6 +133,11 @@ class Player {
     // カードを引く（指定枚数）
     drawCards(count) {
         const drawnCards = [];
+        // -1 カードのトークンが山札の上にあれば、1枚少なく引いてトークンを戻す
+        if (count > 0 && this.minusCardToken) {
+            this.minusCardToken = false;
+            count -= 1;
+        }
         
         for (let i = 0; i < count; i++) {
             const card = this.takeTopCard();
@@ -201,6 +229,10 @@ class Player {
         
         allCards.forEach(card => {
             points += card.getVictoryPoints(allCards);
+        });
+        // 酒場マットにあるときだけ勝利点のあるカード（遠隔地）
+        this.mats.tavern.forEach(card => {
+            points += card.tavernPoints ?? 0;
         });
         
         return points + this.vpTokens;

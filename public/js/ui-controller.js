@@ -6,7 +6,7 @@
 import UIView from './ui-view.js';
 import UIModal from './ui-modal.js';
 import UIEventHandler from './ui-event-handler.js';
-import { ALL_CARDS, CARD_SETS } from './card-data.js';
+import { ALL_CARDS, CARD_SETS, LANDSCAPES } from './card-data.js';
 import OnlineGameController from './online-controller.js';
 import { getServerUrl } from './online-config.js';
 
@@ -314,6 +314,15 @@ class UIController {
     }
     
     // 財源を1つ使う
+    handleLandscapePurchase(landscapeId) {
+        this.eventHandler.handleLandscapePurchase(landscapeId);
+    }
+
+    // イベントなどの説明を表示する
+    showLandscapeDetail(landscapeId) {
+        this.modal.showLandscapeDetail(LANDSCAPES[landscapeId.toUpperCase()]);
+    }
+
     handleUseCoffers() {
         this.eventHandler.handleUseCoffers();
     }

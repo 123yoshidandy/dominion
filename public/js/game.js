@@ -6,6 +6,8 @@ import Card from './card.js';
 import Player from './player.js';
 import { ALL_CARDS, BASIC_CARDS, CARD_TYPES, CARD_SETS, KINGDOM_CARDS, REWARD_CARD_IDS, RUINS_CARD_IDS, getKingdomCardIds } from './card-data.js';
 import { createRandom, createSeed } from './random.js';
+import { putBackInAnyOrder } from './card-helpers.js';
+import { installLandscapes } from './game-landscapes.js';
 
 // 1ターンの間だけ続く効果の記録（ターンの開始で作り直す）
 const createTurnState = () => ({
@@ -21,6 +23,11 @@ const createTurnState = () => ({
     schemes: 0,           // クリーンアップで山札の上に置けるアクションの数（策略）
     farrierDraw: 0,       // ターンの終わりに引く枚数（蹄鉄工）
     joustProvinces: [],   // 馬上槍試合で脇に置いた属州（クリーンアップで捨て札にする）
+    cardsBought: 0,       // 購入したカードの数（使者：このターン最初の購入か）
+    travellingFair: false, // 獲得したカードを山札の上に置いてもよい（旅の祭り）
+    expeditionDraw: 0,    // 次の手札に追加で引く枚数（遠征）
+    savedCards: [],       // 引いた後で手札に戻す、脇に置いたカード（保存）
+    eventsBought: [],     // 購入したイベントのID（1ターンに1回のイベント）
     cleanupStarted: false // ターン終了の処理を始めたか
 });
 
@@ -33,10 +40,10 @@ class Game {
     // cardSets は王国カードを選ぶセット。kingdom を渡すとその王国カードで遊ぶ
     // bane（魔女娘の災いカード）・ferryman（渡し守の山）・colonies（白金貨と植民地を使うか）も指定できる（テスト用）
     // seed が同じなら、同じ操作をすれば必ず同じ結果になる
-    constructor(playerNames, { cardSets = Object.values(CARD_SETS), kingdom = null, bane = null, ferryman = null, colonies = null, shelters = null, seed = createSeed() } = {}) {
+    constructor(playerNames, { cardSets = Object.values(CARD_SETS), kingdom = null, landscapes = null, bane = null, ferryman = null, colonies = null, shelters = null, seed = createSeed() } = {}) {
         this.cardSets = cardSets;
         this.kingdom = kingdom;
-        this.options = { bane, ferryman, colonies, shelters };
+        this.options = { landscapes, bane, ferryman, colonies, shelters };
         this.seed = seed;
         this.random = createRandom(seed);
         this.commands = []; // 受け付けた操作の記録（Game.replay で再現できる）
@@ -61,6 +68,11 @@ class Game {
         this.possessor = null;     // 支配のターン中なら、手番のプレイヤーを操作するプレイヤー
         this.possessionTrash = []; // 支配のターン中に廃棄された、手番のプレイヤーのカード（ターンの終わりに戻す）
         this.regularTurnPlayer = null; // 追加のターンでない、ふつうの手番のプレイヤー（次の手番はこの左隣）
+        this.missions = [];        // これから行う伝道のターンのプレイヤー（カードを購入できない追加のターン）
+        this.missionTurn = false;  // 伝道のターン中か
+        this.currentTurnPlayer = null;  // 今のターンのプレイヤー
+        this.previousTurnPlayer = null; // 直前のターンのプレイヤー（伝道）
+        this.landscapes = [];      // 使うイベントなど（カードではない横長の札）のID
         this.lastError = null;     // 直前に受け付けなかった操作の理由
         this.promptCount = 0;      // これまでの選択待ちの数（画面で同じ選択を出し直さないための番号）
         this.turnCount = 0;        // これまでのターンの数（追加のターンも数える）
@@ -181,6 +193,9 @@ class Game {
                 this.nonSupply[pileId] = count;
             });
         });
+
+        // イベントなど（カードではない横長の札）
+        this.landscapes = this.selectLandscapes();
 
         // 錬金術：コストにポーションのあるカードがあれば、ポーションをサプライに置く
         if (Object.keys(this.supply).some(cardId => this.getPotionCost(cardId) > 0)) {
@@ -309,6 +324,10 @@ class Game {
         }
         cost -= this.turnState.costReduction;
         cost -= inPlay('highway');
+        // トロルの橋：自分のターンの間、場にあるトロルの橋1枚につきコスト-1
+        cost -= inPlay('bridge_troll');
+        // 渡し船：-2 コストのトークンを置いた山のカードは、そのプレイヤーのターンにコスト-2
+        if (data.id && player.pileTokens.minusCost && (this.pileOf[data.id] ?? data.id) === player.pileTokens.minusCost) cost -= 2;
         if (isAction) cost -= 2 * inPlay('quarry');
         return Math.max(0, cost);
     }
@@ -343,6 +362,7 @@ class Game {
     //   { type: 'buyPhase' }        購入フェーズへ
     //   { type: 'coffers', amount } 財源を使う
     //   { type: 'buy', cardId }     カードを購入
+    //   { type: 'buyLandscape', landscapeId } イベントなどを購入
     //   { type: 'endTurn' }         ターン終了
     //   { type: 'answer', answer }  選択に答える（select・choose はインデックスの配列、confirm は真偽値）
     //   { type: 'proxy' }           部屋を出たプレイヤーを、以後CPUが代わりに操作する（オンライン対戦のサーバーだけが送る）
@@ -364,6 +384,9 @@ class Game {
                 break;
             case 'buy':
                 accepted = isCurrent && this.buyCard(command.cardId);
+                break;
+            case 'buyLandscape':
+                accepted = isCurrent && this.buyLandscape(command.landscapeId);
                 break;
             case 'endTurn':
                 accepted = isCurrent && this.endTurn();
@@ -443,21 +466,67 @@ class Game {
         }
 
         const card = player.hand[cardIndex];
+        // 相続：屋敷のトークンを置いたカードがあれば、屋敷をそのカードとしてプレイできる
+        const inherited = card?.id === 'estate' && player.inheritance ? new Card(ALL_CARDS[player.inheritance.toUpperCase()]) : null;
 
-        if (!card || !card.isType(CARD_TYPES.ACTION)) {
+        if (!card || (!card.isType(CARD_TYPES.ACTION) && !inherited)) {
             this.reject('選択されたカードはアクションカードではありません');
             return false;
         }
 
         // アクションカードをプレイ（効果のログより先にプレイしたことを記録する）
+        // 解決し終えた直後に、酒場マットのカード（王家の馬車など）を呼び出せるようにする
         player.actions--;
-        this.log(`${player.name}は${card.name}をプレイしました`);
-        player.playCard(cardIndex, this);
+        this.log(`${player.name}は${card.name}${inherited ? `（${inherited.name}）` : ''}をプレイしました`);
+        player.hand.splice(cardIndex, 1);
+        player.playArea.push(card);
+        this.runNext(
+            () => (inherited ?? card).play(player, this),
+            () => this.afterActionResolved(player, card)
+        );
         this.processEffects();
 
         this.notifyStateChanged();
 
         return true;
+    }
+
+    // アクションを解決し終えた直後：酒場マットのカード（王国の硬貨・王家の馬車）を呼び出せる
+    afterActionResolved(player, card) {
+        this.runNext(...uniqueById(player.mats.tavern.filter(reserve => reserve.onCallAfterAction)).map(reserve => () => {
+            if (player.mats.tavern.includes(reserve)) reserve.onCallAfterAction(player, this, reserve, card);
+        }));
+    }
+
+    // 酒場マットのカードを呼び出す（場に出す。クリーンアップで捨て札になる）
+    callReserve(player, card) {
+        const index = player.mats.tavern.indexOf(card);
+        if (index < 0) return false;
+        player.mats.tavern.splice(index, 1);
+        player.playArea.push(card);
+        this.log(`${player.name}は酒場マットの${card.name}を呼び出しました`);
+        return true;
+    }
+
+    // カードをプレイしたとき最初に得るもの：山に置いた +1 カードなどのトークン（冒険）、チャンピオン
+    applyPlayBonuses(player, card) {
+        const pileId = this.pileOf[card.id] ?? card.id;
+        const tokens = player.pileTokens;
+        const bonus = {
+            cards: tokens.plusCard === pileId ? 1 : 0,
+            actions: (tokens.plusAction === pileId ? 1 : 0) +
+                // チャンピオン：アクションをプレイするたびにアクション +1
+                (card.isType(CARD_TYPES.ACTION) ? player.playArea.filter(other => other.id === 'champion' && other !== card).length : 0),
+            buys: tokens.plusBuy === pileId ? 1 : 0,
+            coins: tokens.plusCoin === pileId ? 1 : 0
+        };
+        if (bonus.cards) player.drawCards(bonus.cards);
+        player.actions += bonus.actions;
+        player.buys += bonus.buys;
+        if (bonus.coins) player.coins += bonus.coins;
+        const parts = [[bonus.cards, 'カード'], [bonus.actions, 'アクション'], [bonus.buys, '購入'], [bonus.coins, '財宝']]
+            .filter(([amount]) => amount > 0).map(([amount, label]) => `${label}+${amount}`);
+        if (parts.length > 0) this.log(`${player.name}は${card.name}をプレイして、トークンなどで${parts.join('、')}を得ました`);
     }
 
     // 購入フェーズに移行し、手札の財宝をすべてプレイする（効果のある財宝の選択待ちになればそこで止まる）
@@ -687,14 +756,14 @@ class Game {
             }
         }
 
-        // ティアラ：このターンに獲得したカードを山札の上に置いてもよい
-        if (isCurrent && this.turnState.tiara) {
+        // ティアラ・旅の祭り：このターンに獲得したカードを山札の上に置いてもよい
+        if (isCurrent && (this.turnState.tiara || this.turnState.travellingFair)) {
             steps.push(() => {
                 if (!player.discard.includes(card) && !player.hand.includes(card)) return;
                 this.promptConfirm({
                     player,
                     card,
-                    title: 'ティアラ',
+                    title: this.turnState.tiara ? 'ティアラ' : '旅の祭り',
                     message: `獲得した${card.name}を山札の上に置きますか？`,
                     yesLabel: '山札の上に置く',
                     noLabel: 'そのままにする',
@@ -707,6 +776,13 @@ class Game {
                 });
             });
         }
+
+        // 獲得した本人の酒場マットのカード（複製）を呼び出してもよい
+        player.mats.tavern.filter(reserve => reserve.onCallOnGain).forEach(reserve => {
+            steps.push(() => {
+                if (player.mats.tavern.includes(reserve)) reserve.onCallOnGain(player, this, reserve, card);
+            });
+        });
 
         // 獲得した本人の手札のリアクション（物見やぐら・交易商）。同じカードが何枚あっても1回だけ聞く
         uniqueById(player.hand.filter(handCard => handCard.onOwnGain)).forEach(reaction => {
@@ -802,6 +878,10 @@ class Game {
             this.reject(`今は${data.name}を購入できません`);
             return false;
         }
+        if (this.missionTurn) {
+            this.reject('伝道のターンにはカードを購入できません');
+            return false;
+        }
 
         // カードを購入（獲得で起きる効果のログより先に購入を記録する）
         // 購入時の効果（超過支払い・隠し財産など）を先に処理してから獲得する
@@ -848,10 +928,40 @@ class Game {
 
     // カードを購入したときの効果（そのカード自身と、場にあるカード）
     onCardBought(player, data) {
+        this.turnState.cardsBought++;
         const steps = [];
         if (data.onBuy) steps.push(() => data.onBuy(player, this, data));
         player.playArea.filter(card => card.onBuyWhileInPlay).forEach(card => {
             steps.push(() => card.onBuyWhileInPlay(player, this, card, data));
+        });
+        // 計画：廃棄のトークンを置いた山のカードを購入したら、手札を1枚廃棄してもよい
+        if (player.pileTokens.trashing && (this.pileOf[data.id] ?? data.id) === player.pileTokens.trashing && player.hand.length > 0) {
+            steps.push(() => this.promptSelect({
+                player, cards: player.hand, min: 0, max: 1, title: '計画',
+                message: '廃棄のトークンの効果で、手札を1枚廃棄できます（選ばなくてもかまいません）。',
+                confirmLabel: '廃棄する', purpose: 'optional-trash',
+                callback: (indices) => {
+                    const trashed = this.trashFromHand(player, indices);
+                    if (trashed.length > 0) this.log(`${player.name}は${trashed[0].name}を廃棄しました`);
+                }
+            }));
+        }
+        // 他のプレイヤーの、次のターンまで続く効果（幽霊の森・沼の妖婆）
+        this.getOtherPlayers(player).forEach(owner => {
+            if (owner.hauntedVictims.has(player)) {
+                steps.push(() => {
+                    if (player.hand.length === 0) return;
+                    const hand = player.hand.splice(0);
+                    this.log(`${player.name}は${owner.name}の幽霊の森の効果で、手札を山札の上に置きます`);
+                    putBackInAnyOrder(this, player, hand, '幽霊の森');
+                });
+            }
+            for (let i = 0; i < (owner.swampHagVictims.get(player) ?? 0); i++) {
+                steps.push(() => {
+                    this.log(`${owner.name}の沼の妖婆の効果`);
+                    this.gainCurse(player);
+                });
+            }
         });
         this.runNext(...steps);
     }
@@ -866,20 +976,49 @@ class Game {
         this.turnState.cleanupStarted = true;
         this.phase = 'cleanup';
         this.runNext(
-            // 購入フェーズの終わりの効果（隠遁者）
+            // 購入フェーズの終わりの効果（隠遁者・酒場マットのワイン商）
             ...player.playArea.filter(card => card.onEndOfBuyPhase).map(card => () => {
                 if (player.playArea.includes(card)) card.onEndOfBuyPhase(player, this, card);
+            }),
+            ...player.mats.tavern.filter(card => card.onEndOfBuyPhaseFromTavern).map(card => () => {
+                if (player.mats.tavern.includes(card)) card.onEndOfBuyPhaseFromTavern(player, this, card);
             }),
             () => this.promptScheme(player),
             // 場から捨て札にするときの効果（錬金術師・薬草商）。持続で場に残るカードには起きない
             ...player.playArea.filter(card => card.onCleanup).map(card => () => {
                 if (player.playArea.includes(card) && !player.hasPendingDuration(card)) card.onCleanup(player, this, card);
             }),
+            // トラベラー：場から捨て札にするとき、次のカードと交換してもよい
+            ...player.playArea.filter(card => card.exchangeFor).map(card => () => {
+                if (player.playArea.includes(card) && !player.hasPendingDuration(card)) this.promptExchange(player, card);
+            }),
             () => this.finishTurn(player)
         );
         this.processEffects();
         this.notifyStateChanged();
         return true;
+    }
+
+    // トラベラーを次のカードと交換する（このカードを山に戻し、次のカードを捨て札に置く。獲得ではない）
+    promptExchange(player, card) {
+        const nextId = card.exchangeFor;
+        if (!(this.nonSupply[nextId] > 0)) return;
+        const next = ALL_CARDS[nextId.toUpperCase()];
+        this.promptConfirm({
+            player,
+            card,
+            title: card.name,
+            message: `${card.name}を${next.name}と交換しますか？`,
+            yesLabel: '交換する',
+            noLabel: '交換しない',
+            purpose: 'traveller-exchange',
+            callback: (yes) => {
+                if (!yes || !this.returnToSupply(player, card)) return;
+                this.nonSupply[nextId]--;
+                player.discard.push(new Card(next));
+                this.log(`${player.name}は${card.name}を${next.name}と交換しました`);
+            }
+        });
     }
 
     // 策略：場のアクションカードを選び、クリーンアップで山札の上に置く
@@ -930,8 +1069,15 @@ class Game {
         // クリーンアップフェーズ（前哨地の追加のターンの前は3枚だけ引く）
         const takesExtraTurn = player.outpostPending && !this.isExtraTurn;
         player.outpostPending = false;
-        player.cleanup(takesExtraTurn ? 3 : 5);
+        player.cleanup((takesExtraTurn ? 3 : 5) + this.turnState.expeditionDraw);
         player.gainedLastTurn = player.gainedThisTurn;
+        // 保存：脇に置いたカードを、引いた後で手札に戻す
+        this.turnState.savedCards.forEach(card => {
+            if (player.setAside.includes(card)) {
+                player.setAside.splice(player.setAside.indexOf(card), 1);
+                player.hand.push(card);
+            }
+        });
 
         // 蹄鉄工：超過支払いした分だけ、ターンの終わりにカードを引く
         if (this.turnState.farrierDraw > 0) {
@@ -959,6 +1105,15 @@ class Game {
             this.startTurn(player);
             return;
         }
+        this.missionTurn = false;
+        const mission = this.missions.shift();
+        if (mission) {
+            this.missionTurn = true;
+            this.currentPlayerIndex = this.players.indexOf(mission);
+            this.log(`${mission.name}は伝道の効果で、カードを購入できない追加のターンを行います`);
+            this.startTurn(mission);
+            return;
+        }
         const possession = this.possessions.shift();
         if (possession) {
             this.possessor = possession.possessor;
@@ -981,6 +1136,8 @@ class Game {
     startTurn(player, { regular = false } = {}) {
         if (regular) this.regularTurnPlayer = player;
         this.turnCount++;
+        this.previousTurnPlayer = this.currentTurnPlayer;
+        this.currentTurnPlayer = player;
         player.actions = 1;
         player.buys = 1;
         player.gainedThisTurn = [];
@@ -994,9 +1151,12 @@ class Game {
         player.monkeys = 0;
         player.corsairVictims.clear();
         player.blockades = [];
+        player.hauntedVictims.clear();
+        player.swampHagVictims.clear();
 
+        // ずっと場に残る持続カード（雇人・チャンピオン）は、効果を使った後も残す
         const durations = player.durations;
-        player.durations = [];
+        player.durations = durations.filter(duration => duration.permanent);
         const plays = player.startOfTurnPlays;
         player.startOfTurnPlays = [];
 
@@ -1015,6 +1175,10 @@ class Game {
             // 書記：ターンの開始時に手札からプレイしてもよい
             ...player.hand.filter(card => card.onStartOfTurn).map(card => () => {
                 if (player.hand.includes(card)) card.onStartOfTurn(player, this, card);
+            }),
+            // 酒場マットのカードをターンの開始時に呼び出してもよい（案内人・ネズミ捕り・変容・教師）
+            ...uniqueById(player.mats.tavern.filter(card => card.onCallStartOfTurn)).map(card => () => {
+                if (player.mats.tavern.includes(card)) card.onCallStartOfTurn(player, this, card);
             })
         );
         this.processEffects();
@@ -1153,6 +1317,10 @@ class Game {
 
     // 灯台が場にあるか、お堀などのリアクションで攻撃を防げるか（リアクションカードを持っていれば常に公開する）
     isProtectedFromAttack(target, attacker) {
+        if (target.playArea.some(card => card.id === 'champion')) {
+            this.log(`${target.name}はチャンピオンで${attacker.name}の攻撃を防ぎました`);
+            return true;
+        }
         if (target.playArea.some(card => card.id === 'lighthouse')) {
             this.log(`${target.name}は灯台で${attacker.name}の攻撃を防ぎました`);
             return true;
@@ -1409,6 +1577,9 @@ function uniqueById(cards) {
         return true;
     });
 }
+
+// イベントなど（カードではない横長の札）の処理を加える
+installLandscapes(Game);
 
 // クラスをエクスポート
 export default Game;

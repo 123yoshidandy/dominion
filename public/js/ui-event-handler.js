@@ -31,8 +31,9 @@ class UIEventHandler {
         if (!view) return;
 
         const card = view.me?.hand[cardIndex];
+        // 相続した屋敷も、そのカードとしてプレイできる
         const canPlay = view.isMyTurn && view.phase === 'action' && view.me.actions > 0 &&
-            card && card.isType(CARD_TYPES.ACTION) && !view.prompt;
+            card && (card.isType(CARD_TYPES.ACTION) || (card.id === 'estate' && view.me.inheritance)) && !view.prompt;
 
         // 今プレイできないカードはタップしても何もしない（説明は長押しで表示する）
         // アニメーション中や返事を待つ間の連打で、別のカードまでプレイしないようにする
@@ -135,6 +136,16 @@ class UIEventHandler {
         }
     }
     
+    // イベントなどを購入する（購入フェーズに、購入回数とコインが足りるときだけ）
+    handleLandscapePurchase(landscapeId) {
+        const view = this.gameController.getView();
+        if (!view || !view.isMyTurn || view.phase !== 'buy' || view.prompt || this.isActionPending) return;
+        const landscape = view.landscapes?.find(item => item.id === landscapeId);
+        if (!landscape || view.me.buys <= 0 || view.me.coins < landscape.cost) return;
+        this.isActionPending = true;
+        if (!this.gameController.send({ type: 'buyLandscape', landscapeId })) this.clearPendingActions();
+    }
+
     // 財源を1つ使って財宝+1を得る
     handleUseCoffers() {
         const view = this.gameController.getView();

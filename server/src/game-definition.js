@@ -19,6 +19,7 @@ const COMMAND_FIELDS = {
     buyPhase: [],
     coffers: ['amount'],
     buy: ['cardId'],
+    buyLandscape: ['landscapeId'],
     endTurn: [],
     answer: ['answer']
 };
