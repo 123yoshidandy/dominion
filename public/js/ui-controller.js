@@ -228,7 +228,10 @@ class UIController {
         if (!view) return;
         
         // オンライン対戦でゲームが始まった・ゲーム中の部屋に戻ったら、ロビーや参加の画面を閉じる
-        if (['lobby', 'online-menu'].includes(this.modal.kind)) this.modal.closeModal();
+        // 同じ顔ぶれでもう一度始めたときは、前のゲームの結果の画面も閉じる
+        if (['lobby', 'online-menu'].includes(this.modal.kind) || (this.modal.kind === 'result' && !view.result)) {
+            this.modal.closeModal();
+        }
         
         this.eventHandler.clearPendingActions();
         this.view.updateGameView(view);

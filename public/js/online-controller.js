@@ -2,13 +2,14 @@
  * オンライン対戦のゲームコントローラー
  * ローカル対戦の GameController と同じく、画面には getView() でビューを渡し、操作は send() で受け取る
  * ゲームはサーバーが進め、ここではサーバーから届いた自分のビューを表示するだけ
+ * サーバーとの接続・再接続・参加情報の保存・CPUの手を間を置いて見せる処理は、共通部品の NetplayClient が行う
  */
 
+import NetplayClient from './netplay/netplay-client.mjs';
 import { hydrateGameView } from './game-view.js';
 
-const SESSION_KEY = 'dominion.online'; // 再接続に使う部屋コードとトークン
+const SESSION_KEY = 'dominion.online'; // 再接続に使う部屋コードとトークン（NetplayClient が保存する）
 const CPU_STEP_DELAY_MS = 450;          // CPUの手はローカル対戦と同じ間隔で順に見せる
-const RECONNECT_DELAY_MS = 2000;
 
 // 保存した参加情報（部屋コード・トークン・名前）
 export function loadOnlineSession() {
@@ -19,128 +20,51 @@ export function loadOnlineSession() {
     }
 }
 
-function saveOnlineSession(session) {
-    try {
-        if (session) {
-            localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-        } else {
-            localStorage.removeItem(SESSION_KEY);
-        }
-    } catch {
-        // 保存できなくても、このページを開いている間は遊べる
-    }
-}
-
 class OnlineGameController {
     // listeners: onLobby(lobby) / onError(message) / onConnectionChange(connected)
     constructor(serverUrl, listeners = {}) {
-        this.serverUrl = serverUrl;
         this.listeners = listeners;
         this.uiController = null;
-        this.socket = null;
-        this.session = loadOnlineSession(); // { roomCode, token, name, seat }
         this.lobby = null;
-        this.view = null;          // 表示中のビュー（hydrate 済み）
-        this.queue = [];           // まだ表示していないビュー（CPUの手を順に見せるため）
-        this.queueTimer = null;
+        this.view = null;              // 表示中のビュー（hydrate 済み）
+        this.matchId = null;           // 表示中の対戦（変わったら前の表示を片付ける）
         this.awaitingResponse = false; // 操作を送ってから返事が届くまで
-        this.isLeaving = false;
+
+        this.net = new NetplayClient({ serverUrl, storageKey: SESSION_KEY, cpuStepDelayMs: CPU_STEP_DELAY_MS });
+        this.net.on('connection', (connected) => this.listeners.onConnectionChange?.(connected));
+        this.net.on('lobby', (lobby) => this.receiveLobby(lobby));
+        this.net.on('state', (state) => this.receiveState(state));
+        this.net.on('error', ({ message }) => {
+            this.awaitingResponse = false;
+            this.listeners.onError?.(message);
+        });
+        this.net.on('left', () => this.net.close());
     }
 
     setUIController(uiController) {
         this.uiController = uiController;
     }
 
-    // ===== 接続 =====
-
-    connect() {
-        return new Promise((resolve, reject) => {
-            const socket = new WebSocket(this.serverUrl);
-            this.socket = socket;
-            socket.addEventListener('open', () => {
-                this.listeners.onConnectionChange?.(true);
-                resolve();
-            });
-            socket.addEventListener('error', () => reject(new Error('サーバーに接続できませんでした')));
-            socket.addEventListener('message', (event) => this.receive(JSON.parse(event.data)));
-            socket.addEventListener('close', () => {
-                if (this.socket !== socket) return;
-                this.listeners.onConnectionChange?.(false);
-                // 部屋に入っていれば、少し待ってつなぎ直す（スマホがスリープしたときなど）
-                if (!this.isLeaving && this.session) {
-                    setTimeout(() => this.reconnect(), RECONNECT_DELAY_MS);
-                }
-            });
-        });
-    }
-
-    async reconnect() {
-        if (this.isLeaving || !this.session || this.isOpen()) return;
-        try {
-            await this.connect();
-            this.request({ action: 'join', roomCode: this.session.roomCode, token: this.session.token });
-        } catch {
-            setTimeout(() => this.reconnect(), RECONNECT_DELAY_MS);
-        }
-    }
-
-    isOpen() {
-        return this.socket?.readyState === WebSocket.OPEN;
-    }
-
-    request(message) {
-        if (!this.isOpen()) {
-            this.listeners.onError?.('サーバーとの接続が切れています。再接続しています…');
-            this.reconnect();
-            return false;
-        }
-        this.socket.send(JSON.stringify(message));
-        return true;
-    }
-
-    // 部屋を出る（席は残るので、同じ端末からは後で戻れない。保存した参加情報も消す）
-    leave() {
-        this.isLeaving = true;
-        this.session = null;
-        saveOnlineSession(null);
-        this.socket?.close();
-        clearTimeout(this.queueTimer);
-    }
-
     // ===== 部屋の操作 =====
 
-    async createRoom(name) {
-        await this.ensureConnected();
-        this.pendingName = name;
-        this.request({ action: 'create', name });
-    }
+    createRoom(name) { return this.net.createRoom(name); }
+    joinRoom(roomCode, name) { return this.net.joinRoom(roomCode, name); }
+    resume() { return this.net.resume(); }
+    // 部屋を出る（対戦中なら、自分の席は以後CPUが代わりに操作する）
+    leave() { this.net.leave(); }
 
-    async joinRoom(roomCode, name) {
-        await this.ensureConnected();
-        this.pendingName = name;
-        // 同じ部屋に入ったことがあれば、その席に戻る
-        const token = this.session?.roomCode === roomCode ? this.session.token : undefined;
-        this.request({ action: 'join', roomCode, name, token });
-    }
-
-    async resume() {
-        await this.ensureConnected();
-        this.request({ action: 'join', roomCode: this.session.roomCode, token: this.session.token });
-    }
-
-    async ensureConnected() {
-        this.isLeaving = false;
-        if (!this.isOpen()) await this.connect();
-    }
-
-    addCpu() { this.request({ action: 'addCpu' }); }
-    removePlayer(seat) { this.request({ action: 'removePlayer', seat }); }
-    setCardSets(cardSets) { this.request({ action: 'setCardSets', cardSets }); }
-    startGame() { this.request({ action: 'start' }); }
-    backToLobby() { this.request({ action: 'backToLobby' }); }
+    addCpu() { this.net.addCpu(); }
+    removePlayer(seat) { this.net.removeCpu(seat); }
+    setCardSets(cardSets) { this.net.setSettings({ cardSets }); }
+    startGame() { this.net.start(); }
+    backToLobby() { this.net.backToLobby(); }
 
     isHost() {
-        return this.session?.seat === 0;
+        return this.net.isHost();
+    }
+
+    get session() {
+        return this.net.session;
     }
 
     // ===== 画面とのやり取り（ローカル対戦のコントローラーと同じ形） =====
@@ -152,7 +76,7 @@ class OnlineGameController {
     }
 
     send(command) {
-        if (!this.request({ action: 'command', command })) return false;
+        if (!this.net.send('command', { command })) return false;
         this.awaitingResponse = true;
         return true;
     }
@@ -165,51 +89,29 @@ class OnlineGameController {
 
     // ===== サーバーからのメッセージ =====
 
-    receive(message) {
-        switch (message.type) {
-            case 'joined':
-                this.session = { roomCode: message.roomCode, token: message.token, seat: message.seat, name: this.pendingName ?? this.session?.name };
-                saveOnlineSession(this.session);
-                break;
-            case 'lobby':
-                this.lobby = message;
-                if (message.status === 'lobby') {
-                    // ロビーに戻ったら、前のゲームの表示を消す
-                    this.view = null;
-                    this.queue = [];
-                }
-                this.listeners.onLobby?.(message);
-                break;
-            case 'state':
-                this.awaitingResponse = false;
-                this.queue.push(message);
-                this.playQueue();
-                break;
-            case 'error':
-                this.awaitingResponse = false;
-                this.listeners.onError?.(message.message);
-                break;
+    // 部屋の状態。画面には、退出した人を除き、使うカードを cardSets に入れた形で渡す
+    receiveLobby(lobby) {
+        this.lobby = {
+            ...lobby,
+            cardSets: lobby.settings?.cardSets ?? [],
+            players: lobby.players.filter(player => !player.left)
+        };
+        if (lobby.status === 'lobby') {
+            // ロビーに戻ったら、前のゲームの表示を消す
+            this.view = null;
+            this.matchId = null;
         }
+        this.listeners.onLobby?.(this.lobby);
     }
 
-    // 届いたビューを順に表示する。CPUの手は間を置いて1手ずつ見せる
-    playQueue() {
-        if (this.queueTimer) return;
-        const next = this.queue.shift();
-        if (!next) return;
-
-        // 部屋に入って最初のビュー、またはロビーから始めた新しいゲームなら、前の表示を片付ける
-        if (!this.view) this.uiController?.resetForNewGame();
-        this.view = hydrateGameView(next.view);
+    // 自分のビュー（CPUの手は NetplayClient が間を置いて1手ずつ届ける）
+    receiveState({ view, matchId }) {
+        this.awaitingResponse = false;
+        // 部屋に入って最初のビュー、または新しい対戦なら、前の表示を片付ける
+        if (!this.view || matchId !== this.matchId) this.uiController?.resetForNewGame();
+        this.matchId = matchId;
+        this.view = hydrateGameView(view);
         this.uiController?.updateGameView();
-
-        if (this.queue.length > 0) {
-            const delay = this.queue[0].cpu ? CPU_STEP_DELAY_MS : 0;
-            this.queueTimer = setTimeout(() => {
-                this.queueTimer = null;
-                this.playQueue();
-            }, delay);
-        }
     }
 }
 

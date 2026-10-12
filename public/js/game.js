@@ -285,6 +285,7 @@ class Game {
     //   { type: 'buy', cardId }     カードを購入
     //   { type: 'endTurn' }         ターン終了
     //   { type: 'answer', answer }  選択に答える（select・choose はインデックスの配列、confirm は真偽値）
+    //   { type: 'proxy' }           部屋を出たプレイヤーを、以後CPUが代わりに操作する（オンライン対戦のサーバーだけが送る）
     applyCommand(playerId, command) {
         this.lastError = null;
         // 支配のターン中は、支配したプレイヤーが手番のプレイヤーの操作と選択をすべて行う
@@ -307,6 +308,9 @@ class Game {
             case 'endTurn':
                 accepted = isCurrent && this.endTurn();
                 break;
+            case 'proxy':
+                accepted = this.startProxy(playerId);
+                break;
             case 'answer':
                 // 選択はそれを求められたプレイヤーだけが答えられる（民兵の攻撃は手番ではない人が答える）
                 accepted = Boolean(this.pendingPrompt) && this.getController(this.pendingPrompt.player).id === playerId &&
@@ -320,6 +324,16 @@ class Game {
             this.reject('今はその操作はできません');
         }
         return accepted;
+    }
+
+    // 部屋を出たプレイヤーを、以後CPUが代わりに操作する
+    startProxy(playerId) {
+        const player = this.players[playerId];
+        if (!player || player.isCPU || this.phase === 'end') return false;
+        player.isCPU = true;
+        this.log(`${player.name}が部屋を出たため、CPUが代わりに操作します`);
+        this.notifyStateChanged();
+        return true;
     }
 
     // 操作の記録からゲームを再現する（サーバーでは操作のたびにこれで今の状態に戻す）

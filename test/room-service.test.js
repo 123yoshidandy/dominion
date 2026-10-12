@@ -1,195 +1,156 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { RoomService } from '../server/src/room-service.js';
-import { MemoryStore } from '../server/src/memory-store.js';
+import { describe, it, expect } from 'vitest';
+import { createTestServer } from '../server/netplay/testing.js';
+import game from '../server/src/game-definition.js';
+import { CARD_SETS } from '../public/js/card-types.js';
 
-describe('オンライン対戦の部屋', () => {
-    let service;
-    let store;
-    let inbox; // 接続IDごとに届いたメッセージ
-
-    const messages = (connectionId, type) => (inbox.get(connectionId) ?? []).filter(m => !type || m.type === type);
-    const last = (connectionId, type) => messages(connectionId, type).at(-1);
-    const send = (connectionId, message) => service.handle(connectionId, message);
-
-    beforeEach(() => {
-        store = new MemoryStore();
-        inbox = new Map();
-        let tokenCount = 0;
-        service = new RoomService({
-            store,
-            send: async (connectionId, message) => {
-                if (!inbox.has(connectionId)) inbox.set(connectionId, []);
-                inbox.get(connectionId).push(structuredClone(message));
-            },
-            createToken: () => `token-${++tokenCount}`
-        });
-    });
-
+// 部屋の仕組みそのもの（部屋番号・再接続・保存のぶつかり）は共通部品のテストで確かめる
+// ここでは、ドミニオンのゲームの定義が部屋に正しく差し込まれているかを確かめる
+describe('オンライン対戦の部屋（ドミニオン）', () => {
     // 2人の部屋を作ってゲームを始める
     const startTwoPlayers = async () => {
-        await send('c1', { action: 'create', name: 'あき' });
-        const { roomCode } = last('c1', 'joined');
-        await send('c2', { action: 'join', roomCode, name: 'はる' });
-        await send('c1', { action: 'start' });
-        return roomCode;
+        const server = createTestServer(game);
+        const [a, b] = await server.createRoom(['あき', 'はる']);
+        await a.send('start');
+        return { server, a, b, code: a.last('joined').roomCode };
     };
 
-    it('部屋を作ると部屋コードと再接続用のトークンが届き、参加者はロビーで互いを見られる', async () => {
-        await send('c1', { action: 'create', name: 'あき' });
-        const joined = last('c1', 'joined');
-        expect(joined.roomCode).toMatch(/^\d{5}$/);
-        expect(joined.seat).toBe(0);
-        expect(joined.token).toBe('token-1');
+    // 自分の手番の人の接続
+    const currentOf = (a, b) => (a.last('state').view.currentPlayerId === 0 ? [a, b] : [b, a]);
 
-        await send('c2', { action: 'join', roomCode: joined.roomCode, name: 'はる' });
-        expect(last('c2', 'joined').seat).toBe(1);
-        expect(last('c1', 'lobby').players.map(p => p.name)).toEqual(['あき', 'はる']);
-        // 他の人のトークンはロビーに入らない
-        expect(JSON.stringify(last('c2', 'lobby'))).not.toContain('token-1');
+    it('ロビーで使うカードのセットを選べ、正しくない指定は受け付けない', async () => {
+        const server = createTestServer(game);
+        const [a, b] = await server.createRoom(['あき', 'はる']);
+        expect(a.last('lobby').settings.cardSets).toEqual(Object.values(CARD_SETS));
+
+        await a.send('setSettings', { settings: { cardSets: ['alchemy', 'base'] } });
+        expect(b.last('lobby').settings.cardSets).toEqual(['alchemy', 'base']);
+
+        await a.send('setSettings', { settings: { cardSets: ['nothing'] } });
+        expect(a.last('error').message).toBe('使うカードの指定が正しくありません');
+        await a.send('setSettings', { settings: { cardSets: [] } });
+        expect(a.last('lobby').settings.cardSets).toEqual(['alchemy', 'base']);
+
+        // ホストでない人は変えられない
+        await b.send('setSettings', { settings: { cardSets: ['base'] } });
+        expect(b.last('error').code).toBe('not_host');
     });
 
-    it('存在しない部屋・満員の部屋には入れない', async () => {
-        await send('c9', { action: 'join', roomCode: '00000', name: 'x' });
-        expect(last('c9', 'error').message).toBe('部屋が見つかりません');
+    it('ゲームを始めると、それぞれに自分から見た状態が届き、選んだセットの王国カードを使う', async () => {
+        const server = createTestServer(game);
+        const [a, b] = await server.createRoom(['あき', 'はる']);
+        await a.send('setSettings', { settings: { cardSets: ['alchemy'] } });
+        await a.send('start');
 
-        await send('c1', { action: 'create', name: 'あき' });
-        const { roomCode } = last('c1', 'joined');
-        await send('c1', { action: 'addCpu' });
-        await send('c1', { action: 'addCpu' });
-        await send('c1', { action: 'addCpu' });
-        await send('c2', { action: 'join', roomCode, name: 'はる' });
-        expect(last('c2', 'error').message).toBe('この部屋は満員です');
-    });
-
-    it('ロビーの操作は部屋を作った人だけができる', async () => {
-        await send('c1', { action: 'create', name: 'あき' });
-        const { roomCode } = last('c1', 'joined');
-        await send('c2', { action: 'join', roomCode, name: 'はる' });
-
-        await send('c2', { action: 'addCpu' });
-        expect(last('c2', 'error').message).toBe('部屋を作った人だけが操作できます');
-
-        await send('c1', { action: 'addCpu' });
-        await send('c1', { action: 'setCardSets', cardSets: ['seaside'] });
-        const lobby = last('c2', 'lobby');
-        expect(lobby.players.map(p => p.isCPU)).toEqual([false, false, true]);
-        expect(lobby.cardSets).toEqual(['seaside']);
-
-        await send('c1', { action: 'removePlayer', seat: 1 });
-        expect(last('c1', 'error').message).toBe('外せるのはCPUだけです');
-        await send('c1', { action: 'removePlayer', seat: 2 });
-        expect(last('c1', 'lobby').players).toHaveLength(2);
-    });
-
-    it('ゲームを始めると、それぞれに自分から見た状態が届く', async () => {
-        await startTwoPlayers();
-        const v1 = last('c1', 'state').view;
-        const v2 = last('c2', 'state').view;
-        expect(v1.viewerId).toBe(0);
-        expect(v2.viewerId).toBe(1);
-        expect(v1.players[0].hand).toHaveLength(5);
-        expect(v1.players[1].hand).toBeNull();
-        expect(v2.players[0].hand).toBeNull();
-        expect(last('c1', 'lobby').status).toBe('playing');
+        const viewA = a.last('state').view;
+        const viewB = b.last('state').view;
+        expect(viewA.viewerId).toBe(0);
+        expect(viewB.viewerId).toBe(1);
+        expect(viewA.players[0].hand).toHaveLength(5);
+        expect(viewA.players[1].hand).toBe(null);
+        expect(viewA.supply.potion).toBe(16);
     });
 
     it('手番でない人の操作は受け付けず、理由と今の状態を返す', async () => {
-        await startTwoPlayers();
-        const { currentPlayerId } = last('c1', 'state').view;
-        const other = currentPlayerId === 0 ? 'c2' : 'c1';
-        const before = messages(other, 'state').length;
-
-        await send(other, { action: 'command', command: { type: 'endTurn' } });
-        expect(last(other, 'error')).toBeDefined();
-        expect(messages(other, 'state').length).toBe(before + 1);
+        const { a, b } = await startTwoPlayers();
+        const [, waiting] = currentOf(a, b);
+        waiting.clear();
+        await waiting.send('command', { command: { type: 'buyPhase' } });
+        expect(waiting.last('error').message).toBe('今はその操作はできません');
+        expect(waiting.last('state').view.phase).toBe('action');
     });
 
-    it('操作は全員に届き、ログは新しい分だけが届く', async () => {
-        await startTwoPlayers();
-        const { currentPlayerId } = last('c1', 'state').view;
-        const mine = currentPlayerId === 0 ? 'c1' : 'c2';
-        const logCount = last('c1', 'state').view.logs.length;
+    it('知らない操作は記録せず、受け付けた操作は全員に届き、ログは新しい分だけが届く', async () => {
+        const { server, a, b, code } = await startTwoPlayers();
+        const [current, waiting] = currentOf(a, b);
+        await current.send('command', { command: { type: 'proxy' } });
+        expect(current.last('error').message).toBe('不明な操作です');
 
-        await send(mine, { action: 'command', command: { type: 'endTurn' } });
-        const view = last('c1', 'state').view;
-        expect(view.currentPlayerId).not.toBe(currentPlayerId);
-        expect(view.logsFrom).toBe(logCount);
-        expect(view.logs.some(message => message.includes('ターンが終了しました'))).toBe(true);
+        const logsBefore = waiting.last('state').view.logs.length;
+        waiting.clear();
+        await current.send('command', { command: { type: 'buyPhase', extra: 'x' } });
+        const state = waiting.last('state');
+        expect(state.view.phase).toBe('buy');
+        expect(state.view.logsFrom).toBe(logsBefore);
+        const saved = await server.store.getRoom(code);
+        expect(saved.game.commands.at(-1)).toEqual({ playerId: current.last('joined').seat, type: 'buyPhase' });
     });
 
-    it('切断しても、トークンで同じ席に戻れる', async () => {
-        const roomCode = await startTwoPlayers();
-        const token = last('c2', 'joined').token;
-
-        await service.disconnect('c2');
-        expect(last('c1', 'lobby').players[1].connected).toBe(false);
-
-        await send('c3', { action: 'join', roomCode, token });
-        expect(last('c3', 'joined').seat).toBe(1);
-        expect(last('c3', 'state').view.viewerId).toBe(1);
-        expect(last('c1', 'lobby').players[1].connected).toBe(true);
-
-        // ゲーム中は新しい人は入れない
-        await send('c4', { action: 'join', roomCode, name: 'なつ' });
-        expect(last('c4', 'error').message).toBe('この部屋はゲームが始まっています');
+    it('切断しても、同じ席に戻ると今の状態が最近のログと一緒に届く', async () => {
+        const { server, a, b } = await startTwoPlayers();
+        const b2 = await server.reconnect(b);
+        expect(b2.all('joined')[0].seat).toBe(1);
+        const view = b2.last('state').view;
+        expect(view.viewerId).toBe(1);
+        expect(view.players[1].hand).toHaveLength(5);
+        expect(a.last('lobby').players[1].connected).toBe(true);
     });
 
-    it('同時に保存がぶつかったら、読み直してやり直す', async () => {
-        await send('c1', { action: 'create', name: 'あき' });
-        const { roomCode } = last('c1', 'joined');
-        // 1回目の保存だけ、先に他の操作が保存したことにする
-        const putRoom = store.putRoom.bind(store);
-        let conflicted = false;
-        store.putRoom = async (room, previousVersion) => {
-            if (!conflicted && room.players.length === 2) {
-                conflicted = true;
-                const current = await store.getRoom(roomCode);
-                current.version++;
-                await putRoom(current, current.version - 1);
-            }
-            return putRoom(room, previousVersion);
-        };
-        await send('c2', { action: 'join', roomCode, name: 'はる' });
-        expect(conflicted).toBe(true);
-        expect(last('c2', 'joined').seat).toBe(1);
-    });
+    it('人間1人とCPU2人で最後まで遊べ、CPUの手は1手ずつ届く', async () => {
+        const server = createTestServer(game);
+        const [a] = await server.createRoom(['あき']);
+        await a.send('addCpu');
+        await a.send('addCpu');
+        await a.send('start');
 
-    it('人間1人とCPU2人で最後まで遊べる（CPUの手は1手ずつ届く）', async () => {
-        await send('c1', { action: 'create', name: 'あき' });
-        await send('c1', { action: 'addCpu' });
-        await send('c1', { action: 'addCpu' });
-        await send('c1', { action: 'start' });
-
-        // 人間は、選択には最小限で答え、アクションはせず、買える一番良い財宝か属州を買う
-        for (let step = 0; step < 5000; step++) {
-            const view = last('c1', 'state').view;
-            if (view.phase === 'end') break;
-            const me = view.players[view.viewerId];
-            let command;
+        // 人間は財宝をプレイして買えるものを買い、ターンを終える
+        for (let turn = 0; turn < 500 && a.last('state').view.phase !== 'end'; turn++) {
+            const view = a.last('state').view;
             if (view.prompt && !view.prompt.waiting) {
-                command = { type: 'answer', answer: view.prompt.type === 'confirm' ? false : [...Array(view.prompt.min).keys()] };
+                const answer = view.prompt.type === 'confirm' ? false : Array.from({ length: view.prompt.min }, (_, i) => i);
+                await a.send('command', { command: { type: 'answer', answer } });
             } else if (view.phase === 'action') {
-                command = { type: 'buyPhase' };
-            } else if (me.buys > 0 && me.coins >= 3) {
-                command = { type: 'buy', cardId: me.coins >= 8 ? 'province' : me.coins >= 6 ? 'gold' : 'silver' };
+                await a.send('command', { command: { type: 'buyPhase' } });
             } else {
-                command = { type: 'endTurn' };
+                await a.send('command', { command: { type: 'endTurn' } });
             }
-            await send('c1', { action: 'command', command });
         }
-
-        const view = last('c1', 'state').view;
-        expect(view.phase).toBe('end');
-        expect(view.result).toHaveLength(3);
-        expect(messages('c1', 'error')).toHaveLength(0);
-        expect(messages('c1', 'state').filter(m => m.cpu).length).toBeGreaterThan(10);
+        expect(a.last('state').view.phase).toBe('end');
+        expect(a.all('state').some(state => state.cpu)).toBe(true);
+        expect(a.last('lobby').status).toBe('ended');
     });
 
-    it('ゲームが終わったら、部屋を作った人がロビーに戻せる', async () => {
-        await startTwoPlayers();
-        await send('c2', { action: 'backToLobby' });
-        expect(last('c2', 'error').message).toBe('部屋を作った人だけが操作できます');
-        await send('c1', { action: 'backToLobby' });
-        expect(last('c2', 'lobby').status).toBe('lobby');
+    it('対戦中に部屋を出た人の席は、CPUが代わりに操作して最後まで進む', async () => {
+        const { a, b } = await startTwoPlayers();
+        await b.send('leave');
+        expect(b.last('left')).toBeTruthy();
+
+        // 残った人は購入フェーズに入ってターンを終えるだけで、相手のターンはCPUが進める
+        for (let turn = 0; turn < 500 && a.last('state').view.phase !== 'end'; turn++) {
+            const view = a.last('state').view;
+            if (view.prompt && !view.prompt.waiting) {
+                const answer = view.prompt.type === 'confirm' ? false : Array.from({ length: view.prompt.min }, (_, i) => i);
+                await a.send('command', { command: { type: 'answer', answer } });
+            } else if (view.phase === 'action') {
+                await a.send('command', { command: { type: 'buyPhase' } });
+            } else {
+                await a.send('command', { command: { type: 'endTurn' } });
+            }
+        }
+        const view = a.last('state').view;
+        expect(view.phase).toBe('end');
+        expect(view.players[1].isCPU).toBe(true);
+    });
+
+    it('対戦が終わったら誰でも部屋に戻れ、部屋を作った人は同じ顔ぶれでもう一度始められる', async () => {
+        const server = createTestServer(game);
+        const [a, b] = await server.createRoom(['あき', 'はる']);
+        await a.send('start');
+        const firstMatch = a.last('state').matchId;
+        // 対戦中は部屋を作った人だけがロビーに戻せる
+        await b.send('backToLobby');
+        expect(b.last('error').code).toBe('not_host');
+
+        // 決着をつけて、もう一度始める
+        const room = await server.store.getRoom(a.last('joined').roomCode);
+        room.status = 'ended';
+        await server.store.putRoom({ ...room, version: room.version + 1 }, room.version);
+        await a.send('start');
+        expect(a.last('state').matchId).toBe(firstMatch + 1);
+
+        const ended = await server.store.getRoom(a.last('joined').roomCode);
+        ended.status = 'ended';
+        await server.store.putRoom({ ...ended, version: ended.version + 1 }, ended.version);
+        await b.send('backToLobby');
+        expect(a.last('lobby').status).toBe('lobby');
     });
 });

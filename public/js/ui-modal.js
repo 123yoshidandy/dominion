@@ -283,8 +283,18 @@ class UIModal {
     // 設定画面（ゲーム中でも変更できる）
     showSettings() {
         this.elements.modalTitle.textContent = '設定';
-        this.elements.modalBody.innerHTML = this.createStackHandToggleHtml('settings-stack-hand');
+        // オンライン対戦の対戦中は、部屋を出られる（自分の席は以後CPUが代わりに操作する）
+        const online = this.uiController.isOnline();
+        this.elements.modalBody.innerHTML = this.createStackHandToggleHtml('settings-stack-hand') + (online ? `
+            <div class="setup-form">
+                <button id="leave-game-btn" class="link-button">部屋を出る（自分の席はCPUが代わりに続けます）</button>
+            </div>
+        ` : '');
         this.setupStackHandToggle('settings-stack-hand');
+        document.getElementById('leave-game-btn')?.addEventListener('click', () => {
+            this.closeModal();
+            this.uiController.leaveOnline();
+        });
         this.openModal({ kind: 'settings' });
     }
     
@@ -458,7 +468,7 @@ class UIModal {
     }
     
     // ゲーム結果表示
-    // online なら、部屋を作った人はロビーに戻せる（他の人はそれを待つ）
+    // online なら、誰でも部屋（ロビー）に戻せる。部屋を作った人は、同じ顔ぶれでもう一度始めることもできる
     showGameResults(result, { online = false, isHost = false } = {}) {
         this.elements.modalTitle.textContent = 'ゲーム終了';
 
@@ -474,10 +484,10 @@ class UIModal {
 
         if (!online) {
             html += '<button id="new-game-btn" class="primary">新しいゲームを始める</button>';
-        } else if (isHost) {
-            html += '<button id="back-to-lobby-btn" class="primary">部屋に戻る（もう一度遊ぶ）</button>';
         } else {
-            html += '<p class="lobby-note">部屋を作った人が部屋に戻るのを待っています</p>';
+            if (isHost) html += '<button id="rematch-btn" class="primary">同じ顔ぶれでもう一度</button>';
+            html += `<button id="back-to-lobby-btn" class="primary ${isHost ? 'secondary' : ''}">部屋に戻る</button>`;
+            if (!isHost) html += '<p class="lobby-note">部屋を作った人は、同じ顔ぶれでもう一度始めることもできます</p>';
         }
         if (online) {
             html += '<button id="leave-room-btn" class="link-button">部屋を出る</button>';
@@ -489,6 +499,9 @@ class UIModal {
         document.getElementById('new-game-btn')?.addEventListener('click', () => {
             this.closeModal();
             this.showGameSetup();
+        });
+        document.getElementById('rematch-btn')?.addEventListener('click', () => {
+            this.uiController.gameController.startGame();
         });
         document.getElementById('back-to-lobby-btn')?.addEventListener('click', () => {
             this.uiController.gameController.backToLobby();

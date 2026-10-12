@@ -29,7 +29,8 @@
 1. 開始画面で「オンラインで遊ぶ」を押し、名前を入れて「部屋を作る」を押す
 2. 「招待URLを共有」で友人にURLを送る（友人は開いて名前を入れ、「参加する」を押す。部屋番号（数字5桁）でも参加できる）
 3. 部屋を作った人が、CPUの追加や使うカードを選んで「ゲーム開始」を押す
-4. ゲームが終わったら、部屋を作った人が「部屋に戻る」で同じメンバーと続けて遊べる
+4. ゲームが終わったら、部屋を作った人は「同じ顔ぶれでもう一度」ですぐに次のゲームを始められる。「部屋に戻る」（誰でも押せる）でロビーに戻ると、メンバーや使うカードを変えられる
+5. ゲームの途中でも、設定（⚙）の「部屋を出る」で抜けられる。抜けた人の席は、以後CPUが代わりに続ける
 
 ## 開発
 
@@ -50,7 +51,7 @@ npm test
 AWS を使わずに、同じ処理のテスト用サーバーを手元で動かせます。画面を `localhost` で開くと、自動でこのサーバーにつながります。
 
 ```bash
-npm run dev:server   # ws://localhost:8787
+npm run dev:server   # ws://localhost:8787（PORT=18731 npm run dev:server でポートを変えられる）
 ```
 
 URLに `?server=wss://...` を付けると、接続先のサーバーを変えられます。
@@ -69,14 +70,16 @@ public/            画面（GitHub Pages でそのまま公開する）
     game-view.js     プレイヤーごとに見える状態（他の人の手札などを含まない）
     random.js        シード付きの乱数（同じ操作の記録から同じゲームを再現する）
     game-controller.js   ローカル対戦のコントローラー
-    online-controller.js オンライン対戦のコントローラー
+    online-controller.js オンライン対戦のコントローラー（接続は netplay/ の NetplayClient）
+    netplay/         オンライン対戦の共通部品（画面側。netplay-kit からコピーしたもの）
     ui-*.js          画面の描画と操作
 server/            オンライン対戦のサーバー
-  src/room-service.js  部屋の処理（作成・参加・操作の受け付け・CPUの進行）
+  netplay/             部屋の仕組みの共通部品（netplay-kit からコピーしたもの。手で直さない）
+  src/game-definition.js  部屋に差し込むドミニオンの定義（設定・操作・ビュー・CPU・退出した人の代わり）
   src/handler.js       Lambda の入口
-  src/dynamo-store.js  DynamoDB への保存
   dev-server.js        手元で試すためのテスト用サーバー
   template.yaml        AWS SAM のテンプレート
+netplay-kit.lock.json  コピーした共通部品の版
 test/              テスト（Vitest）
 ```
 
@@ -85,6 +88,7 @@ test/              テスト（Vitest）
 - サーバーがゲームを進め、各プレイヤーにはその人から見える状態だけを送る（相手の手札や山札の並びは送らない）
 - 部屋には参加者・乱数のシード・操作の記録だけを保存し、操作を受けるたびに記録からゲームを再現する
 - CPU はサーバーで動かし、1手ずつ届ける
+- 部屋の仕組み（作成・参加・再接続・退出・ホストの引き継ぎ・再戦・接続の生存確認）は、4つのゲームに共通の部品 netplay-kit を使う。netplay-kit のリポジトリが正の版で、`node ../netplay-kit/scripts/sync.mjs .` で `server/netplay/` と `public/js/netplay/` にコピーする（`sync.mjs check .` で手で直されていないかを確かめられる）
 
 ## サーバー（AWS）
 
