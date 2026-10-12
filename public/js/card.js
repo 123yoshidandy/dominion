@@ -38,15 +38,17 @@ class Card {
             game.log(`${player.name}の${this.name}は魅了され、効果の代わりにカードを1枚引き、アクション+1を得ました`);
             return;
         }
-        // プレイする前に起きる効果（浮浪児）があれば、それを先に処理してから効果を使う
+        // 効果を使う。習性（移動動物園）があるゲームでは、アクションカードは代わりに習性を使ってもよい
+        const original = () => this.onPlay?.(player, game, this);
+        const useWays = this.isType(CARD_TYPES.ACTION) && (game?.getWays?.().length ?? 0) > 0;
+        const resolve = useWays ? () => game.promptWay(player, this, original) : original;
+        // プレイする前に起きる効果（浮浪児・窯）があれば、それを先に処理してから効果を使う
         const before = game?.getBeforePlaySteps?.(player, this) ?? [];
         if (before.length > 0) {
-            game.runNext(...before, () => this.onPlay?.(player, game, this));
+            game.runNext(...before, resolve);
             return;
         }
-        if (this.onPlay) {
-            this.onPlay(player, game, this);
-        }
+        resolve();
     }
 
     // このカードの勝利点（allCards はプレイヤーが持つすべてのカード）

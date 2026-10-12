@@ -13,13 +13,14 @@ const MULTIPLIER_PRIORITY = ['kings_court', 'throne_room', 'coronet', 'disciple'
 const NON_TERMINAL_PRIORITY = [
     // アクションが2つ以上増える村
     'village', 'university', 'port', 'lost_city', 'bustling_village', 'villa', 'city_quarter', 'encampment', 'blessed_village',
-    'cursed_village', 'mountain_village', 'hideout', 'necropolis', 'bandit_camp', 'fortress', 'wandering_minstrel', 'dame_molly', 'madman',
+    'cursed_village', 'mountain_village', 'hideout', 'snowy_village', 'hunting_lodge', 'hostelry', 'village_green', 'necropolis', 'bandit_camp', 'fortress', 'wandering_minstrel', 'dame_molly', 'madman',
     'bazaar', 'fishing_village', 'festival', 'native_village', 'workers_village', 'city', 'shanty_town',
     'mining_village', 'border_village', 'farmhands', 'plaza', 'crossroads', 'inn', 'candlestick_maker', 'demesne',
     // アクションが1つ増えるカード
     'patrician', 'emporium', 'settlers', 'chariot_race', 'groundskeeper', 'archive', 'forum',
     'will_o_wisp', 'zombie_spy', 'pixie', 'shepherd', 'secret_cave', 'wish',
     'border_guard', 'experiment', 'seer', 'research',
+    'horse', 'destrier', 'fisherman', 'sanctuary', 'bounty_hunter', 'goatherd', 'coven',
     'champion', 'page', 'ratcatcher', 'guide', 'magpie', 'dungeon', 'caravan_guard', 'transmogrify', 'royal_carriage',
     'storyteller', 'raze', 'fugitive', 'treasure_hunter', 'artificer', 'peasant',
     'scrying_pool', 'familiar', 'alchemist', 'apothecary', 'apprentice', 'junk_dealer', 'ironmonger', 'market_square',
@@ -56,7 +57,10 @@ const TERMINAL_PRIORITY = [
     'leprechaun', 'tracker', 'druid', 'faithful_hound', 'zombie_apprentice', 'zombie_mason',
     // ルネサンス
     'old_witch', 'villain', 'scholar', 'swashbuckler', 'treasurer', 'recruiter', 'sculptor', 'silk_merchant', 'patron', 'priest',
-    'inventor', 'flag_bearer', 'improve', 'cargo_ship', 'lackeys', 'acting_troupe'
+    'inventor', 'flag_bearer', 'improve', 'cargo_ship', 'lackeys', 'acting_troupe',
+    // 移動動物園
+    'mastermind', 'gatekeeper', 'barge', 'wayfarer', 'animal_fair', 'paddock', 'livery', 'kiln', 'cardinal', 'falconer',
+    'cavalry', 'groom', 'displace', 'black_cat', 'sheepdog', 'scrap', 'camel_train', 'sleigh'
 ];
 
 // 夜フェイズにプレイする夜のカードの優先順（獲得の数を見るカードは後に）
@@ -369,6 +373,24 @@ function chooseSelection(prompt, game) {
 
         case 'lost-in-the-woods':
             return indicesWhere(cards, isJunk).slice(0, 1);
+
+        case 'bounty-hunter':
+        case 'displace':
+        case 'sanctuary':
+            return min === 0 ? indicesWhere(cards, isTrashTarget).slice(0, 1) : [lowest(cards)];
+
+        case 'scrap-trash':
+            return trashOrder(cards);
+
+        case 'camel-train': {
+            // 相手に取られたくない、高いアクションを追放する
+            const byCost = cards.map((card, index) => index).sort((a, b) => cards[b].cost - cards[a].cost);
+            return [byCost[0]];
+        }
+
+        case 'hostelry':
+        case 'animal-fair-pay':
+            return min > 0 ? [lowest(cards)] : [];
 
         case 'hideout-trash': {
             // 勝利点カードを廃棄すると呪いを獲得するので、呪いか銅貨を選ぶ
@@ -769,6 +791,11 @@ function chooseOption(prompt, game) {
         case 'treasurer':
             // 鍵を受け取る（毎ターン財宝+1）
             return [2];
+        case 'scrap':
+            // カード・アクション・財宝・購入の順に選ぶ
+            return [0, 1, 3, 2, 4, 5].slice(0, min);
+        case 'sleigh':
+            return [0];
         case 'sinister-plot':
             return [player.sinisterPlotTokens >= 2 ? 1 : 0];
         case 'wild-hunt':
@@ -821,6 +848,9 @@ function chooseConfirm(prompt) {
         case 'catacombs':
         case 'traveller-exchange':
         case 'encampment-reveal':
+        case 'now-or-later':
+        case 'kiln':
+        case 'wayfarer':
         case 'horn':
         case 'cargo-ship':
         case 'pageant':

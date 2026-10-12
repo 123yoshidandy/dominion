@@ -11,7 +11,13 @@ export const isCurse = (card) => card.types.includes(CARD_TYPES.CURSE);
 export const names = (cards) => cards.map(card => card.name).join('・');
 
 // +カード・+アクション・+購入・+財宝・+財源・+勝利点トークンをまとめて得て、ログに書く
-export function gainBenefits(player, game, { cards = 0, actions = 0, buys = 0, coins = 0, coffers = 0, vp = 0 }, source = '') {
+export function gainBenefits(player, game, benefits, source = '') {
+    // カメレオンの習性で使っている間は、+カードと+財宝を入れ替える
+    const swapped = player.chameleonActive ? { ...benefits, cards: benefits.coins ?? 0, coins: benefits.cards ?? 0 } : benefits;
+    return applyBenefits(player, game, swapped, source);
+}
+
+function applyBenefits(player, game, { cards = 0, actions = 0, buys = 0, coins = 0, coffers = 0, vp = 0 }, source = '') {
     if (cards > 0) player.drawCards(cards);
     player.actions += actions;
     player.buys += buys;

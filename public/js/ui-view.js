@@ -377,6 +377,7 @@ class UIView {
             ...(artifacts.length > 0 ? [`<span>${artifacts.join('・')}</span>`] : []),
             ...(player.sinisterPlotTokens > 0 ? [`<span>陰謀の企て ${player.sinisterPlotTokens}</span>`] : []),
             ...(tavern.length > 0 ? [`<span>酒場 ${tavern.join('・')}</span>`] : []),
+            ...((player.exile ?? []).length > 0 ? [`<span>追放 ${player.exile.map(card => card.name).join('・')}</span>`] : []),
             ...(tokens.length > 0 ? [`<span>トークン ${tokens.join('、')}</span>`] : []),
             ...(states.length > 0 ? [`<span>状態 ${states.join('・')}</span>`] : [])
         ].join('');

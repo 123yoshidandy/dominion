@@ -97,6 +97,7 @@ export function createGameView(game, viewerId, { logsFrom = 0 } = {}) {
                 playArea: cardIds(player.playArea),
                 islandMat: cardIds(player.mats.island), // 島マットは表向きなので誰でも見られる
                 tavern: cardIds(player.mats.tavern),    // 酒場マットも表向き
+                exile: cardIds(player.mats.exile),      // 追放マットも表向き（移動動物園）
                 // トークン（冒険）
                 pileTokens: { ...player.pileTokens },
                 minusCardToken: player.minusCardToken,
@@ -133,6 +134,7 @@ export function hydrateGameView(view) {
         playArea: toCards(player.playArea),
         islandMat: toCards(player.islandMat),
         tavern: toCards(player.tavern ?? []),
+        exile: toCards(player.exile ?? []),
         hand: toCards(player.hand),
         nativeVillage: toCards(player.nativeVillage)
     }));

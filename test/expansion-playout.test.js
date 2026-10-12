@@ -14,7 +14,8 @@ const SETS = [
     ['adventures', '冒険'],
     ['empires', '帝国'],
     ['nocturne', '夜想曲'],
-    ['renaissance', 'ルネサンス']
+    ['renaissance', 'ルネサンス'],
+    ['menagerie', '移動動物園']
 ];
 
 // CPU同士でゲームを最後まで進める

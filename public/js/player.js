@@ -26,7 +26,7 @@ class Player {
         // ===== 海辺 =====
         this.durations = [];          // 次のターンの開始時に効果がある持続カード { card, effect }
         this.setAside = [];           // 停泊所・封鎖で脇に置いたカード
-        this.mats = { island: [], nativeVillage: [], tavern: [] }; // 島マット・原住民の村マット・酒場マット（冒険）
+        this.mats = { island: [], nativeVillage: [], tavern: [], exile: [] }; // 島マット・原住民の村マット・酒場マット（冒険）・追放マット（移動動物園）
         this.gainedThisTurn = [];     // このターンに獲得したカードのID（密輸人）
         this.gainedLastTurn = [];     // 直前のターンに獲得したカードのID
         this.gainedVictoryInBuyPhase = false; // 購入フェーズに勝利点カードを獲得したか（宝物庫）
@@ -63,8 +63,25 @@ class Player {
         this.villagers = 0;           // 村人（アクションフェーズに使うとアクション+1ずつ）
         this.projects = new Set();    // 自分のキューブを置いたプロジェクトのID
         this.sinisterPlotTokens = 0;  // 陰謀の企てに置いたトークンの数
+
+        // ===== 移動動物園 =====
+        this._actions = 0;            // アクション数（actions で読み書きする。雪深い村の後は増えない）
+        this.noMoreActions = false;   // このターン、これ以上アクション+を受けない（雪深い村）
+        this.trashedThisTurn = 0;     // このターンに廃棄したカードの数（ヤギ飼い）
+        this.trashedLastTurn = 0;     // 直前の自分のターンに廃棄したカードの数
+        this.gatekeeperVictims = new Set(); // 次のターンまで、獲得したカードを追放させるプレイヤー（門番）
         this.hauntedVictims = new Set();      // 次のターンまで、購入すると手札を山札に置くプレイヤー（幽霊の森）
         this.swampHagVictims = new Map();     // 次のターンまで、購入すると呪いを獲得するプレイヤーと回数（沼の妖婆）
+    }
+
+    // アクション数。雪深い村をプレイした後は、このターンはそれ以上増えない
+    get actions() {
+        return this._actions;
+    }
+
+    set actions(value) {
+        if (value > this._actions && this.noMoreActions) return;
+        this._actions = value;
     }
 
     // コイン（財宝）。増えるときに -1 財宝のトークンがあれば、1少なく得てトークンを戻す
@@ -107,7 +124,7 @@ class Player {
     getAllCards() {
         return [
             ...this.hand, ...this.deck, ...this.discard, ...this.playArea,
-            ...this.setAside, ...this.mats.island, ...this.mats.nativeVillage, ...this.mats.tavern
+            ...this.setAside, ...this.mats.island, ...this.mats.nativeVillage, ...this.mats.tavern, ...this.mats.exile
         ];
     }
     

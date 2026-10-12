@@ -58,14 +58,13 @@ const landscapeMethods = {
             this.reject('購入回数が残っていません');
             return false;
         }
-        // 負債があれば先に返す。返しきれなければ購入できない
-        this.payOffDebt(player);
-        if (player.debt > 0) {
+        // 負債は購入の前に財宝で返すので、返した後の財宝で足りるかを見る（断るときは状態を変えない）
+        const cost = this.getLandscapeCost(id);
+        if (player.debt > player.coins) {
             this.reject('負債を返すまで購入できません');
             return false;
         }
-        const cost = this.getLandscapeCost(id);
-        if (player.coins < cost) {
+        if (player.coins - player.debt < cost) {
             this.reject(`${data.name}を購入するためのコインが足りません（必要: ${cost}, 所持: ${player.coins}）`);
             return false;
         }
@@ -82,6 +81,7 @@ const landscapeMethods = {
             return false;
         }
 
+        this.payOffDebt(player);
         player.buys--;
         player.coins -= cost;
         this.turnState.eventsBought.push(id);

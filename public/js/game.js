@@ -9,6 +9,7 @@ import { createRandom, createSeed } from './random.js';
 import { putBackInAnyOrder } from './card-helpers.js';
 import { installLandscapes } from './game-landscapes.js';
 import { installNocturne } from './game-nocturne.js';
+import { installMenagerie } from './game-menagerie.js';
 
 // 1ターンの間だけ続く効果の記録（ターンの開始で作り直す）
 const createTurnState = () => ({
@@ -43,6 +44,9 @@ const createTurnState = () => ({
     citadelUsed: false,   // このターンに城塞でアクションをもう一度プレイしたか
     innovationUsed: false, // このターンに革新を使ったか（最初に獲得したアクションだけ）
     hornUsed: false,      // このターンに角笛を使ったか
+    kilns: 0,             // 次にカードをプレイするとき、先に同じカードを獲得してよい回数（窯）
+    liveries: 0,          // コスト4以上のカードを獲得するたびに馬を獲得する数（馬屋）
+    sealGains: false,     // 獲得したカードを山札の上に置いてもよい（アザラシの習性）
     cleanupStarted: false // ターン終了の処理を始めたか
 });
 
@@ -97,6 +101,7 @@ class Game {
         this.landscapeState = {};  // ランドマークなどが使う状態（オベリスクの山・山道の入札など）
         this.artifacts = {};       // アーティファクト（ルネサンス）の持ち主。使うものだけキーがあり、誰も持っていなければ null
         this.fleetQueue = null;    // 艦隊：ゲームの終わりの後の追加のターンを行うプレイヤーの列
+        this.extraTurns = [];      // これから行う追加のターンのプレイヤー（好機）
         this.lastError = null;     // 直前に受け付けなかった操作の理由
         this.promptCount = 0;      // これまでの選択待ちの数（画面で同じ選択を出し直さないための番号）
         this.turnCount = 0;        // これまでのターンの数（追加のターンも数える）
@@ -233,6 +238,13 @@ class Game {
             this.supply.potion = ALL_CARDS.POTION.count;
         }
 
+        // 習性・イベントで使うサプライ外の山（馬など）
+        this.landscapes.forEach(id => {
+            Object.entries(this.getLandscape(id)?.nonSupplyPiles ?? {}).forEach(([pileId, count]) => {
+                this.nonSupply[pileId] = count;
+            });
+        });
+
         // ランドマークなどの準備（勝利点トークンを置くなど）
         this.landscapes.forEach(id => this.getLandscape(id)?.setup?.(this));
 
@@ -362,6 +374,8 @@ class Game {
         cost -= inPlay('bridge_troll');
         // 運河：運河を持つプレイヤーのターンの間、コスト-1
         if (player.projects.has('canal')) cost -= 1;
+        // 軍馬・漁師・旅人：自分のターンの間、条件でコストが変わる
+        cost -= this.getSpecialCostReduction(data, player);
         // 渡し船：-2 コストのトークンを置いた山のカードは、そのプレイヤーのターンにコスト-2
         if (data.id && player.pileTokens.minusCost && (this.pileOf[data.id] ?? data.id) === player.pileTokens.minusCost) cost -= 2;
         if (isAction) cost -= 2 * inPlay('quarry');
@@ -586,10 +600,14 @@ class Game {
     // 夜フェイズに移る（購入フェーズから。購入フェーズの終わりの効果を先に起こす）
     enterNightPhase() {
         if (this.isAwaitingPrompt()) return false;
-        if (this.phase === 'action') this.enterBuyPhase();
-        if (this.phase !== 'buy' || this.pendingPrompt) {
+        if (this.phase !== 'action' && this.phase !== 'buy') {
             this.reject('購入フェーズの後に夜フェイズに移れます');
             return false;
+        }
+        // アクションフェーズからなら、先に購入フェーズに移る（財宝の選択待ちになれば、そこで止まる。操作は受け付けたものとする）
+        if (this.phase === 'action') {
+            this.enterBuyPhase();
+            if (this.pendingPrompt) return true;
         }
         const player = this.getCurrentPlayer();
         this.runNext(...this.endOfBuyPhaseSteps(player), () => {
@@ -952,6 +970,29 @@ class Game {
             }));
         }
 
+        // 追放マットに同じカードがあれば、捨て札にしてもよい
+        steps.push(() => this.promptDiscardExiled(player, card));
+
+        // 馬屋：このターン、コスト4以上のカードを獲得するたびに馬を獲得する
+        if (isCurrent && this.turnState.liveries > 0 && this.getCost(card) >= 4 && card.id !== 'horse') {
+            for (let i = 0; i < this.turnState.liveries; i++) {
+                steps.push(() => {
+                    if (this.gainFromNonSupply(player, 'horse')) this.log(`${player.name}は馬屋で馬を獲得しました`);
+                });
+            }
+        }
+
+        // 門番：他のプレイヤーが、追放マットにないアクションか財宝を獲得したら、それを追放させる
+        if (card.isType(CARD_TYPES.ACTION) || card.isType(CARD_TYPES.TREASURE)) {
+            this.getOtherPlayers(player).filter(owner => owner.gatekeeperVictims.has(player)).forEach(() => {
+                steps.push(() => {
+                    if (player.mats.exile.some(exiled => exiled.id === card.id)) return;
+                    if (!player.getAllCards().includes(card) || player.mats.exile.includes(card)) return;
+                    this.exileCard(player, card);
+                });
+            });
+        }
+
         // 貨物船：このターンに1回、獲得したカードを脇に置き、次のターンの開始時に手札に加えてよい
         if (isCurrent && this.turnState.cargoShips.length > 0) {
             steps.push(() => {
@@ -985,13 +1026,13 @@ class Game {
 
         // ティアラ・旅の祭り・追跡者（場にある間）：獲得したカードを山札の上に置いてもよい
         const tracker = player.playArea.some(played => played.id === 'tracker');
-        if ((isCurrent && (this.turnState.tiara || this.turnState.travellingFair)) || tracker) {
+        if ((isCurrent && (this.turnState.tiara || this.turnState.travellingFair || this.turnState.sealGains)) || tracker) {
             steps.push(() => {
                 if (!player.discard.includes(card) && !player.hand.includes(card)) return;
                 this.promptConfirm({
                     player,
                     card,
-                    title: this.turnState.tiara ? 'ティアラ' : (this.turnState.travellingFair ? '旅の祭り' : '追跡者'),
+                    title: this.turnState.tiara ? 'ティアラ' : (this.turnState.travellingFair ? '旅の祭り' : (this.turnState.sealGains ? 'アザラシの習性' : '追跡者')),
                     message: `獲得した${card.name}を山札の上に置きますか？`,
                     yesLabel: '山札の上に置く',
                     noLabel: 'そのままにする',
@@ -1076,13 +1117,6 @@ class Game {
             return false;
         }
 
-        // 負債があれば先に返す。返しきれなければ購入できない
-        this.payOffDebt(player);
-        if (player.debt > 0) {
-            this.reject('負債を返すまで購入できません');
-            return false;
-        }
-
         // ALL_CARDSには大文字のID、サプライには小文字のIDで参照する（中身の混ざった山は一番上のカード）
         const { pileId, cardId: topCardId } = this.resolvePile(cardId);
         if (!topCardId || !this.supply[pileId] || this.supply[pileId] <= 0) {
@@ -1098,9 +1132,15 @@ class Game {
             return false;
         }
 
-        const cost = this.getCost(data);
-        if (player.coins < cost) {
-            this.reject(`${data.name}を購入するためのコインが足りません（必要: ${cost}, 所持: ${player.coins}）`);
+        let cost = this.getCost(data);
+        // 動物見本市：コストを払う代わりに、手札のアクションカードを1枚廃棄してもよい（コインが足りないときに使う）
+        const payByTrashing = data.altPayment && player.coins < cost && player.hand.some(card => card.isType(CARD_TYPES.ACTION));
+        if (payByTrashing) cost = 0;
+        // 負債は購入の前に財宝で返すので、返した後の財宝で足りるかを見る（断るときは状態を変えない）
+        if (player.coins - player.debt < cost) {
+            this.reject(player.debt > player.coins
+                ? '負債を返すまで購入できません'
+                : `${data.name}を購入するためのコインが足りません（必要: ${cost}, 所持: ${player.coins - player.debt}）`);
             return false;
         }
         const potionCost = this.getPotionCost(data);
@@ -1125,6 +1165,8 @@ class Game {
         // カードを購入（獲得で起きる効果のログより先に購入を記録する）
         // 購入時の効果（超過支払い・隠し財産など）を先に処理してから獲得する
         // 超過支払いの額は購入するときに決め、効果は獲得した後で起こす（獲得したカードを使う効果があるため）
+        // 購入すると決まってから、負債を返す
+        this.payOffDebt(player);
         player.buys--;
         player.coins -= cost;
         player.potions -= potionCost;
@@ -1138,6 +1180,18 @@ class Game {
         let overpaid = 0;
         let gained = null;
         this.runNext(
+            () => {
+                if (!payByTrashing) return;
+                this.promptSelect({
+                    player, cards: player.hand.filter(card => card.isType(CARD_TYPES.ACTION)), min: 1, max: 1,
+                    title: data.name, message: 'コストを払う代わりに廃棄するアクションカードを選んでください。', confirmLabel: '廃棄する', purpose: 'animal-fair-pay',
+                    callback: ([index]) => {
+                        const actions = player.hand.filter(card => card.isType(CARD_TYPES.ACTION));
+                        const trashed = this.trashFromHand(player, [player.hand.indexOf(actions[index])]);
+                        if (trashed.length > 0) this.log(`${player.name}は${trashed[0].name}を廃棄して支払いました`);
+                    }
+                });
+            },
             () => {
                 if (data.overpay && player.coins > 0) this.promptOverpay(player, data, (amount) => { overpaid = amount; });
             },
@@ -1287,6 +1341,13 @@ class Game {
 
     // クリーンアップを行い、次のターンへ進める
     finishTurn(player) {
+        // カエルの習性：このターンに使ったカードは、場から捨て札にするとき山札の上に置く
+        player.playArea.filter(card => card.frogTurn === this.turnCount && !player.hasPendingDuration(card)).forEach(card => {
+            player.playArea.splice(player.playArea.indexOf(card), 1);
+            player.deck.unshift(card);
+            this.log(`${player.name}はカエルの習性で${card.name}を山札の上に置きました`);
+        });
+
         // 宝物庫：購入フェーズで勝利点カードを獲得していなければ山札の上に戻す（常に得なので自動で戻す）
         if (!player.gainedVictoryInBuyPhase) {
             player.playArea.filter(card => card.id === 'treasury').forEach(card => {
@@ -1317,10 +1378,11 @@ class Game {
         // 旗：持っていれば、手札を引くときに1枚多く引く
         player.cleanup((takesExtraTurn ? 3 : 5) + this.turnState.expeditionDraw + (this.hasArtifact(player, 'flag') ? 1 : 0));
         player.gainedLastTurn = player.gainedThisTurn;
-        // 川の恵み：ターンの終わりにカードを引く
+        player.trashedLastTurn = player.trashedThisTurn;
+        // 川の恵み・リスの習性：ターンの終わりにカードを引く
         if (this.turnState.riverDraw > 0) {
             player.drawCards(this.turnState.riverDraw);
-            this.log(`${player.name}は川の恵みでカードを${this.turnState.riverDraw}枚引きました`);
+            this.log(`${player.name}はターンの終わりにカードを${this.turnState.riverDraw}枚引きました`);
         }
         // 忠犬：脇に置いたカードを、ターンの終わりに手札に戻す
         this.turnState.hounds.forEach(({ player: owner, card }) => {
@@ -1428,6 +1490,14 @@ class Game {
             return;
         }
         this.missionTurn = false;
+        // 好機：このターンの後に追加のターンを行う
+        const extra = this.extraTurns.shift();
+        if (extra) {
+            this.currentPlayerIndex = this.players.indexOf(extra);
+            this.log(`${extra.name}は追加のターンを行います`);
+            this.startTurn(extra);
+            return;
+        }
         const mission = this.missions.shift();
         if (mission) {
             this.missionTurn = true;
@@ -1460,9 +1530,12 @@ class Game {
         this.turnCount++;
         this.previousTurnPlayer = this.currentTurnPlayer;
         this.currentTurnPlayer = player;
+        player.noMoreActions = false;
         player.actions = 1;
         player.buys = 1;
         player.gainedThisTurn = [];
+        player.trashedThisTurn = 0;
+        player.gatekeeperVictims.clear();
         player.gainedVictoryInBuyPhase = false;
         player.hasTrashedForCorsair = false;
         this.turnState = createTurnState();
@@ -1714,12 +1787,27 @@ class Game {
 
     // カードをプレイする直前に起きる効果（浮浪児：場の浮浪児を廃棄して傭兵を獲得してもよい）
     getBeforePlaySteps(player, card) {
-        if (!card.isType(CARD_TYPES.ATTACK)) return [];
-        return player.playArea
+        const steps = [];
+        // 窯：このターン次にカードをプレイするとき、先に同じカードを獲得してよい
+        if (player === this.getCurrentPlayer() && this.turnState.kilns > 0) {
+            this.turnState.kilns--;
+            const pileId = this.pileOf[card.id] ?? card.id;
+            if (this.supply[pileId] > 0) {
+                steps.push(() => this.promptConfirm({
+                    player, card, title: '窯', message: `${card.name}を1枚獲得しますか？`,
+                    yesLabel: '獲得する', noLabel: '獲得しない', purpose: 'kiln',
+                    callback: (yes) => {
+                        if (yes && this.gainCardFromSupply(player, card.id)) this.log(`${player.name}は窯で${card.name}を獲得しました`);
+                    }
+                }));
+            }
+        }
+        if (!card.isType(CARD_TYPES.ATTACK)) return steps;
+        return [...steps, ...player.playArea
             .filter(other => other !== card && other.onOtherAttackPlayed)
             .map(other => () => {
                 if (player.playArea.includes(other)) other.onOtherAttackPlayed(player, this, other, card);
-            });
+            })];
     }
 
     // 廃棄置き場か、支配のターン中に脇に置いた廃棄のカードから取り出す（城砦・墓暴きなど）
@@ -1743,6 +1831,7 @@ class Game {
             this.trash.push(card);
         }
         this.runLandscapeHooks('onTrashAny', player, card);
+        player.trashedThisTurn++;
         // 司祭：このターンの残りの間、カードを廃棄するたびに財宝+2
         if (player === this.getCurrentPlayer() && this.turnState.priests > 0) {
             player.coins += 2 * this.turnState.priests;
@@ -1971,6 +2060,7 @@ function uniqueById(cards) {
 // イベントなど（カードではない横長の札）と、夜想曲の祝福・呪詛などの処理を加える
 installLandscapes(Game);
 installNocturne(Game);
+installMenagerie(Game);
 
 // クラスをエクスポート
 export default Game;

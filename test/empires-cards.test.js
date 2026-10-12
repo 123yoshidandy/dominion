@@ -65,13 +65,14 @@ describe('帝国', () => {
             expect(game.buyCard('engineer')).toBe(true);
             expect(player.debt).toBe(4);
             expect(game.buyCard('copper')).toBe(false);
-            expect(player.debt).toBe(3); // 銅貨の1で返した
+            // 断られた操作は状態を変えない（負債も返さない。返すと操作の記録から再現できなくなる）
+            expect(player.debt).toBe(4);
             expect(game.lastError).toContain('負債');
             passTurns();
-            toBuyPhase(['GOLD', 'GOLD']);
+            toBuyPhase(['GOLD', 'GOLD', 'COPPER']);
             expect(game.buyCard('silver')).toBe(true);
             expect(player.debt).toBe(0);
-            expect(player.coins).toBe(6 - 3 - 3); // 負債3を返して、銀貨（3）を買った残り
+            expect(player.coins).toBe(7 - 4 - 3); // 負債4を返して、銀貨（3）を買った残り
         });
 
         it('ビューに負債とコストの負債が入る', () => {
