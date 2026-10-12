@@ -70,10 +70,8 @@ class UIController {
             this.modal.handleCloseButton();
         });
 
-        // ホームに戻る（確認してから）・遊び方を見る。閉じたらゲーム画面と選択を出し直す
-        this.elements.homeBtn.addEventListener('click', () => {
-            this.modal.showHomeConfirm({ online: this.isOnline(), onCancel: () => this.restoreGameScreen() });
-        });
+        // ホームに戻る（すぐにタイトル画面へ）・遊び方を見る（閉じたらゲーム画面と選択を出し直す）
+        this.elements.homeBtn.addEventListener('click', () => this.goHome());
         this.elements.helpBtn.addEventListener('click', () => {
             this.modal.showHelp({ onClose: () => this.restoreGameScreen() });
         });

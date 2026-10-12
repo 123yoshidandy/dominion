@@ -19,6 +19,24 @@ const cardSetSummary = (sets) => {
     return cardSetLabel(sets);
 };
 
+// 拡張を選ぶ画面に出す、各セットの難しさ（★1〜3）と、そのセットならではのルールの説明
+const CARD_SET_INFO = {
+    base: { level: 1, text: '最初の1セット。特別なルールはなく、ドミニオンの基本だけで遊べる' },
+    intrigue: { level: 1, text: '選択肢から選ぶカードや、勝利点とアクションを兼ねるカード。新しいルールはほとんどない' },
+    seaside: { level: 2, text: '持続カード：次のターンの開始時まで場に残り、もう一度効果がある。島などのマットも使う' },
+    prosperity: { level: 2, text: '白金貨と植民地で、大きな額の長めのゲームになる。勝利点トークン、効果のある財宝' },
+    hinterlands: { level: 2, text: '獲得したとき・捨て札にしたときなど、プレイ以外のときに起きる効果が多い' },
+    cornucopia_guilds: { level: 2, text: '財源（あとで使えるコイン）、超過支払い（多く払うと追加の効果）、褒賞、いろいろなカードを集めると得なカード' },
+    alchemy: { level: 2, text: 'コストにポーションが必要なカード。ポーションを買ってから強いカードを狙う' },
+    dark_ages: { level: 3, text: '廃棄がテーマ。廃墟・避難所・騎士・略奪品など、決まった中身の山やサプライ外のカードが多い' },
+    adventures: { level: 3, text: 'イベント（購入する効果）、酒場マットに置いて後で呼び出すカード、山に置くトークン、上位のカードに変わるトラベラー' },
+    empires: { level: 3, text: '負債（あとで返すコスト）、勝利点トークン、得点や獲得に効くランドマーク、2種で1山のカード' },
+    nocturne: { level: 3, text: '購入の後の夜フェイズ、ランダムに受ける祝福と呪詛、初期デッキに入る家宝' },
+    renaissance: { level: 2, text: '村人（あとで使えるアクション）、1人1回キューブを置くプロジェクト、持ち主が移るアーティファクト' },
+    menagerie: { level: 3, text: '追放マット、馬、アクションの代わりに使える習性、イベント' },
+    allies: { level: 3, text: '連絡役で恩恵トークンを集めて同盟の効果を使う。4種で1山の山は「回す」と一番上が変わる' }
+};
+
 // 利用者が入力した文字をそのまま HTML に入れないようにする
 const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (char) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -139,20 +157,28 @@ class UIModal {
         this.elements.modalTitle.textContent = '使う拡張';
         this.elements.modalBody.innerHTML = `
             <div class="setup-form card-set-screen">
-                <p class="card-set-note">選んだセットから、ランダムに10種の王国カードを使います。</p>
+                <p class="card-set-note">選んだセットから、ランダムに10種の王国カードを使います。★は難しさの目安です。</p>
                 <div class="card-set-actions">
                     <button type="button" class="link-button" data-select-sets="all">すべて選ぶ</button>
                     <button type="button" class="link-button" data-select-sets="base">基本のみ</button>
                 </div>
                 <div class="card-set-list">
                     ${Object.values(CARD_SETS).map(set => `
-                        <label class="card-set-check">
+                        <label class="card-set-check card-set-item">
                             <input type="checkbox" value="${set}" ${selected.includes(set) ? 'checked' : ''}>
-                            <span>${CARD_SET_LABELS[set]}</span>
+                            <span class="card-set-text">
+                                <span class="card-set-head">
+                                    <b>${CARD_SET_LABELS[set]}</b>
+                                    <span class="card-set-level" title="難しさ">${'★'.repeat(CARD_SET_INFO[set].level)}${'☆'.repeat(3 - CARD_SET_INFO[set].level)}</span>
+                                </span>
+                                <span class="card-set-desc">${CARD_SET_INFO[set].text}</span>
+                            </span>
                         </label>
                     `).join('')}
                 </div>
-                <button id="card-sets-done-btn" class="primary">決定（<span class="set-summary"></span>）</button>
+                <div class="card-set-footer">
+                    <button id="card-sets-done-btn" class="primary">決定（<span class="set-summary"></span>）</button>
+                </div>
             </div>
         `;
 
@@ -247,23 +273,6 @@ class UIModal {
         this.openModal({ closable: true, kind: 'help', onClose: close, backdrop });
     }
 
-    // ゲーム画面からホーム（タイトル画面）に戻る前の確認
-    showHomeConfirm({ online, onCancel }) {
-        this.elements.modalTitle.textContent = 'ホームに戻りますか？';
-        this.elements.modalBody.innerHTML = `
-            <p class="prompt-text">${online
-                ? '部屋を出てタイトル画面に戻ります。あなたの席は、以後CPUが代わりに続けます。'
-                : '今のゲームを終えて、タイトル画面に戻ります。このゲームの続きはできません。'}</p>
-            <div class="prompt-buttons">
-                <button id="home-cancel-btn" class="primary secondary">ゲームを続ける</button>
-                <button id="home-ok-btn" class="primary danger">ホームに戻る</button>
-            </div>
-        `;
-        document.getElementById('home-cancel-btn').addEventListener('click', onCancel);
-        document.getElementById('home-ok-btn').addEventListener('click', () => this.uiController.goHome());
-        this.openModal({ closable: true, kind: 'home-confirm', onClose: onCancel });
-    }
-    
     // ===== オンライン対戦 =====
     
     // 名前を入れて、部屋を作るか部屋コードで参加する

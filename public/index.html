@@ -32,10 +32,6 @@
     </header>
 
     <main id="table">
-        <section id="players-info">
-            <!-- プレイヤー情報はJavaScriptで動的に生成されます -->
-        </section>
-
         <section id="supply-section" class="panel">
             <h2>サプライ <span class="hint">タップで購入・長押しで説明</span></h2>
             <div id="supply-piles">
@@ -43,10 +39,17 @@
             </div>
         </section>
 
-        <details id="game-log" class="panel">
-            <summary>ゲームログ</summary>
-            <div id="log-entries"></div>
-        </details>
+        <!-- 横長の画面では右の列（サプライとは別にスクロールする）。縦長の画面ではプレイヤーをサプライの上に出す -->
+        <div id="table-side">
+            <section id="players-info">
+                <!-- プレイヤー情報はJavaScriptで動的に生成されます -->
+            </section>
+
+            <details id="game-log" class="panel">
+                <summary>ゲームログ</summary>
+                <div id="log-entries"></div>
+            </details>
+        </div>
     </main>
 
     <!-- 場札はサプライと手札のあいだに常に表示する -->
