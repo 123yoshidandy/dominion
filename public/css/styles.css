@@ -1844,6 +1844,11 @@ button.primary.secondary {
 .modal[data-kind="setup"] {
     align-items: stretch;
     justify-content: stretch;
+}
+
+/* タイトル画面と、そこから開く画面（拡張・遊び方）は、フェルトの背景にする */
+.modal[data-kind="setup"],
+.modal[data-backdrop="title"] {
     background:
         radial-gradient(ellipse at 28% 38%, rgba(230, 184, 79, 0.16), transparent 55%),
         radial-gradient(ellipse at 50% 50%, var(--felt-light), var(--felt-dark) 80%);
@@ -2030,50 +2035,33 @@ button.primary.secondary {
     white-space: nowrap;
 }
 
-/* ===== 使う拡張のプルダウン（トップ画面とロビーで共通） ===== */
+/* ===== 使う拡張（トップ画面とロビーのボタン、選ぶ画面） ===== */
 
-.card-set-picker {
-    position: relative;
-}
-
-.setup-form .card-set-picker:not(.setup-row .card-set-picker) {
-    margin-top: 12px;
-}
-
-.set-dropdown {
-    flex: 1;
+.card-set-field {
     min-width: 0;
 }
 
-.set-dropdown summary {
+.setup-form .card-set-field:not(.setup-row .card-set-field) {
+    margin-top: 12px;
+}
+
+.card-set-button {
     display: flex;
+    flex: 1;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
+    min-width: 0;
     min-height: 42px;
     padding: 8px 10px;
-    list-style: none;
+    font: inherit;
     font-size: 15px;
     font-weight: 700;
+    text-align: left;
     color: var(--ink);
     background: #fff;
     border: 1px solid #d6ccb4;
     border-radius: 8px;
     cursor: pointer;
-}
-
-.set-dropdown summary::-webkit-details-marker {
-    display: none;
-}
-
-.set-dropdown summary::after {
-    content: '▾';
-    margin-left: auto;
-    color: var(--ink-muted);
-}
-
-.set-dropdown[open] summary {
-    border-color: var(--primary);
-    box-shadow: 0 0 0 2px rgba(47, 122, 85, 0.25);
 }
 
 .set-summary {
@@ -2084,51 +2072,147 @@ button.primary.secondary {
     white-space: nowrap;
 }
 
-.set-menu {
-    position: absolute;
-    z-index: 20;
-    top: calc(100% + 4px);
-    right: 0;
-    width: min(360px, calc(100vw - 32px));
-    max-height: min(320px, 70vh);
-    max-height: min(320px, 70dvh);
-    padding: 10px;
-    overflow-y: auto;
-    background: var(--paper);
-    border: 1px solid #d6ccb4;
-    border-radius: 12px;
-    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+.card-set-button-change {
+    flex: none;
+    font-size: 12px;
+    color: var(--primary);
 }
 
-.set-menu-note {
-    margin: 0 0 4px;
-    font-size: 12px;
-    font-weight: 500;
+.card-set-button-change::after {
+    content: ' ›';
+}
+
+.card-set-note {
+    margin: 0 0 6px;
+    font-size: 13px;
     color: var(--ink-muted);
 }
 
-.set-menu-actions {
+.card-set-actions {
     display: flex;
     gap: 14px;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
 }
 
-.set-menu-actions .link-button {
+.card-set-actions .link-button {
     margin: 0;
     padding: 4px 0;
-    font-size: 13px;
+    font-size: 14px;
 }
 
-.set-menu-list {
+.card-set-list {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
     gap: 6px;
 }
 
-.set-menu-list .card-set-check {
-    padding: 7px 8px;
-    font-size: 13px;
+.card-set-list .card-set-check {
+    padding: 8px;
+    font-size: 14px;
     white-space: nowrap;
+}
+
+#card-sets-done-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    width: 100%;
+    margin-top: 12px;
+}
+
+#card-sets-done-btn .set-summary {
+    flex: 0 1 auto;
+}
+
+/* ===== ボタンの色 ===== */
+
+/* オンラインで遊ぶ：ゲーム開始（緑）と並べるので、別の色で塗る */
+button.primary.online {
+    color: #fff;
+    background: #3f6fa6;
+}
+
+/* ホームに戻るなど、ゲームを終える操作 */
+button.primary.danger {
+    color: #fff;
+    background: var(--danger);
+}
+
+/* ===== 英字のロゴ ===== */
+
+.title-logo,
+#topbar h1 {
+    font-family: 'Cinzel', 'Trajan Pro', Georgia, 'Times New Roman', serif;
+}
+
+.title-help-btn {
+    margin-top: 12px;
+    padding: 6px 16px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--gold);
+    background: rgba(0, 0, 0, 0.18);
+    border: 1px solid rgba(230, 184, 79, 0.6);
+    border-radius: 999px;
+    cursor: pointer;
+}
+
+/* ===== 遊び方 ===== */
+
+.modal[data-kind="help"] .modal-content {
+    max-width: 720px;
+}
+
+.help-section {
+    margin-bottom: 8px;
+    background: var(--paper-dim);
+    border-radius: 10px;
+}
+
+.help-section summary {
+    padding: 10px 12px;
+    font-size: 15px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.help-body {
+    padding: 0 14px 10px;
+    font-size: 14px;
+    line-height: 1.65;
+}
+
+.help-body p,
+.help-body ol,
+.help-body ul {
+    margin: 0 0 8px;
+}
+
+.help-body ol,
+.help-body ul {
+    padding-left: 1.3em;
+}
+
+.help-terms {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 12px;
+    margin: 0 0 8px;
+}
+
+.help-terms dt {
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.help-terms dd {
+    margin: 0;
+}
+
+#help-close-btn {
+    width: 100%;
 }
 
 /* スマホの横画面：高さが足りないので、絵と入力欄を小さくしてスクロールなしで収める */
@@ -2177,7 +2261,20 @@ button.primary.secondary {
         padding: 5px 8px;
     }
 
-    .title-panel .set-dropdown summary {
+    .card-set-list .card-set-check {
+        padding: 5px 8px;
+    }
+
+    .card-set-note,
+    .card-set-actions {
+        margin-bottom: 2px;
+    }
+
+    #card-sets-done-btn {
+        margin-top: 8px;
+    }
+
+    .title-panel .card-set-button {
         min-height: 36px;
         padding: 5px 10px;
     }
@@ -2199,9 +2296,8 @@ button.primary.secondary {
         height: 40px;
     }
 
-    .title-panel .set-menu {
-        max-height: calc(100vh - 110px);
-        max-height: calc(100dvh - 110px);
+    .title-logo {
+        letter-spacing: 0.08em;
     }
 }
 

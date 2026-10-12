@@ -40,6 +40,7 @@ class UIModal {
     showGameSetup() {
         // タイトル画面（左にタイトルと絵、右に設定）として全画面に表示する
         this.elements.modalTitle.textContent = '';
+        const cardSets = this.uiController.settings.cardSets.split('+');
 
         const setupHtml = `
             <div class="title-screen">
@@ -52,7 +53,7 @@ class UIModal {
                                 ${[2, 3, 4].map(count => `<option value="${count}" ${this.uiController.settings.playerCount === count ? 'selected' : ''}>${count}人</option>`).join('')}
                             </select>
                         </label>
-                        ${this.createCardSetChecksHtml('card-sets', this.uiController.settings.cardSets.split('+'))}
+                        ${this.createCardSetButtonHtml('card-sets-btn', cardSets)}
                     </div>
 
                     <div id="player-names"></div>
@@ -61,7 +62,7 @@ class UIModal {
 
                     <div class="title-buttons">
                         <button id="start-game-btn" class="primary">ゲーム開始</button>
-                        <button id="online-btn" class="primary secondary">オンラインで遊ぶ</button>
+                        <button id="online-btn" class="primary online">オンラインで遊ぶ</button>
                     </div>
                 </div>
             </div>
@@ -79,20 +80,25 @@ class UIModal {
         });
 
         this.setupStackHandToggle('setup-stack-hand');
-        
-        this.setupCardSetChecks('card-sets', (sets) => this.uiController.updateSettings({ cardSets: sets.join('+') }));
-        
-        // ゲーム開始ボタンのイベント
-        const startGameBtn = document.getElementById('start-game-btn');
-        startGameBtn.addEventListener('click', () => {
-            this.uiController.startGame();
-        });
+
+        // 拡張は別の画面で選び、決定したらタイトル画面に戻る
+        document.getElementById('card-sets-btn').addEventListener('click', () => this.showCardSetPicker({
+            selected: cardSets,
+            backdrop: 'title',
+            onDone: (sets) => {
+                this.uiController.updateSettings({ cardSets: sets.join('+') });
+                this.showGameSetup();
+            }
+        }));
+
+        document.getElementById('start-game-btn').addEventListener('click', () => this.uiController.startGame());
         document.getElementById('online-btn').addEventListener('click', () => this.showOnlineMenu());
+        document.getElementById('title-help-btn').addEventListener('click', () => this.showHelp({ backdrop: 'title', onClose: () => this.showGameSetup() }));
 
         // モーダルを表示（閉じると何も操作できなくなるので×は出さない）
         this.openModal({ closable: false, kind: 'setup' });
     }
-    
+
     // タイトル画面の左側：タイトルと、扇形に広げたカード（既存のカードのイラストを使う）
     createTitleHeroHtml() {
         const cards = ['village', 'gold', 'province'].map((id, index) => `
@@ -107,71 +113,155 @@ class UIModal {
                     <div class="title-card title-card-back">${CARD_BACK}</div>
                     ${cards}
                 </div>
-                <h1 class="title-logo">ドミニオン</h1>
+                <h1 class="title-logo">DOMINION</h1>
                 <p class="title-sub">デッキ構築型カードゲーム</p>
+                <button id="title-help-btn" class="title-help-btn">？ 遊び方</button>
             </div>
         `;
     }
 
-    // 使うカードのセットを選ぶプルダウン（設定とオンラインのロビーで共通）。開くと各セットのチェックが出る
-    createCardSetChecksHtml(id, selected) {
+    // 使う拡張を表示し、押すと選ぶ画面を開くボタン（タイトル画面とロビーで共通）
+    createCardSetButtonHtml(id, selected) {
         return `
-            <div class="field card-set-picker" id="${id}">
+            <div class="field card-set-field">
                 <span>拡張</span>
-                <details class="set-dropdown">
-                    <summary><span class="set-summary">${escapeHtml(cardSetSummary(selected))}</span></summary>
-                    <div class="set-menu">
-                        <p class="set-menu-note">選んだセットから、ランダムに10種を使います</p>
-                        <div class="set-menu-actions">
-                            <button type="button" class="link-button" data-select-sets="all">すべて</button>
-                            <button type="button" class="link-button" data-select-sets="base">基本のみ</button>
-                        </div>
-                        <div class="set-menu-list">
-                            ${Object.values(CARD_SETS).map(set => `
-                                <label class="card-set-check">
-                                    <input type="checkbox" value="${set}" ${selected.includes(set) ? 'checked' : ''}>
-                                    <span>${CARD_SET_LABELS[set]}</span>
-                                </label>
-                            `).join('')}
-                        </div>
-                    </div>
-                </details>
+                <button type="button" id="${id}" class="card-set-button">
+                    <span class="set-summary">${escapeHtml(cardSetSummary(selected))}</span>
+                    <span class="card-set-button-change">変更</span>
+                </button>
             </div>
         `;
     }
 
-    // チェックが変わったら、選ばれているセットを渡す。すべて外すことはできない（最後の1つは外せない）
-    // プルダウンの外を押したら閉じる
-    setupCardSetChecks(id, onChange) {
-        const root = document.getElementById(id);
-        const details = root.querySelector('details');
-        const summary = root.querySelector('.set-summary');
-        const inputs = Array.from(root.querySelectorAll('input'));
-        const selected = () => inputs.filter(input => input.checked).map(input => input.value);
-        const changed = () => {
-            summary.textContent = cardSetSummary(selected());
-            onChange(selected());
-        };
+    // 使う拡張を選ぶ画面。すべて外すことはできない。決定すると onDone に選んだセットを渡す
+    // backdrop: 'title' ならタイトル画面と同じ背景にする（後ろのゲーム画面を見せない）
+    showCardSetPicker({ selected, onDone, backdrop = null }) {
+        this.elements.modalTitle.textContent = '使う拡張';
+        this.elements.modalBody.innerHTML = `
+            <div class="setup-form card-set-screen">
+                <p class="card-set-note">選んだセットから、ランダムに10種の王国カードを使います。</p>
+                <div class="card-set-actions">
+                    <button type="button" class="link-button" data-select-sets="all">すべて選ぶ</button>
+                    <button type="button" class="link-button" data-select-sets="base">基本のみ</button>
+                </div>
+                <div class="card-set-list">
+                    ${Object.values(CARD_SETS).map(set => `
+                        <label class="card-set-check">
+                            <input type="checkbox" value="${set}" ${selected.includes(set) ? 'checked' : ''}>
+                            <span>${CARD_SET_LABELS[set]}</span>
+                        </label>
+                    `).join('')}
+                </div>
+                <button id="card-sets-done-btn" class="primary">決定（<span class="set-summary"></span>）</button>
+            </div>
+        `;
+
+        const body = this.elements.modalBody;
+        const inputs = Array.from(body.querySelectorAll('.card-set-list input'));
+        const summary = body.querySelector('#card-sets-done-btn .set-summary');
+        const selectedSets = () => inputs.filter(input => input.checked).map(input => input.value);
+        const refresh = () => { summary.textContent = cardSetSummary(selectedSets()); };
         inputs.forEach(input => input.addEventListener('change', () => {
-            if (selected().length === 0) {
-                input.checked = true;
-                return;
-            }
-            changed();
+            if (selectedSets().length === 0) input.checked = true;
+            refresh();
         }));
-        root.querySelectorAll('[data-select-sets]').forEach(button => button.addEventListener('click', () => {
+        body.querySelectorAll('[data-select-sets]').forEach(button => button.addEventListener('click', () => {
             const all = button.dataset.selectSets === 'all';
             inputs.forEach(input => { input.checked = all || input.value === CARD_SETS.BASE; });
-            changed();
+            refresh();
         }));
-        const closeOutside = (event) => {
-            if (!details.isConnected) {
-                document.removeEventListener('pointerdown', closeOutside);
-                return;
-            }
-            if (details.open && !details.contains(event.target)) details.open = false;
-        };
-        document.addEventListener('pointerdown', closeOutside);
+        document.getElementById('card-sets-done-btn').addEventListener('click', () => onDone(selectedSets()));
+        refresh();
+
+        this.openModal({ closable: false, kind: 'card-sets', backdrop });
+    }
+
+    // ===== 遊び方 =====
+
+    // 遊び方の説明。閉じると onClose を呼ぶ（タイトル画面に戻る・ゲーム画面に戻る）
+    showHelp({ onClose, backdrop = null }) {
+        this.elements.modalTitle.textContent = '遊び方';
+        const section = (title, body, open = false) => `
+            <details class="help-section" ${open ? 'open' : ''}>
+                <summary>${title}</summary>
+                <div class="help-body">${body}</div>
+            </details>
+        `;
+        this.elements.modalBody.innerHTML = `
+            <div class="help-content">
+                ${section('ゲームの目的', `
+                    <p>自分のデッキ（山札・手札・捨て札）を、カードを買って強くしていきます。ゲームが終わったとき、デッキの勝利点がいちばん多い人の勝ちです。</p>
+                    <p>最初は銅貨7枚と屋敷3枚の10枚から始め、毎ターン5枚を手札に引きます。</p>
+                `, true)}
+                ${section('ターンの流れ', `
+                    <ol>
+                        <li><b>アクション</b>：手札のアクションカードを1枚プレイできます（カードの効果でアクションが増えれば、さらにプレイできます）。</li>
+                        <li><b>購入</b>：手札の財宝をプレイしてコインを出し、サプライからカードを1枚買えます（購入が増えれば何枚でも）。「購入へ」を押すと、手札の財宝をまとめてプレイします。</li>
+                        <li><b>クリーンアップ</b>：手札と場のカードを捨て札にし、山札から5枚引いて、次の人の番になります。</li>
+                    </ol>
+                    <p>山札がなくなったら、捨て札をシャッフルして山札にします。買ったカードは捨て札に入るので、何ターンか後に手札に来ます。</p>
+                `)}
+                ${section('操作のしかた', `
+                    <ul>
+                        <li>手札・サプライのカードを<b>タップ</b>するとプレイ・購入します。</li>
+                        <li><b>長押し</b>（PCでは右クリック）でカードの説明を見られます。</li>
+                        <li>購入回数を使い切ると、自動でターンを終えます。買わずに終えるときは「ターン終了」を押します。</li>
+                        <li>カードの効果で選ぶものがあるときは、画面に選択が出ます。</li>
+                        <li>画面上部の「⌂」でホーム（タイトル）に戻り、「⚙」で表示の設定を変えられます。</li>
+                    </ul>
+                `)}
+                ${section('カードの種類', `
+                    <ul>
+                        <li><b>財宝</b>（銅貨・銀貨・金貨など）：購入フェーズにプレイしてコインを出します。</li>
+                        <li><b>勝利点</b>（屋敷・公領・属州など）：ゲームの終わりに点になります。手札では役に立ちません。</li>
+                        <li><b>アクション</b>：アクションフェーズにプレイして効果を使います。毎ゲーム、10種がサプライに並びます。</li>
+                        <li><b>呪い</b>：-1点。他のプレイヤーのアタックで押しつけられます。</li>
+                    </ul>
+                `)}
+                ${section('ゲームの終わり', `
+                    <p>属州の山がなくなるか、サプライの山が3つなくなったら、そのターンの終わりでゲームが終わります。白金貨・植民地を使うゲームでは、植民地の山がなくなっても終わります。</p>
+                `)}
+                ${section('拡張のしくみ（用語）', `
+                    <dl class="help-terms">
+                        <dt>持続</dt><dd>次のターンの開始時まで場に残り、そのときにも効果があります。</dd>
+                        <dt>リアクション</dt><dd>他の人のアタックなどのとき、手札から公開・プレイできます。</dd>
+                        <dt>トークン・マット</dt><dd>勝利点トークン・財源・村人・恩恵などは、画面上部と各プレイヤーの欄に数が出ます。</dd>
+                        <dt>イベントなど</dt><dd>サプライの下に並ぶ横長の札です。イベント・プロジェクトは購入でき、ランドマーク・習性・同盟などはずっと効果があります。長押しで説明を見られます。</dd>
+                        <dt>夜</dt><dd>夜のカードが手札にあれば、購入の後に「夜へ」で夜フェイズに移ってプレイできます。</dd>
+                    </dl>
+                    <p>使う拡張は、タイトル画面の「拡張」で選べます。</p>
+                `)}
+                ${section('オンライン対戦', `
+                    <ol>
+                        <li>タイトル画面の「オンラインで遊ぶ」で名前を入れ、「部屋を作る」を押します。</li>
+                        <li>「招待URLを共有」で友人にURLを送ります（部屋番号の数字5桁でも参加できます）。</li>
+                        <li>部屋を作った人が、CPUの追加や拡張を選んで「ゲーム開始」を押します。</li>
+                    </ol>
+                    <p>接続が切れても、同じ席に戻れます。途中で抜けた人の席は、CPUが代わりに続けます。</p>
+                `)}
+                <button id="help-close-btn" class="primary">閉じる</button>
+            </div>
+        `;
+        const close = () => onClose();
+        document.getElementById('help-close-btn').addEventListener('click', close);
+        this.openModal({ closable: true, kind: 'help', onClose: close, backdrop });
+    }
+
+    // ゲーム画面からホーム（タイトル画面）に戻る前の確認
+    showHomeConfirm({ online, onCancel }) {
+        this.elements.modalTitle.textContent = 'ホームに戻りますか？';
+        this.elements.modalBody.innerHTML = `
+            <p class="prompt-text">${online
+                ? '部屋を出てタイトル画面に戻ります。あなたの席は、以後CPUが代わりに続けます。'
+                : '今のゲームを終えて、タイトル画面に戻ります。このゲームの続きはできません。'}</p>
+            <div class="prompt-buttons">
+                <button id="home-cancel-btn" class="primary secondary">ゲームを続ける</button>
+                <button id="home-ok-btn" class="primary danger">ホームに戻る</button>
+            </div>
+        `;
+        document.getElementById('home-cancel-btn').addEventListener('click', onCancel);
+        document.getElementById('home-ok-btn').addEventListener('click', () => this.uiController.goHome());
+        this.openModal({ closable: true, kind: 'home-confirm', onClose: onCancel });
     }
     
     // ===== オンライン対戦 =====
@@ -234,8 +324,6 @@ class UIModal {
     showLobby(lobby, { isHost }) {
         const shareUrl = `${location.origin}${location.pathname}?room=${lobby.roomCode}`;
         
-        // 使うカードを変えるたびに部屋が描き直されるので、プルダウンを開いていたら開いたままにする
-        const setMenuOpen = this.kind === 'lobby' && Boolean(document.querySelector('#lobby-card-sets details')?.open);
         this.elements.modalTitle.textContent = 'オンライン対戦の部屋';
         this.elements.modalBody.innerHTML = `
             <div class="setup-form lobby">
@@ -256,7 +344,7 @@ class UIModal {
                     `).join('')}
                 </ul>
                 ${isHost ? `
-                    ${this.createCardSetChecksHtml('lobby-card-sets', lobby.cardSets)}
+                    ${this.createCardSetButtonHtml('lobby-card-sets-btn', lobby.cardSets)}
                     <button id="add-cpu-btn" class="primary secondary" ${lobby.players.length >= 4 ? 'disabled' : ''}>CPUを追加</button>
                     <button id="start-online-btn" class="primary" ${lobby.players.length < 2 ? 'disabled' : ''}>ゲーム開始</button>
                 ` : `
@@ -271,8 +359,14 @@ class UIModal {
         document.getElementById('share-room-btn').addEventListener('click', () => this.shareRoom(shareUrl));
         document.getElementById('leave-room-btn').addEventListener('click', () => this.uiController.leaveOnline());
         if (isHost) {
-            this.setupCardSetChecks('lobby-card-sets', (sets) => controller.setCardSets(sets));
-            if (setMenuOpen) document.querySelector('#lobby-card-sets details').open = true;
+            // 拡張は別の画面で選ぶ。選んでいる間に届いた部屋の更新は、決定して戻ったときに出す
+            document.getElementById('lobby-card-sets-btn').addEventListener('click', () => this.showCardSetPicker({
+                selected: lobby.cardSets,
+                onDone: (sets) => {
+                    controller.setCardSets(sets);
+                    this.uiController.showLatestLobby();
+                }
+            }));
             document.getElementById('add-cpu-btn').addEventListener('click', () => controller.addCpu());
             document.getElementById('start-online-btn').addEventListener('click', () => controller.startGame());
             this.elements.modalBody.querySelectorAll('[data-remove-seat]').forEach(button => {
@@ -371,17 +465,30 @@ class UIModal {
     }
     
     // モーダルを開く（closable が false なら×を出さず、答えるまで閉じられないようにする）
-    openModal({ closable = true, kind = null } = {}) {
+    // onClose を渡すと、×を押したときに閉じる代わりにそれを呼ぶ（元の画面に戻すため）
+    openModal({ closable = true, kind = null, onClose = null, backdrop = null } = {}) {
         this.kind = kind;
+        this.onClose = onClose;
         // 画面の種類ごとに見た目を変える（トップ画面は全画面のタイトル画面にする）
         this.elements.gameModal.dataset.kind = kind ?? '';
+        this.elements.gameModal.dataset.backdrop = backdrop ?? '';
         this.elements.modalClose.style.display = closable ? '' : 'none';
         this.elements.gameModal.style.display = 'flex';
     }
-    
+
+    // ×を押したとき：戻り先があればそこに戻り、なければ閉じる
+    handleCloseButton() {
+        if (this.onClose) {
+            this.onClose();
+            return;
+        }
+        this.closeModal();
+    }
+
     // モーダルを閉じる
     closeModal() {
         this.kind = null;
+        this.onClose = null;
         this.elements.gameModal.style.display = 'none';
     }
     

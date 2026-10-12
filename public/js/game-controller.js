@@ -32,6 +32,12 @@ class GameController {
         return this.game;
     }
 
+    // ゲームをやめる（ホームに戻るとき）
+    quit() {
+        this.game = null;
+        this.viewerId = null;
+    }
+
     // UIコントローラーを設定
     setUIController(uiController) {
         this.uiController = uiController;

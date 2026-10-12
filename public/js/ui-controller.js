@@ -48,7 +48,9 @@ class UIController {
             modalTitle: document.getElementById('modal-title'),
             modalBody: document.getElementById('modal-body'),
             modalClose: document.querySelector('.close'),
-            settingsBtn: document.getElementById('settings-btn')
+            settingsBtn: document.getElementById('settings-btn'),
+            homeBtn: document.getElementById('home-btn'),
+            helpBtn: document.getElementById('help-btn')
         };
         
         // サブコンポーネントを初期化
@@ -65,7 +67,15 @@ class UIController {
         // モーダルを閉じるイベントを設定
         // 選択待ちの画面には×を出さない（答えるまで閉じられない）ので、ここでは閉じるだけ
         this.elements.modalClose.addEventListener('click', () => {
-            this.modal.closeModal();
+            this.modal.handleCloseButton();
+        });
+
+        // ホームに戻る（確認してから）・遊び方を見る。閉じたらゲーム画面と選択を出し直す
+        this.elements.homeBtn.addEventListener('click', () => {
+            this.modal.showHomeConfirm({ online: this.isOnline(), onCancel: () => this.restoreGameScreen() });
+        });
+        this.elements.helpBtn.addEventListener('click', () => {
+            this.modal.showHelp({ onClose: () => this.restoreGameScreen() });
         });
         
         // 設定ボタンのイベントを設定
@@ -175,6 +185,9 @@ class UIController {
     // ロビーの状態が届いた。ロビーにいる間はロビーの画面を出す（ゲーム中は接続状況の更新だけなので何もしない）
     handleLobby(lobby) {
         if (lobby.status !== 'lobby') return;
+        this.latestLobby = lobby;
+        // 拡張を選ぶ画面を開いている間は描き直さない（決定して戻るときに showLatestLobby で出す）
+        if (this.modal.kind === 'card-sets') return;
         this.resetForNewGame();
         this.modal.showLobby(lobby, { isHost: this.gameController.isHost() });
     }
@@ -190,9 +203,44 @@ class UIController {
         this.showToast(message);
     }
     
+    // 最後に届いた部屋の状態を出す（拡張を選ぶ画面から戻るとき）
+    showLatestLobby() {
+        if (!this.latestLobby) return;
+        this.resetForNewGame();
+        this.modal.showLobby(this.latestLobby, { isHost: this.gameController.isHost() });
+    }
+
+    // ゲームをやめてホーム（タイトル画面）に戻る。オンライン対戦なら部屋を出る
+    goHome() {
+        clearTimeout(this.cpuTimer);
+        this.cpuTimer = null;
+        if (this.isOnline()) {
+            this.leaveOnline();
+            return;
+        }
+        this.gameController.quit();
+        this.resetForNewGame();
+        this.showGameSetup();
+    }
+
+    // 遊び方などを閉じて、ゲーム画面に戻る。選択待ちや結果の画面があれば出し直す
+    restoreGameScreen() {
+        this.modal.closeModal();
+        this.shownPromptId = null;
+        this.isResultShown = false;
+        if (this.gameController.getView()) {
+            this.updateGameView();
+        } else if (this.isOnline() && this.latestLobby) {
+            this.showLatestLobby();
+        } else {
+            this.showGameSetup();
+        }
+    }
+
     // オンライン対戦をやめて、ローカル対戦の設定画面に戻る
     leaveOnline() {
         if (this.isOnline()) this.gameController.leave();
+        this.latestLobby = null;
         this.useController(this.localController);
         this.resetForNewGame();
         this.showGameSetup();
