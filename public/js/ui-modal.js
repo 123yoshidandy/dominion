@@ -5,9 +5,19 @@
 
 import { loadOnlineSession } from './online-controller.js';
 import { CARD_SETS, CARD_SET_LABELS, LANDSCAPE_KIND_LABELS } from './card-types.js';
+import { ALL_CARDS } from './card-data.js';
+import { getCardArt, CARD_BACK } from './card-art.js';
 
 // 使うカードのセットの表示名（「基本・海辺」のように並べる）
 const cardSetLabel = (sets) => Object.values(CARD_SETS).filter(set => sets.includes(set)).map(set => CARD_SET_LABELS[set]).join('・');
+
+// プルダウンの見出しに出す、選んでいるセットの要約
+const cardSetSummary = (sets) => {
+    const all = Object.values(CARD_SETS);
+    if (all.every(set => sets.includes(set))) return `すべて（${all.length}セット）`;
+    if (sets.length === 1 && sets[0] === CARD_SETS.BASE) return '基本のみ';
+    return cardSetLabel(sets);
+};
 
 // 利用者が入力した文字をそのまま HTML に入れないようにする
 const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (char) => ({
@@ -28,26 +38,32 @@ class UIModal {
 
     // ゲームの初期化画面を表示
     showGameSetup() {
-        // モーダルを使ってゲーム設定画面を表示
-        this.elements.modalTitle.textContent = 'ゲーム設定';
+        // タイトル画面（左にタイトルと絵、右に設定）として全画面に表示する
+        this.elements.modalTitle.textContent = '';
 
         const setupHtml = `
-            <div class="setup-form">
-                <label class="field">
-                    <span>プレイヤー数</span>
-                    <select id="player-count">
-                        ${[2, 3, 4].map(count => `<option value="${count}" ${this.uiController.settings.playerCount === count ? 'selected' : ''}>${count}人</option>`).join('')}
-                    </select>
-                </label>
+            <div class="title-screen">
+                ${this.createTitleHeroHtml()}
+                <div class="setup-form title-panel">
+                    <div class="setup-row">
+                        <label class="field player-count-field">
+                            <span>人数</span>
+                            <select id="player-count">
+                                ${[2, 3, 4].map(count => `<option value="${count}" ${this.uiController.settings.playerCount === count ? 'selected' : ''}>${count}人</option>`).join('')}
+                            </select>
+                        </label>
+                        ${this.createCardSetChecksHtml('card-sets', this.uiController.settings.cardSets.split('+'))}
+                    </div>
 
-                <div id="player-names"></div>
+                    <div id="player-names"></div>
 
-                ${this.createCardSetChecksHtml('card-sets', this.uiController.settings.cardSets.split('+'))}
+                    ${this.createStackHandToggleHtml('setup-stack-hand')}
 
-                ${this.createStackHandToggleHtml('setup-stack-hand')}
-
-                <button id="start-game-btn" class="primary">ゲーム開始</button>
-                <button id="online-btn" class="primary secondary">オンラインで遊ぶ</button>
+                    <div class="title-buttons">
+                        <button id="start-game-btn" class="primary">ゲーム開始</button>
+                        <button id="online-btn" class="primary secondary">オンラインで遊ぶ</button>
+                    </div>
+                </div>
             </div>
         `;
 
@@ -77,32 +93,85 @@ class UIModal {
         this.openModal({ closable: false, kind: 'setup' });
     }
     
-    // 使うカードのセットのチェックボックス（設定とオンラインのロビーで共通）
-    createCardSetChecksHtml(id, selected) {
+    // タイトル画面の左側：タイトルと、扇形に広げたカード（既存のカードのイラストを使う）
+    createTitleHeroHtml() {
+        const cards = ['village', 'gold', 'province'].map((id, index) => `
+            <div class="title-card title-card-${index}">
+                <span class="title-card-name">${ALL_CARDS[id.toUpperCase()].name}</span>
+                <span class="title-card-art">${getCardArt(id)}</span>
+            </div>
+        `).join('');
         return `
-            <fieldset class="field card-set-checks" id="${id}">
-                <legend>使うカード（選んだセットからランダムに10種）</legend>
-                ${Object.values(CARD_SETS).map(set => `
-                    <label class="card-set-check">
-                        <input type="checkbox" value="${set}" ${selected.includes(set) ? 'checked' : ''}>
-                        <span>${CARD_SET_LABELS[set]}</span>
-                    </label>
-                `).join('')}
-            </fieldset>
+            <div class="title-hero">
+                <div class="title-cards" aria-hidden="true">
+                    <div class="title-card title-card-back">${CARD_BACK}</div>
+                    ${cards}
+                </div>
+                <h1 class="title-logo">ドミニオン</h1>
+                <p class="title-sub">デッキ構築型カードゲーム</p>
+            </div>
         `;
     }
-    
+
+    // 使うカードのセットを選ぶプルダウン（設定とオンラインのロビーで共通）。開くと各セットのチェックが出る
+    createCardSetChecksHtml(id, selected) {
+        return `
+            <div class="field card-set-picker" id="${id}">
+                <span>拡張</span>
+                <details class="set-dropdown">
+                    <summary><span class="set-summary">${escapeHtml(cardSetSummary(selected))}</span></summary>
+                    <div class="set-menu">
+                        <p class="set-menu-note">選んだセットから、ランダムに10種を使います</p>
+                        <div class="set-menu-actions">
+                            <button type="button" class="link-button" data-select-sets="all">すべて</button>
+                            <button type="button" class="link-button" data-select-sets="base">基本のみ</button>
+                        </div>
+                        <div class="set-menu-list">
+                            ${Object.values(CARD_SETS).map(set => `
+                                <label class="card-set-check">
+                                    <input type="checkbox" value="${set}" ${selected.includes(set) ? 'checked' : ''}>
+                                    <span>${CARD_SET_LABELS[set]}</span>
+                                </label>
+                            `).join('')}
+                        </div>
+                    </div>
+                </details>
+            </div>
+        `;
+    }
+
     // チェックが変わったら、選ばれているセットを渡す。すべて外すことはできない（最後の1つは外せない）
+    // プルダウンの外を押したら閉じる
     setupCardSetChecks(id, onChange) {
-        const inputs = Array.from(document.querySelectorAll(`#${id} input`));
+        const root = document.getElementById(id);
+        const details = root.querySelector('details');
+        const summary = root.querySelector('.set-summary');
+        const inputs = Array.from(root.querySelectorAll('input'));
+        const selected = () => inputs.filter(input => input.checked).map(input => input.value);
+        const changed = () => {
+            summary.textContent = cardSetSummary(selected());
+            onChange(selected());
+        };
         inputs.forEach(input => input.addEventListener('change', () => {
-            const sets = inputs.filter(other => other.checked).map(other => other.value);
-            if (sets.length === 0) {
+            if (selected().length === 0) {
                 input.checked = true;
                 return;
             }
-            onChange(sets);
+            changed();
         }));
+        root.querySelectorAll('[data-select-sets]').forEach(button => button.addEventListener('click', () => {
+            const all = button.dataset.selectSets === 'all';
+            inputs.forEach(input => { input.checked = all || input.value === CARD_SETS.BASE; });
+            changed();
+        }));
+        const closeOutside = (event) => {
+            if (!details.isConnected) {
+                document.removeEventListener('pointerdown', closeOutside);
+                return;
+            }
+            if (details.open && !details.contains(event.target)) details.open = false;
+        };
+        document.addEventListener('pointerdown', closeOutside);
     }
     
     // ===== オンライン対戦 =====
@@ -165,6 +234,8 @@ class UIModal {
     showLobby(lobby, { isHost }) {
         const shareUrl = `${location.origin}${location.pathname}?room=${lobby.roomCode}`;
         
+        // 使うカードを変えるたびに部屋が描き直されるので、プルダウンを開いていたら開いたままにする
+        const setMenuOpen = this.kind === 'lobby' && Boolean(document.querySelector('#lobby-card-sets details')?.open);
         this.elements.modalTitle.textContent = 'オンライン対戦の部屋';
         this.elements.modalBody.innerHTML = `
             <div class="setup-form lobby">
@@ -201,6 +272,7 @@ class UIModal {
         document.getElementById('leave-room-btn').addEventListener('click', () => this.uiController.leaveOnline());
         if (isHost) {
             this.setupCardSetChecks('lobby-card-sets', (sets) => controller.setCardSets(sets));
+            if (setMenuOpen) document.querySelector('#lobby-card-sets details').open = true;
             document.getElementById('add-cpu-btn').addEventListener('click', () => controller.addCpu());
             document.getElementById('start-online-btn').addEventListener('click', () => controller.startGame());
             this.elements.modalBody.querySelectorAll('[data-remove-seat]').forEach(button => {
@@ -301,6 +373,8 @@ class UIModal {
     // モーダルを開く（closable が false なら×を出さず、答えるまで閉じられないようにする）
     openModal({ closable = true, kind = null } = {}) {
         this.kind = kind;
+        // 画面の種類ごとに見た目を変える（トップ画面は全画面のタイトル画面にする）
+        this.elements.gameModal.dataset.kind = kind ?? '';
         this.elements.modalClose.style.display = closable ? '' : 'none';
         this.elements.gameModal.style.display = 'flex';
     }

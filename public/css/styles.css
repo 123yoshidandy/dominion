@@ -1837,3 +1837,399 @@ button.primary.secondary {
     opacity: 1;
     transform: translate(-50%, 0);
 }
+
+/* ===== トップ画面（タイトル画面） ===== */
+/* トップ画面だけはシートではなく全画面にし、左にタイトルと絵、右に設定を並べる */
+
+.modal[data-kind="setup"] {
+    align-items: stretch;
+    justify-content: stretch;
+    background:
+        radial-gradient(ellipse at 28% 38%, rgba(230, 184, 79, 0.16), transparent 55%),
+        radial-gradient(ellipse at 50% 50%, var(--felt-light), var(--felt-dark) 80%);
+}
+
+.modal[data-kind="setup"] .modal-content {
+    display: flex;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    padding: calc(12px + var(--safe-top)) max(16px, env(safe-area-inset-right)) calc(12px + var(--safe-bottom)) max(16px, env(safe-area-inset-left));
+    overflow-y: auto;
+    color: var(--on-felt);
+    background: transparent;
+    border-radius: 0;
+    box-shadow: none;
+    animation: none;
+}
+
+.modal[data-kind="setup"] #modal-title {
+    display: none;
+}
+
+.modal[data-kind="setup"] #modal-body {
+    display: flex;
+    flex: 1;
+}
+
+.title-screen {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 430px);
+    gap: 28px;
+    align-items: center;
+    width: 100%;
+    max-width: 980px;
+    margin: auto;
+}
+
+.title-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+/* 扇形に広げたカード */
+.title-cards {
+    position: relative;
+    width: 240px;
+    height: 170px;
+}
+
+.title-card {
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 92px;
+    height: 130px;
+    margin-left: -46px;
+    padding: 4px 4px 6px;
+    overflow: hidden;
+    color: var(--ink);
+    background: var(--paper);
+    border-top: 16px solid var(--type-action);
+    border-radius: 9px;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.45);
+    transform-origin: 50% 160%;
+}
+
+.title-card-back {
+    padding: 0;
+    border-top: none;
+    background: #23305c;
+    transform: rotate(-33deg);
+}
+
+.title-card-back svg {
+    width: 100%;
+    height: 100%;
+}
+
+.title-card-0 {
+    transform: rotate(-12deg);
+}
+
+.title-card-1 {
+    border-top-color: var(--type-treasure);
+    transform: rotate(9deg);
+}
+
+.title-card-2 {
+    border-top-color: var(--type-victory);
+    transform: rotate(30deg);
+}
+
+.title-card-name {
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.title-card-art {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+}
+
+.title-card-art svg {
+    width: 76px;
+    height: 76px;
+}
+
+.title-logo {
+    margin: 18px 0 0;
+    font-size: 46px;
+    font-weight: 900;
+    letter-spacing: 0.16em;
+    color: var(--gold);
+    text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
+}
+
+.title-sub {
+    margin: 4px 0 0;
+    font-size: 14px;
+    letter-spacing: 0.12em;
+    color: var(--on-felt-muted);
+}
+
+/* 右側の設定 */
+.title-panel {
+    padding: 16px;
+    color: var(--ink);
+    background: var(--paper);
+    border-radius: 16px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.setup-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 10px;
+    align-items: end;
+}
+
+.setup-row .field {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 3px;
+    font-size: 12px;
+}
+
+.setup-form .setup-row .field + .field {
+    margin-top: 0;
+}
+
+.title-panel #player-names {
+    margin-top: 6px;
+}
+
+.title-panel .player-input {
+    margin: 6px 0;
+}
+
+.title-panel .setting-toggle {
+    margin-top: 8px;
+    padding: 9px 12px;
+    font-size: 14px;
+}
+
+.title-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.title-buttons button.primary {
+    margin-top: 0;
+    padding: 0 8px;
+    white-space: nowrap;
+}
+
+/* ===== 使う拡張のプルダウン（トップ画面とロビーで共通） ===== */
+
+.card-set-picker {
+    position: relative;
+}
+
+.setup-form .card-set-picker:not(.setup-row .card-set-picker) {
+    margin-top: 12px;
+}
+
+.set-dropdown {
+    flex: 1;
+    min-width: 0;
+}
+
+.set-dropdown summary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 42px;
+    padding: 8px 10px;
+    list-style: none;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink);
+    background: #fff;
+    border: 1px solid #d6ccb4;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.set-dropdown summary::-webkit-details-marker {
+    display: none;
+}
+
+.set-dropdown summary::after {
+    content: '▾';
+    margin-left: auto;
+    color: var(--ink-muted);
+}
+
+.set-dropdown[open] summary {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(47, 122, 85, 0.25);
+}
+
+.set-summary {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.set-menu {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 4px);
+    right: 0;
+    width: min(360px, calc(100vw - 32px));
+    max-height: min(320px, 70vh);
+    max-height: min(320px, 70dvh);
+    padding: 10px;
+    overflow-y: auto;
+    background: var(--paper);
+    border: 1px solid #d6ccb4;
+    border-radius: 12px;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+
+.set-menu-note {
+    margin: 0 0 4px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink-muted);
+}
+
+.set-menu-actions {
+    display: flex;
+    gap: 14px;
+    margin-bottom: 6px;
+}
+
+.set-menu-actions .link-button {
+    margin: 0;
+    padding: 4px 0;
+    font-size: 13px;
+}
+
+.set-menu-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.set-menu-list .card-set-check {
+    padding: 7px 8px;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+/* スマホの横画面：高さが足りないので、絵と入力欄を小さくしてスクロールなしで収める */
+@media (orientation: landscape) and (max-height: 500px) {
+    .title-screen {
+        grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+        gap: 16px;
+    }
+
+    .title-cards {
+        width: 170px;
+        height: 112px;
+    }
+
+    .title-card {
+        width: 64px;
+        height: 90px;
+        margin-left: -32px;
+        border-top-width: 11px;
+    }
+
+    .title-card-name {
+        font-size: 9px;
+    }
+
+    .title-card-art svg {
+        width: 50px;
+        height: 50px;
+    }
+
+    .title-logo {
+        margin-top: 10px;
+        font-size: 30px;
+    }
+
+    .title-sub {
+        font-size: 12px;
+    }
+
+    .title-panel {
+        padding: 10px 12px;
+    }
+
+    .title-panel select,
+    .title-panel input[type="text"] {
+        padding: 5px 8px;
+    }
+
+    .title-panel .set-dropdown summary {
+        min-height: 36px;
+        padding: 5px 10px;
+    }
+
+    .title-panel .player-input {
+        margin: 4px 0;
+    }
+
+    .title-panel .setting-toggle {
+        margin-top: 6px;
+        padding: 6px 12px;
+    }
+
+    .title-buttons {
+        margin-top: 8px;
+    }
+
+    .title-buttons button.primary {
+        height: 40px;
+    }
+
+    .title-panel .set-menu {
+        max-height: calc(100vh - 110px);
+        max-height: calc(100dvh - 110px);
+    }
+}
+
+/* 縦長の狭い画面：絵を上、設定を下に並べる */
+@media (max-width: 639px) and (orientation: portrait) {
+    .title-screen {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 16px;
+        align-content: center;
+    }
+
+    .title-cards {
+        width: 190px;
+        height: 130px;
+    }
+
+    .title-card {
+        width: 72px;
+        height: 102px;
+        margin-left: -36px;
+    }
+
+    .title-card-art svg {
+        width: 58px;
+        height: 58px;
+    }
+
+    .title-logo {
+        font-size: 34px;
+    }
+}
