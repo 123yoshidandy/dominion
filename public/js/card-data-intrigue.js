@@ -226,7 +226,7 @@ export const INTRIGUE_CARDS = {
                 game.trashCard(target, card);
                 const cost = game.getCost(card);
                 game.log(`${target.name}は山札の一番上の${card.name}を廃棄しました`);
-                const candidates = game.getGainableCards({ exactCost: cost, potion: game.getPotionCost(card) });
+                const candidates = game.getGainableCards({ exactCost: cost, ...game.costExtras(card) });
                 if (candidates.length === 0) return;
                 game.promptSelect({
                     player,
@@ -596,7 +596,7 @@ export const INTRIGUE_CARDS = {
                     game.promptGain({
                         player,
                         maxCost,
-                        potion: game.getPotionCost(trashed),
+                        ...game.costExtras(trashed),
                         title: '交換',
                         message: `コスト${maxCost}以下のカードを1枚獲得してください。`,
                         onGained: (card) => {
@@ -685,7 +685,7 @@ export const INTRIGUE_CARDS = {
                     game.promptGain({
                         player,
                         exactCost: cost,
-                        potion: game.getPotionCost(trashed),
+                        ...game.costExtras(trashed),
                         title: '改良',
                         message: `コストがちょうど${cost}のカードを1枚獲得してください。`
                     });

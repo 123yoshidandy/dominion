@@ -100,7 +100,7 @@ export const TRAVELLER_CARDS = {
                     const [card] = takeTopCards(target, 1);
                     if (!card) return;
                     const cost = game.getCost(card);
-                    if ((cost === 3 || cost === 4) && !game.getPotionCost(card)) {
+                    if ((cost === 3 || cost === 4) && !game.hasExtraCost(card)) {
                         game.trashCard(target, card);
                         game.log(`${target.name}は山札の一番上の${card.name}を廃棄しました`);
                     } else {
@@ -369,7 +369,7 @@ export const ADVENTURES_CARDS = {
         count: 10,
         onPlay: (player, game, card) => putOnTavern(player, game, card),
         onCallOnGain: (player, game, duplicate, gained) => {
-            if (game.getCost(gained) > 6 || game.getPotionCost(gained) || !(game.supply[game.pileOf[gained.id] ?? gained.id] > 0)) return;
+            if (game.getCost(gained) > 6 || game.hasExtraCost(gained) || !(game.supply[game.pileOf[gained.id] ?? gained.id] > 0)) return;
             // 確認には獲得したカードを見せる（呼び出すかの判断に使うため）
             game.promptConfirm({
                 player,
@@ -491,7 +491,7 @@ export const ADVENTURES_CARDS = {
                     if (!trashed) return;
                     const maxCost = game.getCost(trashed) + 1;
                     game.promptGain({
-                        player, maxCost, potion: game.getPotionCost(trashed), destination: 'hand',
+                        player, maxCost, ...game.costExtras(trashed), destination: 'hand',
                         title: '変容', message: `コスト${maxCost}以下のカードを1枚獲得してください（手札に加えます）。`
                     });
                 }
@@ -560,7 +560,7 @@ export const ADVENTURES_CARDS = {
                 const [card] = takeTopCards(target, 1);
                 if (!card) return;
                 const cost = game.getCost(card);
-                if (cost >= 3 && cost <= 6 && !game.getPotionCost(card)) {
+                if (cost >= 3 && cost <= 6 && !game.hasExtraCost(card)) {
                     game.trashCard(target, card);
                     game.log(`${target.name}は山札の一番上の${card.name}を廃棄しました`);
                 } else {

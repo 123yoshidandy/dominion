@@ -20,7 +20,7 @@ const isAttackData = (data) => Boolean(data.isAttack) || data.types.includes(CAR
 // コストがコイン3〜6（ポーションなし）か（騎士・ならず者・墓暴き）
 const costs3to6 = (game, card) => {
     const cost = game.getCost(card);
-    return cost >= 3 && cost <= 6 && !game.getPotionCost(card);
+    return cost >= 3 && cost <= 6 && !game.hasExtraCost(card);
 };
 
 // 山から獲得してログに書く（獲得できなければ何もしない）
@@ -609,7 +609,7 @@ export const DARK_AGES_CARDS = {
                             if (!trashed) return;
                             const cost = game.getCost(card) + 1;
                             game.promptGain({
-                                player, exactCost: cost, potion: game.getPotionCost(card), filter: isAction,
+                                player, exactCost: cost, ...game.costExtras(card), filter: isAction,
                                 title: '行進', message: `コストがちょうど${cost}のアクションカードを1枚獲得してください。`
                             });
                         }
@@ -889,7 +889,7 @@ export const DARK_AGES_CARDS = {
                         callback: ([trashed]) => {
                             if (!trashed) return;
                             const maxCost = game.getCost(trashed) + 3;
-                            game.promptGain({ player, maxCost, potion: game.getPotionCost(trashed), title: '墓暴き', message: `コスト${maxCost}以下のカードを1枚獲得してください。` });
+                            game.promptGain({ player, maxCost, ...game.costExtras(trashed), title: '墓暴き', message: `コスト${maxCost}以下のカードを1枚獲得してください。` });
                         }
                     });
                 }
@@ -993,7 +993,7 @@ export const DARK_AGES_CARDS = {
                     game.log(`${player.name}は${found.name}を廃棄しました`);
                     const maxCost = game.getCost(found) + 3;
                     game.promptGain({
-                        player, maxCost, potion: game.getPotionCost(found), filter: (data) => data.types.includes(CARD_TYPES.VICTORY),
+                        player, maxCost, ...game.costExtras(found), filter: (data) => data.types.includes(CARD_TYPES.VICTORY),
                         title: '建て直し', message: `コスト${maxCost}以下の勝利点カードを1枚獲得してください。`
                     });
                 }

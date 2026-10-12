@@ -31,6 +31,13 @@ class Card {
         if (game?.turnState && this.isType(CARD_TYPES.ACTION)) {
             game.turnState.actionsPlayed++;
         }
+        // 魅了の魔女：魅了を受けたプレイヤーが自分のターンに最初にプレイするアクションは、効果の代わりにカード+1・アクション+1
+        if (game?.isEnchanted?.(player, this)) {
+            player.drawCards(1);
+            player.actions += 1;
+            game.log(`${player.name}の${this.name}は魅了され、効果の代わりにカードを1枚引き、アクション+1を得ました`);
+            return;
+        }
         // プレイする前に起きる効果（浮浪児）があれば、それを先に処理してから効果を使う
         const before = game?.getBeforePlaySteps?.(player, this) ?? [];
         if (before.length > 0) {

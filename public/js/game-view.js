@@ -56,7 +56,12 @@ export function createGameView(game, viewerId, { logsFrom = 0 } = {}) {
         // 中身の混ざった山（騎士・廃墟）の一番上のカード（空なら null）
         pileTops: Object.fromEntries(Object.keys(game.pileCards).map(pileId => [pileId, game.getPileTop(pileId)])),
         // イベントなど（カードではない横長の札）と、そのコスト
-        landscapes: game.landscapes.map(id => ({ id, cost: game.getLandscapeCost(id) })),
+        landscapes: game.landscapes.map(id => ({ id, cost: game.getLandscapeCost(id), vp: game.landscapeVp[id] ?? null })),
+        // 帝国：コストの負債、山に置いた勝利点トークンと負債、オベリスクの山
+        debtCosts: Object.fromEntries(Object.keys(game.supply).map(cardId => [cardId, game.getDebtCost(cardId)])),
+        pileVp: { ...game.pileVp },
+        pileDebt: { ...game.pileDebt },
+        obelisk: game.landscapeState.obelisk ?? null,
         missionTurn: game.missionTurn,
         bane: game.bane,
         ferrymanPile: game.ferrymanPile,
@@ -70,7 +75,8 @@ export function createGameView(game, viewerId, { logsFrom = 0 } = {}) {
                 id: player.id,
                 name: player.name,
                 isCPU: player.isCPU,
-                victoryPoints: player.calculateVictoryPoints(),
+                victoryPoints: game.calculateScore(player),
+                debt: player.debt,
                 actions: player.actions,
                 buys: player.buys,
                 coins: player.coins,

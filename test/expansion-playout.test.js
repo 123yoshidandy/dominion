@@ -11,7 +11,8 @@ const SETS = [
     ['cornucopia_guilds', '収穫祭＆ギルド'],
     ['alchemy', '錬金術'],
     ['dark_ages', '暗黒時代'],
-    ['adventures', '冒険']
+    ['adventures', '冒険'],
+    ['empires', '帝国']
 ];
 
 // CPU同士でゲームを最後まで進める

@@ -107,7 +107,7 @@ export const HINTERLANDS_CARDS = {
                     game.promptGain({
                         player,
                         exactCost: cost + 1,
-                        potion: game.getPotionCost(trashed),
+                        ...game.costExtras(trashed),
                         destination: 'deck',
                         title: '開発',
                         message: `コストがちょうど${cost + 1}のカードを1枚獲得してください（山札の上に置きます）。`
@@ -115,7 +115,7 @@ export const HINTERLANDS_CARDS = {
                     game.runNext(() => game.promptGain({
                         player,
                         exactCost: cost - 1,
-                        potion: game.getPotionCost(trashed),
+                        ...game.costExtras(trashed),
                         destination: 'deck',
                         title: '開発',
                         message: `コストがちょうど${cost - 1}のカードを1枚獲得してください（山札の上に置きます）。`
@@ -437,7 +437,7 @@ export const HINTERLANDS_CARDS = {
         onPlay: (player, game) => gainBenefits(player, game, { coins: 2 }),
         onBuyWhileInPlay: (player, game, haggler, bought) => {
             const maxCost = game.getCost(bought) - 1;
-            if (maxCost < 0 && !game.getPotionCost(bought)) return;
+            if (maxCost < 0 && !game.hasExtraCost(bought)) return;
             game.promptGain({
                 player,
                 lessThan: bought,
@@ -572,7 +572,7 @@ export const HINTERLANDS_CARDS = {
                     game.promptGain({
                         player,
                         maxCost,
-                        potion: game.getPotionCost(card),
+                        ...game.costExtras(card),
                         filter: (data) => data.types.includes(CARD_TYPES.ACTION),
                         title: '車大工',
                         message: `コスト${maxCost}以下のアクションカードを1枚獲得してください。`
@@ -631,7 +631,7 @@ export const HINTERLANDS_CARDS = {
                 callback: ([trashed]) => {
                     if (!trashed) return;
                     const cost = game.getCost(trashed) + 2;
-                    game.promptGain({ player, exactCost: cost, potion: game.getPotionCost(trashed), title: '肥沃な土地', message: `コストがちょうど${cost}のカードを1枚獲得してください。` });
+                    game.promptGain({ player, exactCost: cost, ...game.costExtras(trashed), title: '肥沃な土地', message: `コストがちょうど${cost}のカードを1枚獲得してください。` });
                 }
             });
         }

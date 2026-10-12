@@ -48,6 +48,11 @@ class Player {
         this.minusCoinToken = false;  // 次に財宝を得るとき1少なく得る（-1 財宝のトークンを持っている）
         this.journeyFaceUp = true;    // 旅のトークンが表か（裏返すたびに変わる）
         this.inheritance = null;      // 相続で屋敷のトークンを置いたカードのID（屋敷がそのカードとしてプレイできる）
+
+        // ===== 帝国 =====
+        this.debt = 0;                // 負債（返すまでカードやイベントを購入できない）
+        this.enchantedVictims = new Set();    // 次のターンまで、最初のアクションが効果を失うプレイヤー（魅了の魔女）
+        this.donatePending = false;   // このターンの後に寄付を行う
         this.hauntedVictims = new Set();      // 次のターンまで、購入すると手札を山札に置くプレイヤー（幽霊の森）
         this.swampHagVictims = new Map();     // 次のターンまで、購入すると呪いを獲得するプレイヤーと回数（沼の妖婆）
     }

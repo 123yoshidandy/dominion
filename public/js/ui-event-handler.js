@@ -108,8 +108,10 @@ class UIEventHandler {
         const pending = this.pendingPurchases ?? { count: 0, cost: 0, potions: 0 };
         const cost = view.costs?.[cardId] ?? card?.cost;
         const potionCost = view.potionCosts?.[cardId] ?? card?.potionCost ?? 0;
+        // 負債は購入の前に財宝で返すので、その分を差し引いて足りるかを見る
+        const usableCoins = currentPlayer.coins - (currentPlayer.debt ?? 0);
         if (!card || (view.supply[cardId] ?? 0) <= 0 || view.prompt ||
-            currentPlayer.buys - pending.count <= 0 || currentPlayer.coins - pending.cost < cost ||
+            currentPlayer.buys - pending.count <= 0 || usableCoins - pending.cost < cost ||
             (currentPlayer.potions ?? 0) - (pending.potions ?? 0) < potionCost) {
             return;
         }
@@ -141,7 +143,7 @@ class UIEventHandler {
         const view = this.gameController.getView();
         if (!view || !view.isMyTurn || view.phase !== 'buy' || view.prompt || this.isActionPending) return;
         const landscape = view.landscapes?.find(item => item.id === landscapeId);
-        if (!landscape || view.me.buys <= 0 || view.me.coins < landscape.cost) return;
+        if (!landscape || view.me.buys <= 0 || view.me.coins - (view.me.debt ?? 0) < landscape.cost) return;
         this.isActionPending = true;
         if (!this.gameController.send({ type: 'buyLandscape', landscapeId })) this.clearPendingActions();
     }

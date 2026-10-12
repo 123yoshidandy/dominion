@@ -77,6 +77,7 @@ class UIView {
             stat('購入', currentPlayer.buys, false) +
             stat('コイン', currentPlayer.coins, false) +
             (currentPlayer.potions > 0 ? stat('ポーション', currentPlayer.potions, false) : '') +
+            (currentPlayer.debt > 0 ? stat('負債', currentPlayer.debt, false) : '') +
             (currentPlayer.coffers > 0 ? stat('財源', currentPlayer.coffers, view.phase !== 'buy') : '');
     }
 
@@ -108,10 +109,16 @@ class UIView {
                 // 中身の混ざった山は一番上のカードを見せる（空なら山の名前の札）
                 const card = ALL_CARDS[(view.pileTops?.[cardId] ?? cardId).toUpperCase()];
                 const cost = costOf(cardId);
-                const unaffordable = currentPlayer.coins < cost || (currentPlayer.potions ?? 0) < potionCostOf(cardId);
+                // 負債は購入の前に財宝で返すので、残りのコインかポーションが足りなければ買えない
+                const unaffordable = currentPlayer.coins - (currentPlayer.debt ?? 0) < cost ||
+                    (currentPlayer.potions ?? 0) < potionCostOf(cardId);
                 return this.createSupplyCardHtml(card, supply[cardId], isBuying && unaffordable, {
                     pileId: cardId,
                     cost,
+                    debtCost: view.debtCosts?.[cardId] ?? 0,
+                    vp: view.pileVp?.[cardId] ?? 0,
+                    pileDebt: view.pileDebt?.[cardId] ?? 0,
+                    isObelisk: cardId === view.obelisk,
                     isBane: cardId === view.bane
                 });
             })
@@ -145,13 +152,17 @@ class UIView {
             ${(view.landscapes ?? []).length > 0 ? `
                 <div class="supply-group supply-landscapes">
                     <h3>イベントなど</h3>
-                    <div class="landscape-grid">${view.landscapes.map(({ id, cost }) => {
+                    <div class="landscape-grid">${view.landscapes.map(({ id, cost, vp }) => {
                         const data = LANDSCAPES[id.toUpperCase()];
-                        const unaffordable = isBuying && currentPlayer.coins < cost;
+                        // ランドマークは購入しないので、コストの代わりに置かれた勝利点トークンを出す
+                        const buyable = Boolean(data.onBuy);
+                        const unaffordable = buyable && isBuying && currentPlayer.coins - (currentPlayer.debt ?? 0) < cost;
                         return `
-                            <div class="landscape-tile ${unaffordable ? 'unaffordable' : ''}" data-landscape-id="${id}">
-                                <span class="card-cost">${cost}</span>
+                            <div class="landscape-tile landscape-${data.kind} ${unaffordable ? 'unaffordable' : ''}" data-landscape-id="${id}">
+                                ${buyable ? `<span class="card-cost">${cost}</span>` : ''}
+                                ${data.debtCost ? `<span class="card-debt">${data.debtCost}</span>` : ''}
                                 <span class="landscape-name">${data.name}</span>
+                                ${vp !== null ? `<span class="vp-badge">${vp}</span>` : ''}
                                 <span class="landscape-kind">${LANDSCAPE_KIND_LABELS[data.kind] ?? ''}</span>
                             </div>
                         `;
@@ -208,7 +219,7 @@ class UIView {
         });
     }
 
-    createSupplyCardHtml(card, count, unaffordable, { pileId = card.id, cost = card.cost, isBane = false, nonSupply = false } = {}) {
+    createSupplyCardHtml(card, count, unaffordable, { pileId = card.id, cost = card.cost, debtCost = card.debtCost ?? 0, vp = 0, pileDebt = 0, isObelisk = false, isBane = false, nonSupply = false } = {}) {
         const stateClass = count <= 0 ? 'empty' : (unaffordable ? 'unaffordable' : '');
 
         // 購入や説明には山のIDを使う（中身の混ざった山では、見せているカードと山のIDが違う）
@@ -216,8 +227,11 @@ class UIView {
 
         return `
             <div class="card supply-tile ${this.getCardTypeClass(card)} ${stateClass} ${nonSupply ? 'non-supply' : ''}" data-card-id="${cardId}">
-                <span class="card-cost ${cost < card.cost ? 'reduced' : ''} ${card.potionCost ? 'has-potion' : ''}">${cost}</span>
+                ${cost > 0 || !debtCost ? `<span class="card-cost ${cost < card.cost ? 'reduced' : ''} ${card.potionCost ? 'has-potion' : ''}">${cost}</span>` : ''}
+                ${debtCost ? `<span class="card-debt ${cost > 0 ? 'with-coin' : ''}">${debtCost}</span>` : ''}
                 ${isBane ? '<span class="bane-badge">災い</span>' : ''}
+                ${isObelisk ? '<span class="bane-badge">オベリスク</span>' : ''}
+                ${vp > 0 || pileDebt > 0 ? `<span class="pile-tokens">${vp > 0 ? `<span class="vp-badge">${vp}</span>` : ''}${pileDebt > 0 ? `<span class="card-debt">${pileDebt}</span>` : ''}</span>` : ''}
                 <span class="tile-art">${getCardArt(card.id)}</span>
                 <span class="card-title">${card.name}</span>
                 <span class="card-count">${count}</span>
@@ -232,7 +246,8 @@ class UIView {
             <div class="card ${this.getCardTypeClass(card)} ${extraClass} ${stacked ? 'stacked' : ''}" ${attributes}>
                 ${stacked ? `<span class="stack-count">×${stackCount}</span>` : ''}
                 <div class="card-head">
-                    <span class="card-cost ${card.potionCost ? 'has-potion' : ''}">${card.cost}</span>
+                    ${card.cost > 0 || !card.debtCost ? `<span class="card-cost ${card.potionCost ? 'has-potion' : ''}">${card.cost}</span>` : ''}
+                    ${card.debtCost ? `<span class="card-debt">${card.debtCost}</span>` : ''}
                     <span class="card-title">${card.name}</span>
                 </div>
                 <div class="card-art">${getCardArt(card.id)}</div>
@@ -281,6 +296,7 @@ class UIView {
                     <div class="player-meta">
                         <span>勝利点 <b>${player.victoryPoints}</b>${player.vpTokens > 0 ? `（トークン${player.vpTokens}）` : ''}</span>
                         ${player.coffers > 0 ? `<span>財源 ${player.coffers}</span>` : ''}
+                        ${player.debt > 0 ? `<span>負債 ${player.debt}</span>` : ''}
                         <span>山札 ${player.deckCount}</span>
                         <span>手札 ${player.handCount}</span>
                         <span>捨て札 ${player.discardCount}</span>

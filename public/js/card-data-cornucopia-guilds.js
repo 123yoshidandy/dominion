@@ -182,7 +182,7 @@ export const CORNUCOPIA_GUILDS_CARDS = {
                 callback: ([trashed]) => {
                     if (!trashed) return;
                     const maxCost = game.getCost(trashed) - 1;
-                    if (maxCost < 0 && !game.getPotionCost(trashed)) return;
+                    if (maxCost < 0 && !game.hasExtraCost(trashed)) return;
                     const gain = () => game.promptGain({ player, lessThan: trashed, title: '石工', message: `コスト${maxCost}以下のカードを1枚獲得してください。` });
                     game.runNext(gain, gain);
                 }
@@ -407,7 +407,7 @@ export const CORNUCOPIA_GUILDS_CARDS = {
                 callback: ([trashed]) => {
                     if (!trashed) return;
                     const cost = game.getCost(trashed) + 1;
-                    game.promptGain({ player, exactCost: cost, potion: game.getPotionCost(trashed), title: '再建', message: `コストがちょうど${cost}のカードを1枚獲得してください。` });
+                    game.promptGain({ player, exactCost: cost, ...game.costExtras(trashed), title: '再建', message: `コストがちょうど${cost}のカードを1枚獲得してください。` });
                 }
             });
             game.runNext(once, once);
@@ -474,7 +474,7 @@ export const CORNUCOPIA_GUILDS_CARDS = {
                             player.coffers -= paid;
                             if (paid > 0) game.log(`${player.name}は財源を${paid}つ払いました`);
                             const maxCost = baseCost + paid;
-                            game.promptGain({ player, maxCost, potion: game.getPotionCost(trashed), title: '肉屋', message: `コスト${maxCost}以下のカードを1枚獲得してください。` });
+                            game.promptGain({ player, maxCost, ...game.costExtras(trashed), title: '肉屋', message: `コスト${maxCost}以下のカードを1枚獲得してください。` });
                         }
                     });
                 }

@@ -28,11 +28,14 @@ const createTurnState = () => ({
     expeditionDraw: 0,    // 次の手札に追加で引く枚数（遠征）
     savedCards: [],       // 引いた後で手札に戻す、脇に置いたカード（保存）
     eventsBought: [],     // 購入したイベントのID（1ターンに1回のイベント）
+    charms: 0,            // 次にカードを獲得したとき、同じコストの別のカードも獲得してよい回数（魔除け）
+    encampments: [],      // クリーンアップの開始時にサプライに戻す、脇に置いた野営地
+    fortuneDoubled: false, // このターンに宝運で財宝を2倍にしたか
     cleanupStarted: false // ターン終了の処理を始めたか
 });
 
 // 財宝をまとめてプレイする順（手札の財宝を使う効果を先に、場の財宝を数える効果を後にする）
-const TREASURE_PLAY_FIRST = ['tiara', 'coronet', 'anvil', 'investment'];
+const TREASURE_PLAY_FIRST = ['tiara', 'coronet', 'crown', 'anvil', 'investment'];
 const TREASURE_PLAY_LAST = ['horn_of_plenty', 'bank'];
 
 // ゲームクラス
@@ -73,6 +76,10 @@ class Game {
         this.currentTurnPlayer = null;  // 今のターンのプレイヤー
         this.previousTurnPlayer = null; // 直前のターンのプレイヤー（伝道）
         this.landscapes = [];      // 使うイベントなど（カードではない横長の札）のID
+        this.pileVp = {};          // 山に置いた勝利点トークン（帝国：集合のカード・水道橋など）
+        this.landscapeVp = {};     // ランドマークなどの札に置いた勝利点トークン
+        this.pileDebt = {};        // 山に置いた負債（徴税）
+        this.landscapeState = {};  // ランドマークなどが使う状態（オベリスクの山・山道の入札など）
         this.lastError = null;     // 直前に受け付けなかった操作の理由
         this.promptCount = 0;      // これまでの選択待ちの数（画面で同じ選択を出し直さないための番号）
         this.turnCount = 0;        // これまでのターンの数（追加のターンも数える）
@@ -178,9 +185,11 @@ class Game {
              ALL_CARDS[kingdomIds[Math.floor(this.random() * kingdomIds.length)].toUpperCase()]?.set === CARD_SETS.DARK_AGES);
 
         // 中身が1種類でない山（騎士など）は、中のカードを混ぜて置く
+        // 2種で1山のカード・城は決まった順に重ねる（pileOrdered）。城はプレイヤー数で枚数が変わる
         kingdomIds.forEach(cardId => {
             const data = ALL_CARDS[cardId.toUpperCase()];
-            if (data?.pileCards) this.setupMixedPile(cardId, this.shuffle([...data.pileCards]));
+            const cards = data?.pileCardsFor ? data.pileCardsFor(this.players.length) : data?.pileCards;
+            if (cards) this.setupMixedPile(cardId, data.pileOrdered ? [...cards] : this.shuffle([...cards]));
         });
         // 略奪者など：廃墟の山（5種類を混ぜ、プレイヤー数-1 の10倍の枚数）
         if (kingdomIds.some(cardId => ALL_CARDS[cardId.toUpperCase()]?.types.includes(CARD_TYPES.LOOTER))) {
@@ -201,6 +210,9 @@ class Game {
         if (Object.keys(this.supply).some(cardId => this.getPotionCost(cardId) > 0)) {
             this.supply.potion = ALL_CARDS.POTION.count;
         }
+
+        // ランドマークなどの準備（勝利点トークンを置くなど）
+        this.landscapes.forEach(id => this.getLandscape(id)?.setup?.(this));
 
         // ペテン師：呪いが財宝としても使える
         this.curseIsTreasure = this.isInSupply('charlatan');
@@ -338,11 +350,27 @@ class Game {
         return data?.potionCost ?? 0;
     }
 
-    // a のコストが b より安いか（コインとポーションのどちらも多くなく、どちらかが少ない）
+    // コストの負債の数（帝国。負債のあるカードを購入すると、その数の負債を負う）
+    getDebtCost(card) {
+        const data = typeof card === 'string' ? ALL_CARDS[(this.getPileTop(card.toLowerCase()) ?? card).toUpperCase()] : card;
+        return data?.debtCost ?? 0;
+    }
+
+    // コストのコイン以外の部分（ポーションと負債）。「このカードのコストまで」などの比べ方に渡す
+    costExtras(card) {
+        return { potion: this.getPotionCost(card), debt: this.getDebtCost(card) };
+    }
+
+    // コストにポーションか負債があるか（「コスト3〜6」などのコインだけの条件には当てはまらない）
+    hasExtraCost(card) {
+        return this.getPotionCost(card) > 0 || this.getDebtCost(card) > 0;
+    }
+
+    // a のコストが b より安いか（コイン・ポーション・負債のどれも多くなく、どれかが少ない）
     costsLessThan(a, b) {
-        const [coinsA, coinsB] = [this.getCost(a), this.getCost(b)];
-        const [potionA, potionB] = [this.getPotionCost(a), this.getPotionCost(b)];
-        return coinsA <= coinsB && potionA <= potionB && (coinsA < coinsB || potionA < potionB);
+        const parts = (card) => [this.getCost(card), this.getPotionCost(card), this.getDebtCost(card)];
+        const [partsA, partsB] = [parts(a), parts(b)];
+        return partsA.every((value, i) => value <= partsB[i]) && partsA.some((value, i) => value < partsB[i]);
     }
 
     // 財宝として扱うカードか（ペテン師のあるゲームでは呪いも財宝）
@@ -508,6 +536,19 @@ class Game {
         return true;
     }
 
+    // 購入フェーズからアクションフェーズに戻る（ヴィラを購入フェーズに獲得したとき）
+    returnToActionPhase(player) {
+        if (this.phase !== 'buy' || player !== this.getCurrentPlayer()) return;
+        this.phase = 'action';
+        this.log(`${player.name}はアクションフェーズに戻りました`);
+    }
+
+    // 魅了の魔女：他のプレイヤーの魅了を受けていて、自分のターンに最初にプレイするアクションなら、効果の代わりにカード+1・アクション+1
+    isEnchanted(player, card) {
+        return card.isType(CARD_TYPES.ACTION) && player === this.getCurrentPlayer() && this.turnState.actionsPlayed === 1 &&
+            this.players.some(owner => owner !== player && owner.enchantedVictims.has(player));
+    }
+
     // カードをプレイしたとき最初に得るもの：山に置いた +1 カードなどのトークン（冒険）、チャンピオン
     applyPlayBonuses(player, card) {
         const pileId = this.pileOf[card.id] ?? card.id;
@@ -551,10 +592,14 @@ class Game {
         this.log(`${player.name}は財宝カードを${treasures.length}枚プレイしました`);
         this.log('購入フェーズに移行しました');
 
+        // 購入フェーズの開始時のランドマーク（闘技場）のあとで財宝をプレイする
         // 先の財宝の効果で手札から無くなった財宝（ティアラで2回プレイしたものなど）はプレイしない
-        this.runNext(...treasures.map(card => () => {
-            if (player.hand.includes(card)) this.playTreasure(player, card);
-        }));
+        this.runNext(
+            () => this.runLandscapeHooks('onStartBuyPhase', player),
+            ...treasures.map(card => () => {
+                if (player.hand.includes(card)) this.playTreasure(player, card);
+            })
+        );
         this.processEffects();
 
         this.notifyStateChanged();
@@ -690,7 +735,12 @@ class Game {
                 player.gainedVictoryInBuyPhase = true;
             }
             if (this.phase === 'buy') this.turnState.buyPhaseGains++;
+            // 庭師：場にある間、勝利点カードを獲得するたびに勝利点トークン+1
+            if (card.isType(CARD_TYPES.VICTORY)) {
+                this.gainVp(player, player.playArea.filter(played => played.id === 'groundskeeper').length, '庭師');
+            }
         }
+        this.runLandscapeHooks('onGainAny', player, card);
 
         this.players.forEach(owner => {
             if (owner === player) return;
@@ -754,6 +804,15 @@ class Game {
                     });
                 });
             }
+        }
+
+        // 魔除け：次にカードを獲得したとき、同じコストの名前の違うカードも獲得してよい
+        if (isCurrent && this.turnState.charms > 0) {
+            this.turnState.charms--;
+            steps.push(() => this.promptGain({
+                player, exactCost: this.getCost(card), ...this.costExtras(card), optional: true, filter: (data) => data.id !== card.id,
+                title: '魔除け', message: `${card.name}と同じコストの、名前の違うカードを1枚獲得できます（選ばなくてもかまいません）。`
+            }));
         }
 
         // ティアラ・旅の祭り：このターンに獲得したカードを山札の上に置いてもよい
@@ -848,6 +907,13 @@ class Game {
             return false;
         }
 
+        // 負債があれば先に返す。返しきれなければ購入できない
+        this.payOffDebt(player);
+        if (player.debt > 0) {
+            this.reject('負債を返すまで購入できません');
+            return false;
+        }
+
         // ALL_CARDSには大文字のID、サプライには小文字のIDで参照する（中身の混ざった山は一番上のカード）
         const { pileId, cardId: topCardId } = this.resolvePile(cardId);
         if (!topCardId || !this.supply[pileId] || this.supply[pileId] <= 0) {
@@ -890,6 +956,12 @@ class Game {
         player.coins -= cost;
         player.potions -= potionCost;
         this.log(`${player.name}は${data.name}を購入しました`);
+        // コストの負債と、山に置かれた負債（徴税）を負う
+        this.takeDebt(player, this.getDebtCost(data));
+        if (this.pileDebt[pileId] > 0) {
+            this.takeDebt(player, this.pileDebt[pileId], '徴税');
+            this.pileDebt[pileId] = 0;
+        }
         let overpaid = 0;
         let gained = null;
         this.runNext(
@@ -929,6 +1001,7 @@ class Game {
     // カードを購入したときの効果（そのカード自身と、場にあるカード）
     onCardBought(player, data) {
         this.turnState.cardsBought++;
+        this.runLandscapeHooks('onBuyAny', player, data);
         const steps = [];
         if (data.onBuy) steps.push(() => data.onBuy(player, this, data));
         player.playArea.filter(card => card.onBuyWhileInPlay).forEach(card => {
@@ -975,6 +1048,10 @@ class Game {
         const player = this.getCurrentPlayer();
         this.turnState.cleanupStarted = true;
         this.phase = 'cleanup';
+        // 野営地：クリーンアップの開始時に、脇に置いた野営地をサプライに戻す
+        this.turnState.encampments.forEach(card => {
+            if (player.setAside.includes(card) && this.returnToSupply(player, card)) this.log(`${player.name}は野営地をサプライに戻しました`);
+        });
         this.runNext(
             // 購入フェーズの終わりの効果（隠遁者・酒場マットのワイン商）
             ...player.playArea.filter(card => card.onEndOfBuyPhase).map(card => () => {
@@ -1084,6 +1161,9 @@ class Game {
             player.drawCards(this.turnState.farrierDraw);
             this.log(`${player.name}は蹄鉄工の効果でカードを${this.turnState.farrierDraw}枚引きました`);
         }
+        // ターンの終わりのランドマーク（浴場など）
+        this.runLandscapeHooks('onEndTurn', player);
+
         // 支配のターンの終わりに、脇に置いた（廃棄された）カードを捨て札に戻す
         if (this.possessor) {
             player.discard.push(...this.possessionTrash);
@@ -1092,6 +1172,44 @@ class Game {
         }
         this.log(`${player.name}のターンが終了しました`);
 
+        // このターンの後に起きること（寄付・山道の入札）があれば、それを終えてから次の手番に進む
+        const afterTurn = [
+            ...(player.donatePending ? [() => this.resolveDonate(player)] : []),
+            ...this.landscapes.map(id => this.getLandscape(id)?.afterTurn).filter(Boolean).map(hook => () => hook(this, player))
+        ];
+        if (afterTurn.length > 0) {
+            this.runNext(...afterTurn, () => this.advanceTurn(player, takesExtraTurn));
+            return;
+        }
+        this.advanceTurn(player, takesExtraTurn);
+    }
+
+    // 寄付：山札と捨て札を手札に加え、好きな枚数を廃棄し、手札を山札にしてシャッフルして5枚引く
+    resolveDonate(player) {
+        player.donatePending = false;
+        player.hand.push(...player.deck.splice(0), ...player.discard.splice(0));
+        this.log(`${player.name}は寄付で、山札と捨て札をすべて手札に加えました`);
+        this.promptSelect({
+            player,
+            cards: player.hand,
+            min: 0,
+            max: player.hand.length,
+            title: '寄付',
+            message: '廃棄するカードを選んでください（選ばなくてもかまいません）。残りはシャッフルして山札にし、5枚引きます。',
+            confirmLabel: '廃棄する',
+            purpose: 'donate',
+            callback: (indices) => {
+                const trashed = this.trashFromHand(player, indices);
+                if (trashed.length > 0) this.log(`${player.name}は${trashed.length}枚を廃棄しました`);
+                player.deck.push(...player.hand.splice(0));
+                player.shuffleDeck();
+                player.drawCards(5);
+            }
+        });
+    }
+
+    // ゲームの終わりを確かめ、次の手番に進む
+    advanceTurn(player, takesExtraTurn) {
         // ゲーム終了条件はターン終了時にチェックする
         if (this.checkGameEnd()) {
             this.endGame();
@@ -1153,6 +1271,7 @@ class Game {
         player.blockades = [];
         player.hauntedVictims.clear();
         player.swampHagVictims.clear();
+        player.enchantedVictims.clear();
 
         // ずっと場に残る持続カード（雇人・チャンピオン）は、効果を使った後も残す
         const durations = player.durations;
@@ -1184,6 +1303,52 @@ class Game {
         this.processEffects();
     }
 
+    // プレイヤーの勝利点（カード・勝利点トークンに、ランドマークの得点を足す）
+    calculateScore(player) {
+        return player.calculateVictoryPoints() +
+            this.landscapes.reduce((sum, id) => sum + (this.getLandscape(id)?.score?.(this, player) ?? 0), 0);
+    }
+
+    // 勝利点トークンを得る
+    gainVp(player, amount, source = '') {
+        if (amount <= 0) return;
+        player.vpTokens += amount;
+        this.log(`${player.name}は${source ? `${source}で` : ''}勝利点トークンを${amount}つ得ました`);
+    }
+
+    // 山や札に置いた勝利点トークンを取る（pool は this.pileVp か this.landscapeVp）
+    takeVpFrom(player, pool, key, source, amount = Infinity) {
+        const taken = Math.min(pool[key] ?? 0, amount);
+        if (taken <= 0) return 0;
+        pool[key] -= taken;
+        this.gainVp(player, taken, source);
+        return taken;
+    }
+
+    // ランドマークなどのきっかけ（hook は onGainAny・onBuyAny・onTrashAny など）を、使う札の順に起こす
+    runLandscapeHooks(hook, ...args) {
+        this.landscapes.forEach(id => {
+            const data = this.getLandscape(id);
+            if (data?.[hook]) data[hook](this, ...args);
+        });
+    }
+
+    // 負債を、持っている財宝で返せるだけ返す（負債があるとカードやイベントを購入できない）
+    payOffDebt(player) {
+        const amount = Math.min(player.coins, player.debt);
+        if (amount <= 0) return;
+        player.coins -= amount;
+        player.debt -= amount;
+        this.log(`${player.name}は負債を${amount}返しました${player.debt > 0 ? `（残り${player.debt}）` : ''}`);
+    }
+
+    // 負債を負う
+    takeDebt(player, amount, source = '') {
+        if (amount <= 0) return;
+        player.debt += amount;
+        this.log(`${player.name}は${source ? `${source}で` : ''}負債を${amount}負いました`);
+    }
+
     // ゲーム終了条件をチェック
     checkGameEnd() {
         // 属州（植民地を使うなら植民地も）の山札が空になったらゲーム終了
@@ -1204,9 +1369,9 @@ class Game {
     endGame() {
         this.phase = 'end';
 
-        // 各プレイヤーの勝利点を計算
+        // 各プレイヤーの勝利点を計算（ランドマークの得点を含む）
         const scores = this.players.map(player => {
-            const points = player.calculateVictoryPoints();
+            const points = this.calculateScore(player);
             return { player, points };
         });
 
@@ -1359,6 +1524,7 @@ class Game {
         } else {
             this.trash.push(card);
         }
+        this.runLandscapeHooks('onTrashAny', player, card);
         const steps = [];
         if (card.onTrash) steps.push(() => card.onTrash(player, this, card));
         // 自分のカードが廃棄されたときの手札のリアクション（市場広場）。同じカードは1回だけ聞く
@@ -1444,7 +1610,7 @@ class Game {
     // 獲得できるサプライのカードデータ（今のコストで条件に合うもの。コストの高い順）
     // potion はコストのポーションの数：「コスト○以下」ならそれ以下、「ちょうど○」なら同じ数のカードだけを選ぶ
     // lessThan を渡すと、そのカードより安いカードだけを選ぶ（ポーションも比べる）
-    getGainableCards({ maxCost = Infinity, minCost = 0, exactCost = null, potion = 0, lessThan = null, filter = () => true } = {}) {
+    getGainableCards({ maxCost = Infinity, minCost = 0, exactCost = null, potion = 0, debt = 0, lessThan = null, filter = () => true } = {}) {
         return Object.keys(this.supply)
             .filter(cardId => this.supply[cardId] > 0)
             .map(cardId => ALL_CARDS[this.getPileTop(cardId)?.toUpperCase()])
@@ -1452,11 +1618,12 @@ class Game {
                 if (!data) return false;
                 const cost = this.getCost(data);
                 const potionCost = this.getPotionCost(data);
+                const debtCost = this.getDebtCost(data);
                 if (lessThan) {
                     if (!this.costsLessThan(data, lessThan)) return false;
                 } else if (exactCost !== null) {
-                    if (cost !== exactCost || potionCost !== potion) return false;
-                } else if (cost > maxCost || cost < minCost || potionCost > potion) {
+                    if (cost !== exactCost || potionCost !== potion || debtCost !== debt) return false;
+                } else if (cost > maxCost || cost < minCost || potionCost > potion || debtCost > debt) {
                     return false;
                 }
                 return filter(data);
@@ -1466,8 +1633,8 @@ class Game {
 
     // サプライから条件に合うカードを1枚選んで獲得させる（filter でカードの種類を絞れる。optional なら選ばなくてもよい）
     // onGained には獲得したカードが渡る
-    promptGain({ player, maxCost = Infinity, minCost = 0, exactCost = null, potion = 0, lessThan = null, filter = () => true, destination = 'discard', optional = false, title, message, purpose = 'gain', onGained }) {
-        const candidates = this.getGainableCards({ maxCost, minCost, exactCost, potion, lessThan, filter });
+    promptGain({ player, maxCost = Infinity, minCost = 0, exactCost = null, potion = 0, debt = 0, lessThan = null, filter = () => true, destination = 'discard', optional = false, title, message, purpose = 'gain', onGained }) {
+        const candidates = this.getGainableCards({ maxCost, minCost, exactCost, potion, debt, lessThan, filter });
 
         if (candidates.length === 0) {
             this.log(`${player.name}が獲得できるカードはありませんでした`);

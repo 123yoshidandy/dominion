@@ -7,15 +7,16 @@
 import { CARD_TYPES } from './card-data.js';
 
 // 何度もプレイさせるカード（他のアクションカードがあるときに最優先でプレイする）
-const MULTIPLIER_PRIORITY = ['kings_court', 'throne_room', 'coronet', 'disciple'];
+const MULTIPLIER_PRIORITY = ['kings_court', 'throne_room', 'coronet', 'disciple', 'crown'];
 
 // アクションを増やすカード（何枚プレイしても他のアクションを妨げない）の優先順
 const NON_TERMINAL_PRIORITY = [
     // アクションが2つ以上増える村
-    'village', 'university', 'port', 'lost_city', 'necropolis', 'bandit_camp', 'fortress', 'wandering_minstrel', 'dame_molly', 'madman',
+    'village', 'university', 'port', 'lost_city', 'bustling_village', 'villa', 'city_quarter', 'encampment', 'necropolis', 'bandit_camp', 'fortress', 'wandering_minstrel', 'dame_molly', 'madman',
     'bazaar', 'fishing_village', 'festival', 'native_village', 'workers_village', 'city', 'shanty_town',
     'mining_village', 'border_village', 'farmhands', 'plaza', 'crossroads', 'inn', 'candlestick_maker', 'demesne',
     // アクションが1つ増えるカード
+    'patrician', 'emporium', 'settlers', 'chariot_race', 'groundskeeper', 'archive', 'forum',
     'champion', 'page', 'ratcatcher', 'guide', 'magpie', 'dungeon', 'caravan_guard', 'transmogrify', 'royal_carriage',
     'storyteller', 'raze', 'fugitive', 'treasure_hunter', 'artificer', 'peasant',
     'scrying_pool', 'familiar', 'alchemist', 'apothecary', 'apprentice', 'junk_dealer', 'ironmonger', 'market_square',
@@ -28,7 +29,7 @@ const NON_TERMINAL_PRIORITY = [
 
 // アクションを増やさないカード（ターミナル）の優先順
 const TERMINAL_PRIORITY = [
-    'possession', 'golem', 'cultist', 'swamp_hag', 'hireling', 'witch', 'haunted_woods', 'giant', 'bridge_troll', 'sea_witch', 'soothsayer', 'torturer', 'young_witch', 'charlatan', 'witchs_hut', 'margrave', 'minion',
+    'possession', 'golem', 'cultist', 'overlord', 'royal_blacksmith', 'enchantress', 'legionary', 'swamp_hag', 'hireling', 'witch', 'haunted_woods', 'giant', 'bridge_troll', 'sea_witch', 'soothsayer', 'torturer', 'young_witch', 'charlatan', 'witchs_hut', 'margrave', 'minion',
     'artisan', 'wharf', 'council_room', 'library', 'patrol', 'courtier', 'nobles', 'rabble', 'jester', 'bandit', 'corsair',
     'merchant_ship', 'pirate', 'outpost', 'smithy', 'diplomat', 'guard_dog', 'journeyman', 'carnival', 'vault',
     'magnate', 'housecarl', 'courser', 'renown', 'militia', 'footpad', 'berserker', 'mint', 'cutpurse', 'blockade',
@@ -44,11 +45,13 @@ const TERMINAL_PRIORITY = [
     'poor_house', 'beggar', 'abandoned_mine', 'ruined_library', 'ruined_market', 'survivors',
     // 冒険
     'wine_merchant', 'hero', 'warrior', 'soldier', 'gear', 'ranger', 'messenger', 'amulet', 'miser', 'duplicate',
-    'distant_lands', 'teacher'
+    'distant_lands', 'teacher',
+    // 帝国
+    'catapult', 'gladiator', 'engineer', 'temple', 'wild_hunt', 'sacrifice', 'farmers_market', 'small_castle', 'opulent_castle'
 ];
 
 // 買うカードがないときに使うイベント（安くて損のないもの）
-const EVENT_BUY_PRIORITY = ['expedition', 'scouting_party', 'alms', 'save'];
+const EVENT_BUY_PRIORITY = ['expedition', 'delve', 'scouting_party', 'alms', 'save'];
 
 // ポーションがあるときに買う錬金術のカード（コストの高い順に考える）
 const POTION_BUY_PRIORITY = ['golem', 'familiar', 'alchemist', 'scrying_pool', 'apothecary', 'university', 'philosophers_stone'];
@@ -91,7 +94,14 @@ function isWorthPlaying(card, player, game) {
         case 'altar':
         case 'junk_dealer':
         case 'forager':
+        case 'sacrifice':
+        case 'catapult':
+        case 'temple':
             return others.length > 0;
+        case 'opulent_castle':
+            return others.some(c => c.isType(CARD_TYPES.VICTORY));
+        case 'crown':
+            return others.some(c => c.isType(CARD_TYPES.ACTION));
         case 'procession':
             return others.some(c => c.isType(CARD_TYPES.ACTION) && !c.isType(CARD_TYPES.DURATION));
         case 'treasure_map':
@@ -188,12 +198,12 @@ export function chooseCardToBuy(player, game) {
         if (provincesLeft <= 5) return pick(['duchy', 'silver']);
 
         const actions = ['laboratory', 'bazaar', 'market', 'festival', 'city', 'highway', 'hunting_party', 'baker', 'cartographer',
-            'junk_dealer', 'bandit_camp', 'lost_city'];
+            'junk_dealer', 'bandit_camp', 'lost_city', 'groundskeeper', 'forum', 'archive'];
         if (canAddTerminal) {
             if (cursesLeft) actions.unshift('witch', 'sea_witch', 'soothsayer', 'torturer', 'charlatan');
             if (available('ruins')) actions.unshift('cultist');
             if (cursesLeft) actions.unshift('swamp_hag');
-            actions.push('knights', 'rogue');
+            actions.push('knights', 'rogue', 'legionary');
             actions.push('margrave', 'wharf', 'council_room', 'library', 'courtier', 'bandit', 'merchant_ship', 'rabble');
         }
         return pick([...actions, 'silver']);
@@ -201,7 +211,7 @@ export function chooseCardToBuy(player, game) {
     if (coins >= 3) {
         if (provincesLeft <= 2) return pick(['estate', 'silver']);
         if (coins === 4 && canAddTerminal) {
-            return pick([...(cursesLeft ? ['young_witch'] : []), ...(available('ruins') ? ['marauder'] : []), 'smithy', 'militia',
+            return pick([...(cursesLeft ? ['young_witch'] : []), ...(available('ruins') ? ['marauder'] : []), 'villa', 'smithy', 'militia',
                 'monument', 'cutpurse', 'moneylender', 'silver']);
         }
         return pick(['silver']);
@@ -335,6 +345,39 @@ function chooseSelection(prompt, game) {
         case 'steward-trash':
         case 'trading-post':
             return min <= 1 ? trashOrder(cards) : indicesByKeepValue(cards).slice(0, min);
+
+        case 'catapult-trash':
+        case 'sacrifice-trash':
+        case 'ritual-trash':
+            return trashOrder(cards);
+
+        case 'temple-trash': {
+            const junk = indicesWhere(cards, isTrashTarget).slice(0, 3);
+            return junk.length > 0 ? junk : [lowest(cards)];
+        }
+
+        case 'gladiator-reveal':
+            // 相手が持っていなさそうな、高いカードを公開する
+            return [cards.map((card, index) => index).sort((a, b) => cards[b].cost - cards[a].cost)[0]];
+
+        case 'small-castle':
+            return [0];
+
+        case 'haunted-castle':
+            return indicesByKeepValue(cards).slice(0, 2);
+
+        case 'opulent-castle':
+            return cards.map((card, index) => index);
+
+        case 'archive':
+            return [highest(cards)];
+
+        case 'annex':
+            // 不要なカードは捨て札に残し、山札に混ぜない
+            return indicesWhere(cards, isJunk).slice(0, 5);
+
+        case 'donate':
+            return indicesWhere(cards, isTrashTarget);
 
         case 'raze-trash': {
             // 不要なカードがあればそれを、なければ破壊そのものを廃棄する
@@ -646,6 +689,12 @@ function chooseOption(prompt, game) {
             return [player.actions <= 0 && handHasAction ? 0 : 2];
         case 'amulet':
             return [player.hand.some(isTrashTarget) ? 1 : 2];
+        case 'charm':
+            return [0];
+        case 'wild-hunt':
+            return [(game.pileVp.wild_hunt ?? 0) >= 3 && (game.supply.estate ?? 0) > 0 ? 1 : 0];
+        case 'mountain-pass':
+            return [0];
         case 'miser': {
             const copperOnMat = player.mats.tavern.filter(c => c.id === 'copper').length;
             return [player.hand.some(c => c.id === 'copper') && copperOnMat < 3 ? 0 : 1];
@@ -691,6 +740,10 @@ function chooseConfirm(prompt) {
         case 'hovel':
         case 'catacombs':
         case 'traveller-exchange':
+        case 'encampment-reveal':
+        case 'take-from-discard':
+        case 'gladiator-answer':
+        case 'legionary':
         case 'call-royal-carriage':
         case 'call-teacher':
         case 'wine-merchant':

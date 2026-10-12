@@ -13,6 +13,7 @@ import {
     DARK_AGES_CARDS, KNIGHT_CARDS, RUINS_CARDS, SHELTER_CARDS, DARK_AGES_NON_SUPPLY_CARDS, RUINS_PILE
 } from './card-data-dark-ages.js';
 import { ADVENTURES_CARDS, TRAVELLER_CARDS, ADVENTURES_EVENTS } from './card-data-adventures.js';
+import { EMPIRES_CARDS, EMPIRES_PILE_CARDS, CASTLE_CARDS, EMPIRES_EVENTS, EMPIRES_LANDMARKS } from './card-data-empires.js';
 
 export { CARD_TYPES, CARD_SETS };
 
@@ -426,7 +427,7 @@ const BASE_KINGDOM_CARDS = {
                     game.promptGain({
                         player,
                         maxCost,
-                        potion: game.getPotionCost(trashed),
+                        ...game.costExtras(trashed),
                         title: '改築',
                         message: `コスト${maxCost}以下のカードを1枚獲得してください。`
                     });
@@ -677,7 +678,7 @@ const BASE_KINGDOM_CARDS = {
                     game.promptGain({
                         player,
                         maxCost,
-                        potion: game.getPotionCost(trashed),
+                        ...game.costExtras(trashed),
                         filter: (data) => data.types.includes(CARD_TYPES.TREASURE),
                         destination: 'hand',
                         title: '鉱山',
@@ -831,7 +832,8 @@ export const KINGDOM_CARDS = {
     ...withSet(CORNUCOPIA_GUILDS_CARDS, CARD_SETS.CORNUCOPIA_GUILDS),
     ...withSet(ALCHEMY_CARDS, CARD_SETS.ALCHEMY),
     ...withSet(DARK_AGES_CARDS, CARD_SETS.DARK_AGES),
-    ...withSet(ADVENTURES_CARDS, CARD_SETS.ADVENTURES)
+    ...withSet(ADVENTURES_CARDS, CARD_SETS.ADVENTURES),
+    ...withSet(EMPIRES_CARDS, CARD_SETS.EMPIRES)
 };
 
 // 王国カード以外で、一部のゲームだけで使うカード（白金貨・植民地・ポーション・褒賞・騎士・廃墟・避難所など）
@@ -840,12 +842,14 @@ export const EXTRA_CARDS = {
     ...withSet(ALCHEMY_BASIC_CARDS, CARD_SETS.ALCHEMY),
     ...withSet({ ...KNIGHT_CARDS, ...RUINS_CARDS, ...SHELTER_CARDS, ...DARK_AGES_NON_SUPPLY_CARDS, ...RUINS_PILE }, CARD_SETS.DARK_AGES),
     ...withSet(TRAVELLER_CARDS, CARD_SETS.ADVENTURES),
+    ...withSet({ ...EMPIRES_PILE_CARDS, ...CASTLE_CARDS }, CARD_SETS.EMPIRES),
     ...withSet(REWARD_CARDS, CARD_SETS.CORNUCOPIA_GUILDS)
 };
 
 // イベントなど、カードではない横長の札（ランドスケープ）
 export const LANDSCAPES = {
-    ...withSet(ADVENTURES_EVENTS, CARD_SETS.ADVENTURES)
+    ...withSet(ADVENTURES_EVENTS, CARD_SETS.ADVENTURES),
+    ...withSet({ ...EMPIRES_EVENTS, ...EMPIRES_LANDMARKS }, CARD_SETS.EMPIRES)
 };
 
 // 廃墟のカードID（小文字。廃墟の山にはこれを10枚ずつ混ぜる）

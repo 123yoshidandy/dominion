@@ -472,6 +472,65 @@ button.primary {
     border: 1px solid #fff;
 }
 
+/* 負債（帝国）：銅色の六角形 */
+.card-debt {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    font-size: 11px;
+    font-weight: 800;
+    color: #fff;
+    background: #a0522d;
+    clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
+}
+
+.supply-tile .card-debt {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 15px;
+    height: 15px;
+    font-size: 9px;
+}
+
+.supply-tile .card-debt.with-coin {
+    left: 19px;
+}
+
+/* 山や札に置いた勝利点トークン（緑の丸）と負債 */
+.vp-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 3px;
+    border-radius: 8px;
+    font-size: 9px;
+    font-weight: 800;
+    color: #fff;
+    background: var(--type-victory);
+}
+
+.pile-tokens {
+    position: absolute;
+    bottom: 3px;
+    right: 3px;
+    display: flex;
+    gap: 2px;
+}
+
+.pile-tokens .card-debt {
+    position: static;
+}
+
+.landscape-landmark {
+    border-left-color: #3f8a4c;
+}
+
 /* 橋・街道などでコストが下がっているときは色を変える */
 .card-cost.reduced {
     color: #fff;

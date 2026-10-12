@@ -58,6 +58,12 @@ const landscapeMethods = {
             this.reject('購入回数が残っていません');
             return false;
         }
+        // 負債があれば先に返す。返しきれなければ購入できない
+        this.payOffDebt(player);
+        if (player.debt > 0) {
+            this.reject('負債を返すまで購入できません');
+            return false;
+        }
         const cost = this.getLandscapeCost(id);
         if (player.coins < cost) {
             this.reject(`${data.name}を購入するためのコインが足りません（必要: ${cost}, 所持: ${player.coins}）`);
@@ -81,10 +87,16 @@ const landscapeMethods = {
         this.turnState.eventsBought.push(id);
         player.landscapesBought = [...(player.landscapesBought ?? []), id];
         this.log(`${player.name}は${data.name}を購入しました`);
+        this.takeDebt(player, data.debtCost ?? 0);
         this.runNext(() => data.onBuy(player, this, data));
         this.processEffects();
         this.notifyStateChanged();
         return true;
+    },
+
+    // 山の一番上のカードのデータ（空の中身の混ざった山は山の札のデータ）
+    getPileTopData(pileId) {
+        return ALL_CARDS[(this.getPileTop(pileId) ?? pileId).toUpperCase()] ?? null;
     },
 
     // 山の名前（中身の混ざった山は一番上のカードの名前）

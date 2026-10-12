@@ -18,7 +18,9 @@ export const CARD_TYPES = {
     LOOTER: 'looter',     // 略奪者（サプライに廃墟の山を置く）
     COMMAND: 'command',   // 命令（サプライのカードをプレイするカード。命令のカードはプレイできない）
     RESERVE: 'reserve',   // リザーブ（酒場マットに置き、決まったときに呼び出す）
-    TRAVELLER: 'traveller' // トラベラー（場から捨て札にするとき、次のカードと交換できる）
+    TRAVELLER: 'traveller', // トラベラー（場から捨て札にするとき、次のカードと交換できる）
+    CASTLE: 'castle',     // 城（帝国。城の山は安い順に重ねる）
+    GATHERING: 'gathering' // 集合（帝国。山に勝利点トークンをためる）
 };
 
 // 王国カードの収録セット
@@ -31,7 +33,8 @@ export const CARD_SETS = {
     CORNUCOPIA_GUILDS: 'cornucopia_guilds',
     ALCHEMY: 'alchemy',
     DARK_AGES: 'dark_ages',
-    ADVENTURES: 'adventures'
+    ADVENTURES: 'adventures',
+    EMPIRES: 'empires'
 };
 
 // 収録セットの表示名（開始画面とロビーで使う）
@@ -44,14 +47,17 @@ export const CARD_SET_LABELS = {
     cornucopia_guilds: '収穫祭＆ギルド',
     alchemy: '錬金術',
     dark_ages: '暗黒時代',
-    adventures: '冒険'
+    adventures: '冒険',
+    empires: '帝国'
 };
 
 // カードではない横長の札（ランドスケープ）の種類
 export const LANDSCAPE_KINDS = {
-    EVENT: 'event' // イベント：購入して効果を使う
+    EVENT: 'event',      // イベント：購入して効果を使う
+    LANDMARK: 'landmark' // ランドマーク：得点や、獲得などのきっかけで効果がある（購入しない）
 };
 
 export const LANDSCAPE_KIND_LABELS = {
-    event: 'イベント'
+    event: 'イベント',
+    landmark: 'ランドマーク'
 };
