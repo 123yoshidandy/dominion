@@ -172,6 +172,11 @@ class Player {
     // カードを引く（指定枚数）
     drawCards(count) {
         const drawnCards = [];
+        // カメレオンの習性で使っている間は、カードを引く代わりに財宝を得る
+        if (this.chameleonActive && count > 0) {
+            this.coins += count;
+            return drawnCards;
+        }
         // -1 カードのトークンが山札の上にあれば、1枚少なく引いてトークンを戻す
         if (count > 0 && this.minusCardToken) {
             this.minusCardToken = false;

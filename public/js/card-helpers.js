@@ -13,8 +13,15 @@ export const names = (cards) => cards.map(card => card.name).join('・');
 // +カード・+アクション・+購入・+財宝・+財源・+勝利点トークンをまとめて得て、ログに書く
 export function gainBenefits(player, game, benefits, source = '') {
     // カメレオンの習性で使っている間は、+カードと+財宝を入れ替える
-    const swapped = player.chameleonActive ? { ...benefits, cards: benefits.coins ?? 0, coins: benefits.cards ?? 0 } : benefits;
-    return applyBenefits(player, game, swapped, source);
+    // （+カードは drawCards が財宝に変える。+財宝は、ここでカメレオンを外してカードを引く）
+    if (player.chameleonActive && (benefits.coins ?? 0) > 0) {
+        player.chameleonActive = false;
+        player.drawCards(benefits.coins);
+        player.chameleonActive = true;
+        game.log(`${player.name}はカメレオンの習性で、財宝+${benefits.coins}の代わりにカードを${benefits.coins}枚引きました`);
+        return applyBenefits(player, game, { ...benefits, coins: 0 }, source);
+    }
+    return applyBenefits(player, game, benefits, source);
 }
 
 function applyBenefits(player, game, { cards = 0, actions = 0, buys = 0, coins = 0, coffers = 0, vp = 0 }, source = '') {
