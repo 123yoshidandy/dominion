@@ -39,7 +39,7 @@ describe.each(SETS)('%s（%s）のCPU同士の試合', (set) => {
 
         for (let round = 0; round < 20; round++) {
             // セットのカードをすべてサプライに置く
-            const game = createGame(cpus(2 + (round % 3)), kingdom);
+            const game = createGame(cpus(2 + (round % 3)), kingdom, { seed: 600 + round });
             game.players.forEach(p => {
                 p.deck.push(...makeCards(ids), ...makeCards(Object.keys(EXTRA_CARDS)).filter(card => card.onPlay));
                 p.shuffleDeck();
@@ -65,7 +65,7 @@ describe.each(SETS)('%s（%s）のCPU同士の試合', (set) => {
 
     it('ランダムな王国カードで最後まで進められる', () => {
         for (let round = 0; round < 10; round++) {
-            const game = new Game(cpus(2 + (round % 3)), { cardSets: [set] });
+            const game = new Game(cpus(2 + (round % 3)), { cardSets: [set], seed: 700 + round });
             game.setup();
             expect(playOut(game).phase).toBe('end');
         }

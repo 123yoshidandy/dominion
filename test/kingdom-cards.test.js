@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { getKingdomCardIds } from '../public/js/card-data.js';
 import { runCpuStep, hasCpuPrompt } from '../public/js/cpu-player.js';
-import { createGame, makeCards } from './helpers.js';
+import { createGame, makeCards, seededShuffle } from './helpers.js';
 
 // 基本セットの26種すべてをサプライに入れたいテスト用（サプライの枚数を見るテストで使う）
 const BASE_CARD_IDS = getKingdomCardIds(['base']);
@@ -422,7 +422,7 @@ describe('全カードでのCPU同士の試合', () => {
     it('ランダムな王国カードで最後まで進められる', () => {
         for (let round = 0; round < 30; round++) {
             const game = createGame([{ name: 'CPU1', isCPU: true }, { name: 'CPU2', isCPU: true }, { name: 'CPU3', isCPU: true }],
-                [...ALL_KINGDOM].sort(() => Math.random() - 0.5).slice(0, 10));
+                seededShuffle(ALL_KINGDOM, 400 + round).slice(0, 10), { seed: 400 + round });
             let steps = 0;
             while (game.phase !== 'end' && steps < 30000) {
                 runCpuStep(game);

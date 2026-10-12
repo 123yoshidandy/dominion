@@ -88,7 +88,7 @@ describe('CPUプレイヤー', () => {
 
     it('CPU同士で最後までゲームを進められる', () => {
         for (let round = 0; round < 20; round++) {
-            const cpuGame = new Game([{ name: 'CPU1', isCPU: true }, { name: 'CPU2', isCPU: true }]);
+            const cpuGame = new Game([{ name: 'CPU1', isCPU: true }, { name: 'CPU2', isCPU: true }], { seed: 500 + round });
             cpuGame.setup();
 
             let steps = 0;

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { getKingdomCardIds } from '../public/js/card-data.js';
 import { runCpuStep } from '../public/js/cpu-player.js';
-import { createGame, makeCards } from './helpers.js';
+import { createGame, makeCards, seededShuffle } from './helpers.js';
 
 const SEASIDE_CARD_IDS = getKingdomCardIds(['seaside']);
 const SEASIDE_KINGDOM = SEASIDE_CARD_IDS.map(id => id.toLowerCase());
@@ -395,7 +395,7 @@ describe('海辺のカードでのCPU同士の試合', () => {
         const groups = [SEASIDE_KINGDOM.slice(0, 10), SEASIDE_KINGDOM.slice(10, 20), SEASIDE_KINGDOM.slice(17, 27)];
         groups.forEach(kingdom => {
             for (let round = 0; round < 10; round++) {
-                expect(playOut(createGame(cpuPlayers, kingdom), 20000).phase).toBe('end');
+                expect(playOut(createGame(cpuPlayers, kingdom, { seed: 100 + round }), 20000).phase).toBe('end');
             }
         });
     });
@@ -405,7 +405,7 @@ describe('海辺のカードでのCPU同士の試合', () => {
         const actionIds = SEASIDE_CARD_IDS.filter(id => id !== 'ASTROLABE');
 
         for (let round = 0; round < 10; round++) {
-            const game = createGame(cpuPlayers, SEASIDE_KINGDOM);
+            const game = createGame(cpuPlayers, SEASIDE_KINGDOM, { seed: 200 + round });
             game.players.forEach(p => {
                 p.deck.push(...makeCards([...actionIds, 'TREASURE_MAP', 'ASTROLABE']));
                 p.shuffleDeck();
@@ -426,8 +426,8 @@ describe('海辺のカードでのCPU同士の試合', () => {
     it('基本と海辺を混ぜたランダムな王国カードで、3人でも最後まで進められる', () => {
         const all = getKingdomCardIds(['base', 'seaside']).map(id => id.toLowerCase());
         for (let round = 0; round < 30; round++) {
-            const kingdom = [...all].sort(() => Math.random() - 0.5).slice(0, 10);
-            const game = createGame([...cpuPlayers, { name: 'CPU3', isCPU: true }], kingdom);
+            const kingdom = seededShuffle(all, 300 + round).slice(0, 10);
+            const game = createGame([...cpuPlayers, { name: 'CPU3', isCPU: true }], kingdom, { seed: 300 + round });
             expect(playOut(game, 30000).phase).toBe('end');
         }
     });
