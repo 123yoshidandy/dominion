@@ -61,6 +61,8 @@ export function createGameView(game, viewerId, { logsFrom = 0 } = {}) {
         debtCosts: Object.fromEntries(Object.keys(game.supply).map(cardId => [cardId, game.getDebtCost(cardId)])),
         pileVp: { ...game.pileVp },
         pileDebt: { ...game.pileDebt },
+        // 同盟：山に置いた恩恵トークン（発明家の一族）
+        inventorTokens: { ...game.inventorTokens },
         obelisk: game.landscapeState.obelisk ?? null,
         // 夜想曲：ドルイドの祝福、森で迷うを持つプレイヤー、祝福・呪詛の山の残り
         druidBoons: [...(game.druidBoons ?? [])],
@@ -90,6 +92,7 @@ export function createGameView(game, viewerId, { logsFrom = 0 } = {}) {
                 potions: player.potions,
                 coffers: player.coffers,
                 vpTokens: player.vpTokens,
+                favors: player.favors,
                 handCount: player.hand.length,
                 deckCount: player.deck.length,
                 discardCount: player.discard.length,

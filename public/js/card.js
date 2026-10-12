@@ -43,9 +43,11 @@ class Card {
         const useWays = this.isType(CARD_TYPES.ACTION) && (game?.getWays?.().length ?? 0) > 0;
         const resolve = useWays ? () => game.promptWay(player, this, original) : original;
         // プレイする前に起きる効果（浮浪児・窯）があれば、それを先に処理してから効果を使う
+        // プレイした後に起きる効果（同盟の札）があれば、効果を解決し終えてから起こす
         const before = game?.getBeforePlaySteps?.(player, this) ?? [];
-        if (before.length > 0) {
-            game.runNext(...before, resolve);
+        const after = game?.getAfterPlayStep?.(player, this) ?? null;
+        if (before.length > 0 || after) {
+            game.runNext(...before, resolve, ...(after ? [after] : []));
             return;
         }
         resolve();

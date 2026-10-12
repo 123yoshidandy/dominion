@@ -26,7 +26,14 @@ export const CARD_TYPES = {
     FATE: 'fate',         // 運命（祝福を使う）
     DOOM: 'doom',         // 呪い（呪詛を使う）
     SPIRIT: 'spirit',     // 精霊（サプライ外の山）
-    ZOMBIE: 'zombie'      // ゾンビ（最初から廃棄置き場にある）
+    ZOMBIE: 'zombie',     // ゾンビ（最初から廃棄置き場にある）
+    LIAISON: 'liaison',   // 連絡役（同盟。王国にあれば同盟の札を1枚使う）
+    TOWNSFOLK: 'townsfolk', // 町民（同盟。4種で1山の山。以下も同じ）
+    AUGUR: 'augur',       // 鳥占い師
+    CLASH: 'clash',       // 衝突
+    FORT: 'fort',         // 砦
+    ODYSSEY: 'odyssey',   // 冒険旅行
+    WIZARD: 'wizard'      // 魔法使い
 };
 
 // 王国カードの収録セット
@@ -43,7 +50,8 @@ export const CARD_SETS = {
     EMPIRES: 'empires',
     NOCTURNE: 'nocturne',
     RENAISSANCE: 'renaissance',
-    MENAGERIE: 'menagerie'
+    MENAGERIE: 'menagerie',
+    ALLIES: 'allies'
 };
 
 // 収録セットの表示名（開始画面とロビーで使う）
@@ -60,7 +68,8 @@ export const CARD_SET_LABELS = {
     empires: '帝国',
     nocturne: '夜想曲',
     renaissance: 'ルネサンス',
-    menagerie: '移動動物園'
+    menagerie: '移動動物園',
+    allies: '同盟'
 };
 
 // カードではない横長の札（ランドスケープ）の種類
@@ -68,7 +77,8 @@ export const LANDSCAPE_KINDS = {
     EVENT: 'event',      // イベント：購入して効果を使う
     LANDMARK: 'landmark', // ランドマーク：得点や、獲得などのきっかけで効果がある（購入しない）
     PROJECT: 'project',  // プロジェクト：購入すると自分のキューブを置き、以後ずっと効果がある（1人1回）
-    WAY: 'way'           // 習性：アクションカードをプレイするとき、本来の効果の代わりに使ってよい
+    WAY: 'way',          // 習性：アクションカードをプレイするとき、本来の効果の代わりに使ってよい
+    ALLY: 'ally'         // 同盟：連絡役のあるゲームで1枚使い、恩恵トークンを使って効果を得る
 };
 
 export const LANDSCAPE_KIND_LABELS = {
@@ -76,5 +86,6 @@ export const LANDSCAPE_KIND_LABELS = {
     landmark: 'ランドマーク',
     project: 'プロジェクト',
     way: '習性',
+    ally: '同盟',
     boon: '祝福'
 };

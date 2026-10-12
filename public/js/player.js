@@ -72,6 +72,14 @@ class Player {
         this.gatekeeperVictims = new Set(); // 次のターンまで、獲得したカードを追放させるプレイヤー（門番）
         this.hauntedVictims = new Set();      // 次のターンまで、購入すると手札を山札に置くプレイヤー（幽霊の森）
         this.swampHagVictims = new Map();     // 次のターンまで、購入すると呪いを獲得するプレイヤーと回数（沼の妖婆）
+
+        // ===== 同盟 =====
+        this.favors = 0;              // 恩恵トークン（同盟の札の効果に使う）
+        this.shuffleCount = 0;        // 捨て札をシャッフルして山札にした回数（密使）
+        this.onShuffle = null;        // シャッフルしたときの効果（占星術師団・石工団。Game が設定する）
+        this.skipTurns = 0;           // 飛ばす自分のターンの数（リッチ）
+        this.highwaymanVictims = new Set(); // 次のターンまで、毎ターン最初の財宝が何もしないプレイヤー（辻強盗）
+        this.warlordVictims = new Set();    // 次のターンまで、場に2枚以上あるアクションを手札からプレイできないプレイヤー（将軍）
     }
 
     // アクション数。雪深い村をプレイした後は、このターンはそれ以上増えない
@@ -154,6 +162,7 @@ class Player {
             const best = candidates.sort((a, b) => b.cost - a.cost)[0];
             if (best) this.deck.unshift(...this.deck.splice(this.deck.indexOf(best), 1));
         }
+        this.onShuffle?.();
     }
     
     // 山札の一番上のカードを取り出す。山札が空なら捨て札をシャッフルして山札にする（どちらも空なら null）
@@ -164,6 +173,7 @@ class Player {
             }
             this.deck = [...this.discard];
             this.discard = [];
+            this.shuffleCount++;
             this.shuffleDeck();
         }
         return this.deck.shift();

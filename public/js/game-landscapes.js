@@ -15,7 +15,8 @@ const landscapeMethods = {
     selectLandscapes() {
         if (this.options.landscapes) return [...this.options.landscapes];
         if (this.kingdom) return [];
-        const pool = Object.values(LANDSCAPES).filter(data => this.cardSets.includes(data.set)).map(data => data.id);
+        // 同盟の札は連絡役のあるゲームだけで使う（setupAllies で選ぶ）
+        const pool = Object.values(LANDSCAPES).filter(data => this.cardSets.includes(data.set) && data.kind !== 'ally').map(data => data.id);
         if (pool.length === 0) return [];
         const deck = this.shuffle([...getKingdomCardIds(this.cardSets).map(() => null), ...pool]);
         const chosen = [];

@@ -28,11 +28,17 @@ const NON_TERMINAL_PRIORITY = [
     'sentry', 'poacher', 'lighthouse', 'sailor', 'hunting_party', 'baker', 'cartographer', 'ferryman', 'herald',
     'advisor', 'joust', 'menagerie', 'wishing_well', 'mill', 'secret_passage', 'upgrade', 'oasis', 'scheme', 'trail',
     'stables', 'wheelwright', 'farrier', 'hamlet', 'lurker', 'pawn', 'harbinger', 'merchant', 'haven', 'lookout', 'warehouse',
+    // 同盟
+    'capital_city', 'merchant_camp', 'town', 'lich', 'underling', 'sycophant', 'hunter', 'skirmisher', 'swap',
+    'innkeeper', 'warlord', 'old_map', 'voyage', 'student', 'battle_plan', 'sibyl', 'distant_shore', 'sorceress',
+    'sorcerer', 'miller',
     'cellar'
 ];
 
 // アクションを増やさないカード（ターミナル）の優先順
 const TERMINAL_PRIORITY = [
+    // 長老は手札のアクションをもう1枚プレイできるので、ターミナルの中で最初にプレイする
+    'elder',
     'possession', 'golem', 'cultist', 'overlord', 'royal_blacksmith', 'enchantress', 'legionary', 'swamp_hag', 'hireling', 'witch', 'haunted_woods', 'giant', 'bridge_troll', 'sea_witch', 'soothsayer', 'torturer', 'young_witch', 'charlatan', 'witchs_hut', 'margrave', 'minion',
     'artisan', 'wharf', 'council_room', 'library', 'patrol', 'courtier', 'nobles', 'rabble', 'jester', 'bandit', 'corsair',
     'merchant_ship', 'pirate', 'outpost', 'smithy', 'diplomat', 'guard_dog', 'journeyman', 'carnival', 'vault',
@@ -60,7 +66,11 @@ const TERMINAL_PRIORITY = [
     'inventor', 'flag_bearer', 'improve', 'cargo_ship', 'lackeys', 'acting_troupe',
     // 移動動物園
     'mastermind', 'gatekeeper', 'barge', 'wayfarer', 'animal_fair', 'paddock', 'livery', 'kiln', 'cardinal', 'falconer',
-    'cavalry', 'groom', 'displace', 'black_cat', 'sheepdog', 'scrap', 'camel_train', 'sleigh'
+    'cavalry', 'groom', 'displace', 'black_cat', 'sheepdog', 'scrap', 'camel_train', 'sleigh',
+    // 同盟
+    'marquis', 'emissary', 'highwayman', 'barbarian', 'galleria', 'guildmaster', 'specialist', 'modify',
+    'hill_fort', 'stronghold', 'royal_galley', 'courier', 'broker', 'carpenter', 'blacksmith', 'town_crier',
+    'conjurer', 'garrison', 'archer', 'acolyte', 'tent', 'herb_gatherer', 'sentinel', 'importer'
 ];
 
 // 夜フェイズにプレイする夜のカードの優先順（獲得の数を見るカードは後に）
@@ -86,6 +96,10 @@ const isTrashTarget = (card) => ['curse', 'estate', 'hovel', 'overgrown_estate']
 
 // プレイヤーが持つすべてのカード
 const allCardsOf = (player) => [...player.hand, ...player.deck, ...player.discard, ...player.playArea];
+
+// 持っている財宝の合計（銅貨を廃棄しても困らないかの目安）
+const treasureValue = (player) => allCardsOf(player).filter(card => card.isType(CARD_TYPES.TREASURE)).reduce((sum, card) => sum + (card.value ?? 0), 0);
+const canSpareCopper = (player) => treasureValue(player) >= 7;
 
 // プレイの優先順位（小さいほど優先。一覧にないカードは最後）
 const playRank = (card) => {
@@ -155,9 +169,23 @@ function isWorthPlaying(card, player, game) {
         case 'stables':
         case 'spice_merchant':
             return others.some(c => c.isType(CARD_TYPES.TREASURE));
+        case 'broker':
+        case 'modify':
+        case 'student':
+            // 必ず廃棄するので、不要なカードか、財宝が足りているときの銅貨があるときだけプレイする
+            return others.some(c => isTrashTarget(c) || (c.id === 'copper' && canSpareCopper(player)));
+        case 'specialist':
+            return others.some(c => c.isType(CARD_TYPES.ACTION) || c.isType(CARD_TYPES.TREASURE));
         default:
             return true;
     }
+}
+
+// 将軍の攻撃や航海の追加のターンの制限で、手札からプレイできないか
+function isBlockedFromPlay(card, player, game) {
+    const state = game?.turnState;
+    if (state && state.handPlayLimit !== null && state.handPlayLimit !== undefined && state.handPlays >= state.handPlayLimit) return true;
+    return Boolean(game?.isWarlordTarget?.(player)) && player.playArea.filter(played => played.id === card.id).length >= 2;
 }
 
 // 手札からプレイするアクションカードのインデックスを選ぶ（なければ -1）
@@ -166,8 +194,8 @@ export function chooseActionCard(player, game) {
 
     // アクションを増やすカードを先にプレイし、ターミナルは最後に回す（相続した屋敷は、そのカードとして扱う）
     for (const cardId of PLAY_PRIORITY) {
-        const index = player.hand.findIndex(card =>
-            (card.id === cardId && isWorthPlaying(card, player, game)) || (card.id === 'estate' && player.inheritance === cardId));
+        const index = player.hand.findIndex(card => !isBlockedFromPlay(card, player, game) &&
+            ((card.id === cardId && isWorthPlaying(card, player, game)) || (card.id === 'estate' && player.inheritance === cardId)));
         if (index >= 0) return index;
     }
 
@@ -179,7 +207,12 @@ export function chooseCardToBuy(player, game) {
     const coins = player.coins;
     const supply = game.supply;
     const provincesLeft = supply.colony ?? supply.province ?? 0;
-    const available = (cardId) => (supply[cardId] ?? 0) > 0;
+    // 4種で1山の山（同盟）などは、一番上にあるカードのIDで買える
+    const pileFor = (cardId) => {
+        const pileId = game.pileOf?.[cardId];
+        return pileId && game.getPileTop(pileId) === cardId ? pileId : cardId;
+    };
+    const available = (cardId) => (supply[pileFor(cardId)] ?? 0) > 0 && game.getCost(pileFor(cardId)) <= Math.max(coins, 0);
 
     // ターミナルのアクションは、デッキ12枚あたり1枚程度に抑える
     const cards = allCardsOf(player);
@@ -187,7 +220,12 @@ export function chooseCardToBuy(player, game) {
     const canAddTerminal = terminalCount < 1 + Math.floor(cards.length / 12);
     const cursesLeft = available('curse');
 
-    const pick = (candidates) => candidates.find(available) ?? null;
+    const pick = (candidates) => {
+        const found = candidates.find(available);
+        return found ? pileFor(found) : null;
+    };
+    // 同じカードを max 枚未満しか持っていない候補だけにする
+    const fewerThan = (max, ids) => ids.filter(id => cards.filter(card => card.id === id).length < max);
 
     // ポーションがあれば、属州に届かないときは錬金術のカードを買う
     const potionCards = POTION_BUY_PRIORITY.filter(cardId => available(cardId) && !(cardId === 'familiar' && !cursesLeft));
@@ -211,32 +249,49 @@ export function chooseCardToBuy(player, game) {
         return pick(['province', 'gold']);
     }
     if (coins >= 6) {
-        return provincesLeft <= 4 ? pick(['duchy', 'gold']) : pick(['gold']);
+        return provincesLeft <= 4
+            ? pick(['duchy', 'distant_shore', 'stronghold', 'territory', 'gold'])
+            : pick([...fewerThan(1, ['sibyl', 'marquis', 'lich']), 'gold']);
     }
     if (coins >= 5) {
         if (provincesLeft <= 5) return pick(['duchy', 'silver']);
 
         const actions = ['laboratory', 'bazaar', 'market', 'festival', 'city', 'highway', 'hunting_party', 'baker', 'cartographer',
-            'junk_dealer', 'bandit_camp', 'lost_city', 'groundskeeper', 'forum', 'archive'];
+            'junk_dealer', 'bandit_camp', 'lost_city', 'groundskeeper', 'forum', 'archive',
+            ...fewerThan(2, ['capital_city', 'hunter', 'skirmisher', 'swap', 'sorceress', 'sorcerer', 'warlord'])];
         if (canAddTerminal) {
             if (cursesLeft) actions.unshift('witch', 'sea_witch', 'soothsayer', 'torturer', 'charlatan');
             if (available('ruins')) actions.unshift('cultist');
             if (cursesLeft) actions.unshift('swamp_hag');
             actions.push('knights', 'rogue', 'legionary');
             actions.push('margrave', 'wharf', 'council_room', 'library', 'courtier', 'bandit', 'merchant_ship', 'rabble');
+            actions.push('elder', 'barbarian', 'highwayman', 'galleria', 'guildmaster', 'emissary', 'modify', 'specialist', 'hill_fort', 'contract');
         }
         return pick([...actions, 'silver']);
     }
     if (coins >= 3) {
         if (provincesLeft <= 2) return pick(['estate', 'silver']);
+        // 同盟：アクションの増えるカードは2枚まで
+        const allies = pick(fewerThan(2, coins >= 4 ? ['town', 'innkeeper', 'voyage', 'miller'] : ['merchant_camp', 'underling', 'old_map', 'student', 'battle_plan']));
+        if (allies) return allies;
         if (coins === 4 && canAddTerminal) {
             return pick([...(cursesLeft ? ['young_witch'] : []), ...(available('ruins') ? ['marauder'] : []), 'villa', 'smithy', 'militia',
-                'monument', 'cutpurse', 'moneylender', 'silver']);
+                'monument', 'cutpurse', 'moneylender', 'courier', 'carpenter', 'broker', 'royal_galley', 'conjurer', 'garrison',
+                'archer', 'acolyte', 'silver']);
+        }
+        if (canAddTerminal) {
+            const terminal = pick(fewerThan(1, ['sentinel', 'importer', 'tent', 'herb_gatherer']));
+            if (terminal) return terminal;
         }
         return pick(['silver']);
     }
     if (coins >= 2 && provincesLeft <= 2) {
         return pick(['estate']);
+    }
+    // 同盟：コスト2のカードを1枚ずつ
+    if (coins === 2 && provincesLeft > 2) {
+        const cheap = pick(fewerThan(1, ['town_crier', 'sycophant', 'bauble']));
+        if (cheap) return cheap;
     }
 
     return chooseWhenStalled(player, game);
@@ -728,10 +783,63 @@ function chooseSelection(prompt, game) {
         case 'gain':
             return min === 0 && cards.length === 0 ? [] : [chooseGain(prompt, game)];
 
+        // ===== 同盟 =====
+        case 'sentinel-trash':
+            return indicesWhere(cards, isTrashTarget).slice(0, max);
+        case 'broker-trash':
+        case 'modify-trash':
+        case 'student-trash': {
+            // 財宝が足りなければ銅貨は廃棄せず、財宝でない価値の低いカードを選ぶ
+            if (canSpareCopper(player) || cards.some(isTrashTarget)) return trashOrder(cards);
+            const nonTreasure = cards.map((card, index) => index).filter(index => !cards[index].isType(CARD_TYPES.TREASURE))
+                .sort((a, b) => keepValue(cards[a]) - keepValue(cards[b]));
+            return [nonTreasure[0] ?? lowest(cards)];
+        }
+        case 'miller':
+        case 'herb-gatherer':
+        case 'courier':
+        case 'archer-hide':
+        case 'archer-discard':
+            return cards.length > 0 ? [highest(cards)] : [];
+        case 'specialist': {
+            const best = cards.map((card, index) => index).sort((a, b) => playRank(cards[a]) - playRank(cards[b]));
+            return [best[0]];
+        }
+        case 'swap':
+        case 'woodworkers-guild':
+            return optionalOne(card => card.isType(CARD_TYPES.RUINS) || card.cost <= 2);
+        case 'acolyte-trash':
+            return optionalOne(card => isJunk(card) || isTrashTarget(card));
+        case 'architects-guild':
+        case 'crafters-guild': {
+            if (cards.length === 0) return [];
+            const index = chooseGain(prompt, game);
+            return cards[index].cost >= 2 ? [index] : [];
+        }
+        case 'cave-dwellers':
+            return indicesWhere(cards, isJunk).slice(0, 1);
+        case 'coastal-haven':
+            // 銀貨以上の財宝やアクションを、恩恵の数だけ次のターンに残す
+            return indicesByKeepValue(cards).reverse().filter(index => keepValue(cards[index]) >= 4).slice(0, max);
+        case 'family-of-inventors':
+            return optionalOne(card => card.id === 'gold');
+        case 'market-towns': {
+            const best = cards.map((card, index) => index).sort((a, b) => playRank(cards[a]) - playRank(cards[b]));
+            return best.slice(0, 1);
+        }
+        case 'peaceful-cult':
+            return indicesWhere(cards, isTrashTarget).slice(0, max);
+
         default:
             // 想定外の選択は、条件を満たす最小の枚数を先頭から選ぶ
             return cards.map((card, index) => index).slice(0, min);
     }
+}
+
+// 長老の効果で選べる数が増えていれば、まだ選んでいない選択肢を先頭から足す
+function withExtra(prompt, chosen) {
+    const extra = prompt.options.map((option, index) => index).filter(index => !chosen.includes(index));
+    return [...chosen, ...extra].slice(0, Math.max(chosen.length, prompt.max));
 }
 
 // 選択肢から選ぶ選択に対する答え：選んだ選択肢のインデックスの配列
@@ -819,6 +927,36 @@ function chooseOption(prompt, game) {
             return [(game.supply.province ?? 0) <= 4 ? 2 : 0];
         case 'graverobber':
             return [game.trash.some(c => game.getCost(c) >= 3 && game.getCost(c) <= 6) ? 0 : 1];
+
+        // ===== 同盟（「1つを選ぶ」は、長老で選べる数が増えていれば withExtra で足す） =====
+        case 'town':
+            return withExtra(prompt, [player.hand.some(c => c.isType(CARD_TYPES.ACTION)) ? 0 : 1]);
+        case 'town-crier':
+            return withExtra(prompt, [player.actions <= 0 && handHasAction ? 2 : 0]);
+        case 'blacksmith': {
+            if (player.actions <= 0 && handHasAction) return withExtra(prompt, [2]);
+            return withExtra(prompt, [6 - player.hand.length > 2 ? 0 : 1]);
+        }
+        case 'innkeeper':
+            return withExtra(prompt, [handHasJunk(2) ? 1 : 0]);
+        case 'hill-fort':
+            return withExtra(prompt, [player.actions <= 0 && handHasAction ? 1 : 0]);
+        case 'stronghold':
+            return withExtra(prompt, [game.phase === 'action' ? 0 : 1]);
+        case 'broker':
+            return withExtra(prompt, [player.actions <= 0 && handHasAction ? 1 : 2]);
+        case 'modify':
+            return withExtra(prompt, [options.length > 1 && card && game.getCost(card) >= 2 ? 1 : 0]);
+        case 'specialist-choice':
+            return withExtra(prompt, [0]);
+        case 'bauble':
+            return [1, 2];
+        case 'band-of-nomads':
+            if (player !== game.getCurrentPlayer()) return [1];
+            if (game.phase === 'action') return [player.actions <= 0 && handHasAction ? 2 : 1];
+            return [player.coins >= 2 ? 3 : 0];
+        case 'rotate-any':
+            return [0];
         default:
             // 想定外の選択（超過支払い・寵臣の攻撃を受けた側など）は先頭から選ぶ
             return options.map((option, index) => index).slice(0, Math.max(min, 1));
@@ -826,7 +964,7 @@ function chooseOption(prompt, game) {
 }
 
 // はい／いいえの選択に対する答え
-function chooseConfirm(prompt) {
+function chooseConfirm(prompt, game) {
     const { player, card } = prompt;
 
     switch (prompt.purpose) {
@@ -864,7 +1002,28 @@ function chooseConfirm(prompt) {
         case 'call-royal-carriage':
         case 'call-teacher':
         case 'wine-merchant':
+        // 同盟
+        case 'topdeck-from-play':
+        case 'battle-plan-reveal':
+        case 'circle-of-witches':
+        case 'city-state':
+        case 'fellowship-of-scribes':
+        case 'forest-dwellers':
+        case 'gang-of-pickpockets':
+        case 'island-folk':
+        case 'mountain-folk':
             return true;
+        case 'acolyte-self':
+            return (game?.getCost('augurs') ?? 0) >= 5;
+        case 'capital-city-discard':
+            return player.hand.filter(isJunk).length >= 2;
+        case 'desert-guides': {
+            // 手札の財宝が少なく、アクションもなければ引き直す
+            const coins = player.hand.filter(c => c.isType(CARD_TYPES.TREASURE)).reduce((sum, c) => sum + (c.value ?? 0), 0);
+            return coins <= 3 && !player.hand.some(c => c.isType(CARD_TYPES.ACTION));
+        }
+        case 'trappers-lodge':
+            return Boolean(card) && !isJunk(card) && card.id !== 'copper' && player === game?.getCurrentPlayer();
         case 'call-coin-of-the-realm':
             return player.actions <= 0 && player.hand.some(c => c.isType(CARD_TYPES.ACTION));
         case 'call-ratcatcher':
@@ -900,7 +1059,7 @@ function chooseConfirm(prompt) {
 
 // 選択待ちに対する答え（select・choose は配列、confirm は真偽値）
 export function choosePromptAnswer(prompt, game) {
-    if (prompt.type === 'confirm') return chooseConfirm(prompt);
+    if (prompt.type === 'confirm') return chooseConfirm(prompt, game);
     if (prompt.type === 'choose') return chooseOption(prompt, game);
     return chooseSelection(prompt, game);
 }

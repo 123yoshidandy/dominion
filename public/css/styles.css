@@ -536,6 +536,25 @@ button.primary {
     border-left-color: #3f8a4c;
 }
 
+.landscape-ally {
+    border-left-color: #c98a1a;
+}
+
+/* 山に置いた恩恵トークン（発明家の一族） */
+.favor-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 3px;
+    border-radius: 8px;
+    font-size: 9px;
+    font-weight: 800;
+    color: #fff;
+    background: #c98a1a;
+}
+
 .landscape-project {
     border-left-color: #c0392b;
 }

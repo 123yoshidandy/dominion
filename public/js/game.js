@@ -10,6 +10,7 @@ import { putBackInAnyOrder } from './card-helpers.js';
 import { installLandscapes } from './game-landscapes.js';
 import { installNocturne } from './game-nocturne.js';
 import { installMenagerie } from './game-menagerie.js';
+import { installAllies } from './game-allies.js';
 
 // 1ターンの間だけ続く効果の記録（ターンの開始で作り直す）
 const createTurnState = () => ({
@@ -47,6 +48,14 @@ const createTurnState = () => ({
     kilns: 0,             // 次にカードをプレイするとき、先に同じカードを獲得してよい回数（窯）
     liveries: 0,          // コスト4以上のカードを獲得するたびに馬を獲得する数（馬屋）
     sealGains: false,     // 獲得したカードを山札の上に置いてもよい（アザラシの習性）
+    galleria: 0,          // コスト3か4のカードを獲得するたびに得る購入の数（ガレリア）
+    guildmasters: 0,      // カードを獲得するたびに得る恩恵の数（ギルドの親方）
+    skirmishers: 0,       // アタックカードを獲得するたびに、他のプレイヤーの手札を3枚にする回数（散兵）
+    garrisons: [],        // カードを獲得するたびにトークンを置く守備隊 { tokens }
+    baubleGains: false,   // 獲得したカードを山札の上に置いてもよい（装身具）
+    handPlays: 0,         // このターンに手札からプレイしたカードの数（航海）
+    handPlayLimit: null,  // 手札からプレイできるカードの数の上限（航海の追加のターンは3）
+    highwaymanBlocked: new Set(), // このターン、辻強盗で最初の財宝が何もしなかったプレイヤー
     cleanupStarted: false // ターン終了の処理を始めたか
 });
 
@@ -62,10 +71,10 @@ class Game {
     // cardSets は王国カードを選ぶセット。kingdom を渡すとその王国カードで遊ぶ
     // bane（魔女娘の災いカード）・ferryman（渡し守の山）・colonies（白金貨と植民地を使うか）も指定できる（テスト用）
     // seed が同じなら、同じ操作をすれば必ず同じ結果になる
-    constructor(playerNames, { cardSets = Object.values(CARD_SETS), kingdom = null, landscapes = null, bane = null, ferryman = null, colonies = null, shelters = null, seed = createSeed() } = {}) {
+    constructor(playerNames, { cardSets = Object.values(CARD_SETS), kingdom = null, landscapes = null, ally = undefined, bane = null, ferryman = null, colonies = null, shelters = null, seed = createSeed() } = {}) {
         this.cardSets = cardSets;
         this.kingdom = kingdom;
-        this.options = { landscapes, bane, ferryman, colonies, shelters };
+        this.options = { landscapes, ally, bane, ferryman, colonies, shelters };
         this.seed = seed;
         this.random = createRandom(seed);
         this.commands = []; // 受け付けた操作の記録（Game.replay で再現できる）
@@ -101,7 +110,8 @@ class Game {
         this.landscapeState = {};  // ランドマークなどが使う状態（オベリスクの山・山道の入札など）
         this.artifacts = {};       // アーティファクト（ルネサンス）の持ち主。使うものだけキーがあり、誰も持っていなければ null
         this.fleetQueue = null;    // 艦隊：ゲームの終わりの後の追加のターンを行うプレイヤーの列
-        this.extraTurns = [];      // これから行う追加のターンのプレイヤー（好機）
+        this.extraTurns = [];      // これから行う追加のターン（プレイヤーか { player, handPlayLimit }。好機・航海・島の民）
+        this.inventorTokens = {};  // 山に置いた恩恵トークンの数（発明家の一族。1つにつきコスト-1）
         this.lastError = null;     // 直前に受け付けなかった操作の理由
         this.promptCount = 0;      // これまでの選択待ちの数（画面で同じ選択を出し直さないための番号）
         this.turnCount = 0;        // これまでのターンの数（追加のターンも数える）
@@ -128,6 +138,8 @@ class Game {
             // パン屋：各プレイヤーは財源を1つ持って始める
             if (this.isInSupply('baker')) player.coffers += 1;
         });
+        // 同盟：シャッフルしたときの効果（占星術師団・石工団）は、初期デッキを配った後から効かせる
+        this.installShuffleHooks();
 
         // 最初のプレイヤーを設定
         this.currentPlayerIndex = Math.floor(this.random() * this.players.length);
@@ -229,6 +241,8 @@ class Game {
 
         // イベントなど（カードではない横長の札）
         this.landscapes = this.selectLandscapes();
+        // 同盟：連絡役があれば同盟の札を1枚使い、恩恵トークンを配る
+        this.setupAllies();
 
         // 夜想曲：祝福・呪詛の山、家宝、ゾンビなど
         this.setupNocturne();
@@ -379,6 +393,8 @@ class Game {
         // 渡し船：-2 コストのトークンを置いた山のカードは、そのプレイヤーのターンにコスト-2
         if (data.id && player.pileTokens.minusCost && (this.pileOf[data.id] ?? data.id) === player.pileTokens.minusCost) cost -= 2;
         if (isAction) cost -= 2 * inPlay('quarry');
+        // 発明家の一族：山の恩恵トークン1つにつきコスト-1
+        if (data.id) cost -= this.inventorTokens[this.pileOf[data.id] ?? data.id] ?? 0;
         return Math.max(0, cost);
     }
 
@@ -555,6 +571,8 @@ class Game {
             this.reject('選択されたカードはアクションカードではありません');
             return false;
         }
+        if (!this.canPlayFromHand(player, card)) return false;
+        this.turnState.handPlays++;
 
         // アクションカードをプレイ（効果のログより先にプレイしたことを記録する）
         // 解決し終えた直後に、酒場マットのカード（王家の馬車など）を呼び出せるようにする
@@ -588,6 +606,8 @@ class Game {
             this.reject('夜フェイズにプレイできるのは夜のカードです');
             return false;
         }
+        if (!this.canPlayFromHand(player, card)) return false;
+        this.turnState.handPlays++;
         this.log(`${player.name}は${card.name}をプレイしました`);
         player.hand.splice(cardIndex, 1);
         player.playArea.push(card);
@@ -704,7 +724,14 @@ class Game {
             if (TREASURE_PLAY_LAST.includes(card.id)) return 1 + TREASURE_PLAY_LAST.indexOf(card.id);
             return 0;
         };
-        const treasures = player.hand.filter(card => this.isTreasure(card)).sort((a, b) => rank(a) - rank(b));
+        let treasures = player.hand.filter(card => this.isTreasure(card)).sort((a, b) => rank(a) - rank(b));
+        // 航海の追加のターン：手札からプレイできる残りの枚数まで、財宝の高い順にプレイする
+        const limit = this.turnState.handPlayLimit;
+        if (limit !== null) {
+            const remaining = Math.max(0, limit - this.turnState.handPlays);
+            const best = [...treasures].sort((a, b) => this.getTreasureValue(b) - this.getTreasureValue(a)).slice(0, remaining);
+            treasures = treasures.filter(card => best.includes(card));
+        }
 
         this.phase = 'buy';
         this.log(`${player.name}は財宝カードを${treasures.length}枚プレイしました`);
@@ -720,7 +747,10 @@ class Game {
                 if (this.gainCardFromSupply(player, 'gold')) this.log(`${player.name}は宝箱で金貨を獲得しました`);
             },
             ...treasures.map(card => () => {
-                if (player.hand.includes(card)) this.playTreasure(player, card);
+                if (player.hand.includes(card)) {
+                    this.turnState.handPlays++;
+                    this.playTreasure(player, card);
+                }
             })
         );
         this.processEffects();
@@ -739,6 +769,11 @@ class Game {
 
     // 場の財宝の効果を使う（ティアラ・宝冠で2回目に使うときもこれを呼ぶ）
     applyTreasure(player, card) {
+        // 辻強盗：攻撃を受けていれば、このターン最初にプレイした財宝は何もしない
+        if (this.isBlockedByHighwayman(player)) {
+            this.log(`辻強盗の効果で、${player.name}の${card.name}は何もしません`);
+            return;
+        }
         player.coins += this.getTreasureValue(card);
         card.play(player, this);
 
@@ -970,6 +1005,9 @@ class Game {
             }));
         }
 
+        // 同盟：守備隊・ガレリア・ギルドの親方・散兵と、獲得したときの同盟の札
+        steps.push(...this.alliesGainSteps(player, card, isCurrent));
+
         // 追放マットに同じカードがあれば、捨て札にしてもよい
         steps.push(() => this.promptDiscardExiled(player, card));
 
@@ -1026,13 +1064,13 @@ class Game {
 
         // ティアラ・旅の祭り・追跡者（場にある間）：獲得したカードを山札の上に置いてもよい
         const tracker = player.playArea.some(played => played.id === 'tracker');
-        if ((isCurrent && (this.turnState.tiara || this.turnState.travellingFair || this.turnState.sealGains)) || tracker) {
+        if ((isCurrent && (this.turnState.tiara || this.turnState.travellingFair || this.turnState.sealGains || this.turnState.baubleGains)) || tracker) {
             steps.push(() => {
                 if (!player.discard.includes(card) && !player.hand.includes(card)) return;
                 this.promptConfirm({
                     player,
                     card,
-                    title: this.turnState.tiara ? 'ティアラ' : (this.turnState.travellingFair ? '旅の祭り' : (this.turnState.sealGains ? 'アザラシの習性' : '追跡者')),
+                    title: this.turnState.tiara ? 'ティアラ' : (this.turnState.travellingFair ? '旅の祭り' : (this.turnState.sealGains ? 'アザラシの習性' : (this.turnState.baubleGains ? '装身具' : '追跡者'))),
                     message: `獲得した${card.name}を山札の上に置きますか？`,
                     yesLabel: '山札の上に置く',
                     noLabel: 'そのままにする',
@@ -1291,6 +1329,8 @@ class Game {
             ...player.playArea.filter(card => card.exchangeFor).map(card => () => {
                 if (player.playArea.includes(card) && !player.hasPendingDuration(card)) this.promptExchange(player, card);
             }),
+            // 同盟：手札を捨て札にする前の効果（沿岸の避難港）
+            () => this.runLandscapeHooks('beforeCleanup', player),
             () => this.finishTurn(player)
         );
         this.processEffects();
@@ -1491,11 +1531,13 @@ class Game {
         }
         this.missionTurn = false;
         // 好機：このターンの後に追加のターンを行う
-        const extra = this.extraTurns.shift();
-        if (extra) {
+        // 航海：手札からプレイできるカードの数に上限のある追加のターン
+        const extraEntry = this.extraTurns.shift();
+        if (extraEntry) {
+            const extra = extraEntry.player ?? extraEntry;
             this.currentPlayerIndex = this.players.indexOf(extra);
             this.log(`${extra.name}は追加のターンを行います`);
-            this.startTurn(extra);
+            this.startTurn(extra, { handPlayLimit: extraEntry.handPlayLimit ?? null });
             return;
         }
         const mission = this.missions.shift();
@@ -1515,7 +1557,14 @@ class Game {
             return;
         }
         this.currentPlayerIndex = this.players.indexOf(this.regularTurnPlayer ?? player);
-        this.startTurn(this.nextPlayer(), { regular: true });
+        let next = this.nextPlayer();
+        // リッチ：ターンを飛ばすプレイヤーは、次のプレイヤーに手番を渡す
+        while (next.skipTurns > 0) {
+            next.skipTurns--;
+            this.log(`${next.name}はリッチの効果でターンを飛ばしました`);
+            next = this.nextPlayer();
+        }
+        this.startTurn(next, { regular: true });
     }
 
     // 支配：左隣のプレイヤーは、このターンの後に追加のターンを行い、その間はこのプレイヤーが操作する
@@ -1525,7 +1574,7 @@ class Game {
 
     // ターンを始める（持続カード・農場労働者・書記の効果をここで処理する）
     // regular はふつうの手番（追加のターンでない）か
-    startTurn(player, { regular = false } = {}) {
+    startTurn(player, { regular = false, handPlayLimit = null } = {}) {
         if (regular) this.regularTurnPlayer = player;
         this.turnCount++;
         this.previousTurnPlayer = this.currentTurnPlayer;
@@ -1539,8 +1588,10 @@ class Game {
         player.gainedVictoryInBuyPhase = false;
         player.hasTrashedForCorsair = false;
         this.turnState = createTurnState();
+        this.turnState.handPlayLimit = handPlayLimit;
         this.phase = 'action';
         this.log(`${player.name}のターンです`);
+        if (handPlayLimit !== null) this.log(`このターンは、手札からカードを${handPlayLimit}枚までしかプレイできません`);
 
         // 前のターンからの効果（猿・私掠船・封鎖）は、このターンの開始で終わる
         player.monkeys = 0;
@@ -1549,6 +1600,8 @@ class Game {
         player.hauntedVictims.clear();
         player.swampHagVictims.clear();
         player.enchantedVictims.clear();
+        player.highwaymanVictims.clear();
+        player.warlordVictims.clear();
 
         // ずっと場に残る持続カード（雇人・チャンピオン）は、効果を使った後も残す
         const durations = player.durations;
@@ -2061,6 +2114,7 @@ function uniqueById(cards) {
 installLandscapes(Game);
 installNocturne(Game);
 installMenagerie(Game);
+installAllies(Game);
 
 // クラスをエクスポート
 export default Game;

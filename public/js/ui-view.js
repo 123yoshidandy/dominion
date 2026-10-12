@@ -83,7 +83,8 @@ class UIView {
             (currentPlayer.potions > 0 ? stat('ポーション', currentPlayer.potions, false) : '') +
             (currentPlayer.debt > 0 ? stat('負債', currentPlayer.debt, false) : '') +
             (currentPlayer.coffers > 0 ? stat('財源', currentPlayer.coffers, view.phase !== 'buy') : '') +
-            (currentPlayer.villagers > 0 ? stat('村人', currentPlayer.villagers, view.phase !== 'action') : '');
+            (currentPlayer.villagers > 0 ? stat('村人', currentPlayer.villagers, view.phase !== 'action') : '') +
+            (currentPlayer.favors > 0 ? stat('恩恵', currentPlayer.favors, false) : '');
     }
 
     // フェーズの日本語テキストを取得
@@ -124,6 +125,7 @@ class UIView {
                     debtCost: view.debtCosts?.[cardId] ?? 0,
                     vp: view.pileVp?.[cardId] ?? 0,
                     pileDebt: view.pileDebt?.[cardId] ?? 0,
+                    favorTokens: view.inventorTokens?.[cardId] ?? 0,
                     isObelisk: cardId === view.obelisk,
                     isBane: cardId === view.bane
                 });
@@ -242,7 +244,7 @@ class UIView {
         });
     }
 
-    createSupplyCardHtml(card, count, unaffordable, { pileId = card.id, cost = card.cost, debtCost = card.debtCost ?? 0, vp = 0, pileDebt = 0, isObelisk = false, isBane = false, nonSupply = false } = {}) {
+    createSupplyCardHtml(card, count, unaffordable, { pileId = card.id, cost = card.cost, debtCost = card.debtCost ?? 0, vp = 0, pileDebt = 0, favorTokens = 0, isObelisk = false, isBane = false, nonSupply = false } = {}) {
         const stateClass = count <= 0 ? 'empty' : (unaffordable ? 'unaffordable' : '');
 
         // 購入や説明には山のIDを使う（中身の混ざった山では、見せているカードと山のIDが違う）
@@ -254,7 +256,7 @@ class UIView {
                 ${debtCost ? `<span class="card-debt ${cost > 0 ? 'with-coin' : ''}">${debtCost}</span>` : ''}
                 ${isBane ? '<span class="bane-badge">災い</span>' : ''}
                 ${isObelisk ? '<span class="bane-badge">オベリスク</span>' : ''}
-                ${vp > 0 || pileDebt > 0 ? `<span class="pile-tokens">${vp > 0 ? `<span class="vp-badge">${vp}</span>` : ''}${pileDebt > 0 ? `<span class="card-debt">${pileDebt}</span>` : ''}</span>` : ''}
+                ${vp > 0 || pileDebt > 0 || favorTokens > 0 ? `<span class="pile-tokens">${vp > 0 ? `<span class="vp-badge">${vp}</span>` : ''}${pileDebt > 0 ? `<span class="card-debt">${pileDebt}</span>` : ''}${favorTokens > 0 ? `<span class="favor-badge" title="恩恵トークン（コスト-${favorTokens}）">${favorTokens}</span>` : ''}</span>` : ''}
                 <span class="tile-art">${getCardArt(card.id)}</span>
                 <span class="card-title">${card.name}</span>
                 <span class="card-count">${count}</span>
@@ -310,7 +312,14 @@ class UIView {
             [CARD_TYPES.FATE]: '運命',
             [CARD_TYPES.DOOM]: '呪い',
             [CARD_TYPES.SPIRIT]: '精霊',
-            [CARD_TYPES.ZOMBIE]: 'ゾンビ'
+            [CARD_TYPES.ZOMBIE]: 'ゾンビ',
+            [CARD_TYPES.LIAISON]: '連絡役',
+            [CARD_TYPES.TOWNSFOLK]: '町民',
+            [CARD_TYPES.AUGUR]: '鳥占い師',
+            [CARD_TYPES.CLASH]: '衝突',
+            [CARD_TYPES.FORT]: '砦',
+            [CARD_TYPES.ODYSSEY]: '冒険旅行',
+            [CARD_TYPES.WIZARD]: '魔法使い'
         };
 
         return types.map(type => typeMap[type] || type).join(' - ');
@@ -330,6 +339,7 @@ class UIView {
                         <span>勝利点 <b>${player.victoryPoints}</b>${player.vpTokens > 0 ? `（トークン${player.vpTokens}）` : ''}</span>
                         ${player.coffers > 0 ? `<span>財源 ${player.coffers}</span>` : ''}
                         ${player.debt > 0 ? `<span>負債 ${player.debt}</span>` : ''}
+                        ${player.favors > 0 ? `<span>恩恵 ${player.favors}</span>` : ''}
                         <span>山札 ${player.deckCount}</span>
                         <span>手札 ${player.handCount}</span>
                         <span>捨て札 ${player.discardCount}</span>
