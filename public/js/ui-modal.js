@@ -309,7 +309,7 @@ class UIModal {
             <div class="card-detail">
                 ${this.view.createCardHtml(card, '', 'large')}
                 <div class="card-detail-info">
-                    <p>コスト <b>${card.cost}</b>${cost !== undefined && cost !== card.cost ? `（今は <b>${cost}</b>）` : ''}</p>
+                    <p>コスト <b>${card.cost}</b>${card.potionCost ? '＋ポーション' : ''}${cost !== undefined && cost !== card.cost ? `（今は <b>${cost}</b>）` : ''}</p>
                     ${count !== undefined ? `<p>サプライ残り <b>${count}</b>枚</p>` : ''}
                 </div>
             </div>

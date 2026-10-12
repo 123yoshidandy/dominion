@@ -8,7 +8,7 @@
 
 import Game from '../../public/js/game.js';
 import { createGameView } from '../../public/js/game-view.js';
-import { runCpuStep, hasCpuPrompt } from '../../public/js/cpu-player.js';
+import { runCpuStep, isCpuToMove } from '../../public/js/cpu-player.js';
 import { createSeed } from '../../public/js/random.js';
 import { CARD_SETS } from '../../public/js/card-types.js';
 
@@ -239,9 +239,7 @@ export class RoomService {
     }
 
     needsCpu(game) {
-        if (game.phase === 'end') return false;
-        if (game.pendingPrompt) return hasCpuPrompt(game);
-        return game.getCurrentPlayer().isCPU;
+        return isCpuToMove(game);
     }
 
     // ===== 保存と送信 =====

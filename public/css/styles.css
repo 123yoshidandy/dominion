@@ -449,6 +449,27 @@ button.primary {
     filter: grayscale(0.85);
 }
 
+/* コストにポーションがあるカード（錬金術）：コストの右下に青い印を付ける */
+.card-cost.has-potion {
+    position: relative;
+}
+
+.supply-tile .card-cost.has-potion {
+    position: absolute;
+}
+
+.card-cost.has-potion::after {
+    content: '';
+    position: absolute;
+    right: -4px;
+    bottom: -3px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #3f7fd6;
+    border: 1px solid #fff;
+}
+
 /* 橋・街道などでコストが下がっているときは色を変える */
 .card-cost.reduced {
     color: #fff;

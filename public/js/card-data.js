@@ -8,6 +8,7 @@ import { SEASIDE_CARDS } from './card-data-seaside.js';
 import { PROSPERITY_CARDS, PROSPERITY_BASIC_CARDS } from './card-data-prosperity.js';
 import { HINTERLANDS_CARDS } from './card-data-hinterlands.js';
 import { CORNUCOPIA_GUILDS_CARDS, REWARD_CARDS } from './card-data-cornucopia-guilds.js';
+import { ALCHEMY_CARDS, ALCHEMY_BASIC_CARDS } from './card-data-alchemy.js';
 
 export { CARD_TYPES, CARD_SETS };
 
@@ -421,6 +422,7 @@ const BASE_KINGDOM_CARDS = {
                     game.promptGain({
                         player,
                         maxCost,
+                        potion: game.getPotionCost(trashed),
                         title: '改築',
                         message: `コスト${maxCost}以下のカードを1枚獲得してください。`
                     });
@@ -671,6 +673,7 @@ const BASE_KINGDOM_CARDS = {
                     game.promptGain({
                         player,
                         maxCost,
+                        potion: game.getPotionCost(trashed),
                         filter: (data) => data.types.includes(CARD_TYPES.TREASURE),
                         destination: 'hand',
                         title: '鉱山',
@@ -821,12 +824,14 @@ export const KINGDOM_CARDS = {
     ...withSet(SEASIDE_CARDS, CARD_SETS.SEASIDE),
     ...withSet(PROSPERITY_CARDS, CARD_SETS.PROSPERITY),
     ...withSet(HINTERLANDS_CARDS, CARD_SETS.HINTERLANDS),
-    ...withSet(CORNUCOPIA_GUILDS_CARDS, CARD_SETS.CORNUCOPIA_GUILDS)
+    ...withSet(CORNUCOPIA_GUILDS_CARDS, CARD_SETS.CORNUCOPIA_GUILDS),
+    ...withSet(ALCHEMY_CARDS, CARD_SETS.ALCHEMY)
 };
 
-// 王国カード以外で、一部のゲームだけで使うカード（白金貨・植民地・褒賞）
+// 王国カード以外で、一部のゲームだけで使うカード（白金貨・植民地・ポーション・褒賞）
 export const EXTRA_CARDS = {
     ...withSet(PROSPERITY_BASIC_CARDS, CARD_SETS.PROSPERITY),
+    ...withSet(ALCHEMY_BASIC_CARDS, CARD_SETS.ALCHEMY),
     ...withSet(REWARD_CARDS, CARD_SETS.CORNUCOPIA_GUILDS)
 };
 

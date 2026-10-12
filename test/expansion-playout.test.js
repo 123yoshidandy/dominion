@@ -8,7 +8,8 @@ const SETS = [
     ['intrigue', '陰謀'],
     ['prosperity', '繁栄'],
     ['hinterlands', '異郷'],
-    ['cornucopia_guilds', '収穫祭＆ギルド']
+    ['cornucopia_guilds', '収穫祭＆ギルド'],
+    ['alchemy', '錬金術']
 ];
 
 // CPU同士でゲームを最後まで進める

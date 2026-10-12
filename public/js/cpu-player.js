@@ -12,10 +12,10 @@ const MULTIPLIER_PRIORITY = ['kings_court', 'throne_room', 'coronet'];
 // アクションを増やすカード（何枚プレイしても他のアクションを妨げない）の優先順
 const NON_TERMINAL_PRIORITY = [
     // アクションが2つ以上増える村
-    'village', 'bazaar', 'fishing_village', 'festival', 'native_village', 'workers_village', 'city', 'shanty_town',
+    'village', 'university', 'bazaar', 'fishing_village', 'festival', 'native_village', 'workers_village', 'city', 'shanty_town',
     'mining_village', 'border_village', 'farmhands', 'plaza', 'crossroads', 'inn', 'candlestick_maker', 'demesne',
     // アクションが1つ増えるカード
-    'grand_market', 'peddler', 'laboratory', 'market', 'treasury', 'highway', 'caravan', 'tide_pools', 'sea_chart',
+    'scrying_pool', 'familiar', 'alchemist', 'apothecary', 'apprentice', 'grand_market', 'peddler', 'laboratory', 'market', 'treasury', 'highway', 'caravan', 'tide_pools', 'sea_chart',
     'sentry', 'poacher', 'lighthouse', 'sailor', 'hunting_party', 'baker', 'cartographer', 'ferryman', 'herald',
     'advisor', 'joust', 'menagerie', 'wishing_well', 'mill', 'secret_passage', 'upgrade', 'oasis', 'scheme', 'trail',
     'stables', 'wheelwright', 'farrier', 'hamlet', 'lurker', 'pawn', 'harbinger', 'merchant', 'haven', 'lookout', 'warehouse',
@@ -24,7 +24,7 @@ const NON_TERMINAL_PRIORITY = [
 
 // アクションを増やさないカード（ターミナル）の優先順
 const TERMINAL_PRIORITY = [
-    'witch', 'sea_witch', 'soothsayer', 'torturer', 'young_witch', 'charlatan', 'witchs_hut', 'margrave', 'minion',
+    'possession', 'golem', 'witch', 'sea_witch', 'soothsayer', 'torturer', 'young_witch', 'charlatan', 'witchs_hut', 'margrave', 'minion',
     'artisan', 'wharf', 'council_room', 'library', 'patrol', 'courtier', 'nobles', 'rabble', 'jester', 'bandit', 'corsair',
     'merchant_ship', 'pirate', 'outpost', 'smithy', 'diplomat', 'guard_dog', 'journeyman', 'carnival', 'vault',
     'magnate', 'housecarl', 'courser', 'renown', 'militia', 'footpad', 'berserker', 'mint', 'cutpurse', 'blockade',
@@ -32,8 +32,11 @@ const TERMINAL_PRIORITY = [
     'swindler', 'ironworks', 'weaver', 'jack_of_all_trades', 'butcher', 'watchtower', 'steward', 'courtyard', 'shop',
     'masquerade', 'salvager', 'mine', 'moneylender', 'spice_merchant', 'bishop', 'trading_post', 'replace', 'expand',
     'forge', 'remake', 'develop', 'trader', 'stonemason', 'infirmary', 'remodel', 'bureaucrat', 'vassal', 'smugglers',
-    'workshop', 'treasure_map', 'island', 'moat', 'chapel', 'tactician'
+    'workshop', 'treasure_map', 'island', 'moat', 'chapel', 'tactician', 'herbalist', 'transmute'
 ];
+
+// ポーションがあるときに買う錬金術のカード（コストの高い順に考える）
+const POTION_BUY_PRIORITY = ['golem', 'familiar', 'alchemist', 'scrying_pool', 'apothecary', 'university', 'philosophers_stone'];
 
 const PLAY_PRIORITY = [...MULTIPLIER_PRIORITY, ...NON_TERMINAL_PRIORITY, ...TERMINAL_PRIORITY];
 
@@ -68,6 +71,8 @@ function isWorthPlaying(card, player, game) {
         case 'expand':
         case 'courtier':
         case 'stonemason':
+        case 'transmute':
+        case 'apprentice':
             return others.length > 0;
         case 'treasure_map':
             return others.some(c => c.id === 'treasure_map');
@@ -133,6 +138,18 @@ export function chooseCardToBuy(player, game) {
     const cursesLeft = available('curse');
 
     const pick = (candidates) => candidates.find(available) ?? null;
+
+    // ポーションがあれば、属州に届かないときは錬金術のカードを買う
+    const potionCards = POTION_BUY_PRIORITY.filter(cardId => available(cardId) && !(cardId === 'familiar' && !cursesLeft));
+    if ((player.potions ?? 0) > 0 && coins < 8) {
+        const affordable = potionCards.filter(cardId => game.getCost(cardId) <= coins);
+        if (affordable.length > 0) return affordable[0];
+    }
+    // 欲しい錬金術のカードがあり、ポーションを持っていなければ、ポーションを買う
+    if (potionCards.length > 0 && available('potion') && (coins === 4 || coins === 5) && provincesLeft > 4 &&
+        !cards.some(card => card.id === 'potion')) {
+        return 'potion';
+    }
 
     if (coins >= 11 && available('colony')) {
         return pick(['colony']);
@@ -270,6 +287,21 @@ function chooseSelection(prompt, game) {
         case 'steward-trash':
         case 'trading-post':
             return min <= 1 ? trashOrder(cards) : indicesByKeepValue(cards).slice(0, min);
+
+        case 'transmute-trash': {
+            // 屋敷は金貨に変わるので最優先で廃棄する
+            const estate = indexOf(card => card.id === 'estate');
+            return estate >= 0 ? [estate] : trashOrder(cards);
+        }
+
+        case 'apprentice-trash':
+            return trashOrder(cards);
+
+        case 'herbalist':
+            return [highest(cards)];
+
+        case 'golem-first':
+            return [playRank(cards[0]) <= playRank(cards[1]) ? 0 : 1];
 
         case 'optional-trash':
         case 'sailor-trash':
@@ -489,7 +521,14 @@ function chooseConfirm(prompt) {
         case 'tunnel':
         case 'fools-gold-react':
         case 'clerk-start':
+        case 'alchemist-topdeck':
             return true;
+        case 'scrying-pool-self':
+            // 自分の山札の不要なカードは捨てる
+            return Boolean(card) && (isJunk(card) || card.id === 'copper');
+        case 'scrying-pool-other':
+            // 相手の山札の良いカードは捨てさせる
+            return Boolean(card) && !isJunk(card) && card.id !== 'copper';
         case 'tiara-topdeck':
             return Boolean(card) && !isJunk(card) && card.id !== 'copper';
         case 'jack-discard':
@@ -512,9 +551,16 @@ export function choosePromptAnswer(prompt, game) {
     return chooseSelection(prompt, game);
 }
 
-// CPUが答えるべき選択待ちがあるか
+// CPUが答えるべき選択待ちがあるか（支配のターン中は、支配したプレイヤーが答える）
 export function hasCpuPrompt(game) {
-    return Boolean(game.pendingPrompt && game.pendingPrompt.player.isCPU);
+    return Boolean(game.pendingPrompt && game.getController(game.pendingPrompt.player).isCPU);
+}
+
+// CPUが動く番か（CPUへの選択待ちがあるか、選択待ちがなくCPUが手番を操作するか）
+export function isCpuToMove(game) {
+    if (game.phase === 'end') return false;
+    if (game.pendingPrompt) return hasCpuPrompt(game);
+    return game.getController(game.getCurrentPlayer()).isCPU;
 }
 
 // CPUの手番を1手だけ進める（CPUへの選択待ちがあれば、手番に関係なくそれに答える）
@@ -527,10 +573,11 @@ export function runCpuStep(game) {
     if (prompt) {
         // 人間の選択待ちなら、答えが出るまで待つ
         if (hasCpuPrompt(game)) {
+            const controllerId = game.getController(prompt.player).id;
             // 答えが受け付けられなければ、条件を満たす最小の答えで答え直す
-            if (!game.applyCommand(prompt.player.id, { type: 'answer', answer: choosePromptAnswer(prompt, game) })) {
+            if (!game.applyCommand(controllerId, { type: 'answer', answer: choosePromptAnswer(prompt, game) })) {
                 const count = prompt.min ?? 0;
-                game.applyCommand(prompt.player.id, {
+                game.applyCommand(controllerId, {
                     type: 'answer',
                     answer: prompt.type === 'confirm' ? false : Array.from({ length: count }, (_, i) => i)
                 });
@@ -539,9 +586,11 @@ export function runCpuStep(game) {
         return;
     }
 
+    // 支配のターン中は、支配したプレイヤーが手番のプレイヤーのカードで操作する
     const player = game.getCurrentPlayer();
-    if (!player.isCPU) return;
-    const apply = (command) => game.applyCommand(player.id, command);
+    const controller = game.getController(player);
+    if (!controller.isCPU) return;
+    const apply = (command) => game.applyCommand(controller.id, command);
 
     if (game.phase === 'action') {
         const index = chooseActionCard(player, game);

@@ -53,6 +53,10 @@ class Game {
         this.pendingPrompt = null; // プレイヤーの選択待ち（地下室・礼拝堂など）
         this.effectQueue = [];     // カード効果のまだ実行していない手順（選択待ちの後に続きを進める）
         this.isExtraTurn = false;  // 前哨地による追加のターン中か
+        this.possessions = [];     // これから行う支配のターン { possessor, target }
+        this.possessor = null;     // 支配のターン中なら、手番のプレイヤーを操作するプレイヤー
+        this.possessionTrash = []; // 支配のターン中に廃棄された、手番のプレイヤーのカード（ターンの終わりに戻す）
+        this.regularTurnPlayer = null; // 追加のターンでない、ふつうの手番のプレイヤー（次の手番はこの左隣）
         this.lastError = null;     // 直前に受け付けなかった操作の理由
         this.promptCount = 0;      // これまでの選択待ちの数（画面で同じ選択を出し直さないための番号）
         this.turnState = createTurnState();
@@ -86,7 +90,7 @@ class Game {
         if (this.useColonies) this.log('白金貨と植民地を使います');
         if (this.bane) this.log(`魔女娘の災いカードは${ALL_CARDS[this.bane.toUpperCase()].name}です`);
         if (this.ferrymanPile) this.log(`渡し守で獲得するカードは${ALL_CARDS[this.ferrymanPile.toUpperCase()].name}です`);
-        this.startTurn(this.getCurrentPlayer());
+        this.startTurn(this.getCurrentPlayer(), { regular: true });
     }
 
     // サプライパイルの初期化
@@ -125,13 +129,13 @@ class Game {
 
         // 魔女娘：コスト2か3の王国カードを1種、災いカードとしてサプライに加える
         if (this.isInSupply('young_witch')) {
-            this.bane = this.options.bane ?? this.pickUnusedKingdomCard(data => [2, 3].includes(data.cost));
+            this.bane = this.options.bane ?? this.pickUnusedKingdomCard(data => [2, 3].includes(data.cost) && !data.potionCost);
             if (this.bane) this.supply[this.bane] = pileSize(this.bane);
         }
 
         // 渡し守：コスト3か4の使っていない王国カードを1種、サプライ外に置く
         if (this.isInSupply('ferryman')) {
-            this.ferrymanPile = this.options.ferryman ?? this.pickUnusedKingdomCard(data => [3, 4].includes(data.cost));
+            this.ferrymanPile = this.options.ferryman ?? this.pickUnusedKingdomCard(data => [3, 4].includes(data.cost) && !data.potionCost);
             if (this.ferrymanPile) this.nonSupply[this.ferrymanPile] = pileSize(this.ferrymanPile);
         }
 
@@ -148,6 +152,11 @@ class Game {
         if (this.useColonies) {
             this.supply.platinum = ALL_CARDS.PLATINUM.count;
             this.supply.colony = victoryCardCount;
+        }
+
+        // 錬金術：コストにポーションのあるカードがあれば、ポーションをサプライに置く
+        if (Object.keys(this.supply).some(cardId => this.getPotionCost(cardId) > 0)) {
+            this.supply.potion = ALL_CARDS.POTION.count;
         }
 
         // ペテン師：呪いが財宝としても使える
@@ -192,6 +201,16 @@ class Game {
         return this.players[this.currentPlayerIndex];
     }
 
+    // そのプレイヤーの操作と選択を行うプレイヤー（支配のターン中の手番のプレイヤーは、支配したプレイヤーが操作する）
+    getController(player) {
+        return this.possessor && player === this.getCurrentPlayer() ? this.possessor : player;
+    }
+
+    // 支配のターン中に手番のプレイヤーが獲得するカードは、支配したプレイヤーが代わりに獲得する
+    getGainRecipient(player) {
+        return this.possessor && player === this.getCurrentPlayer() ? this.possessor : player;
+    }
+
     // 次のプレイヤーに切り替える
     nextPlayer() {
         this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
@@ -234,6 +253,19 @@ class Game {
         return Math.max(0, cost);
     }
 
+    // コストのポーションの数（錬金術。軽減の効果はポーションには及ばない）
+    getPotionCost(card) {
+        const data = typeof card === 'string' ? ALL_CARDS[card.toUpperCase()] : card;
+        return data?.potionCost ?? 0;
+    }
+
+    // a のコストが b より安いか（コインとポーションのどちらも多くなく、どちらかが少ない）
+    costsLessThan(a, b) {
+        const [coinsA, coinsB] = [this.getCost(a), this.getCost(b)];
+        const [potionA, potionB] = [this.getPotionCost(a), this.getPotionCost(b)];
+        return coinsA <= coinsB && potionA <= potionB && (coinsA < coinsB || potionA < potionB);
+    }
+
     // 財宝として扱うカードか（ペテン師のあるゲームでは呪いも財宝）
     isTreasure(card) {
         return card.isType(CARD_TYPES.TREASURE) || (this.curseIsTreasure && card.id === 'curse');
@@ -255,7 +287,8 @@ class Game {
     //   { type: 'answer', answer }  選択に答える（select・choose はインデックスの配列、confirm は真偽値）
     applyCommand(playerId, command) {
         this.lastError = null;
-        const isCurrent = this.getCurrentPlayer().id === playerId;
+        // 支配のターン中は、支配したプレイヤーが手番のプレイヤーの操作と選択をすべて行う
+        const isCurrent = this.getController(this.getCurrentPlayer()).id === playerId;
         let accepted = false;
 
         switch (command.type) {
@@ -276,7 +309,8 @@ class Game {
                 break;
             case 'answer':
                 // 選択はそれを求められたプレイヤーだけが答えられる（民兵の攻撃は手番ではない人が答える）
-                accepted = this.pendingPrompt?.player.id === playerId && this.resolvePrompt(command.answer);
+                accepted = Boolean(this.pendingPrompt) && this.getController(this.pendingPrompt.player).id === playerId &&
+                    this.resolvePrompt(command.answer);
                 break;
         }
 
@@ -464,16 +498,27 @@ class Game {
             return null;
         }
         piles[lowerCardId]--;
-        const card = player.gainCard(lowerCardId, destination);
-        this.onCardGained(player, card);
+        const recipient = this.redirectGain(player, lowerCardId);
+        const card = recipient.gainCard(lowerCardId, recipient === player ? destination : 'discard');
+        this.onCardGained(recipient, card);
         return card;
     }
 
     // 廃棄置き場などにあるカードそのものを獲得する（待ち伏せ）
     gainCardInstance(player, card, destination = 'discard') {
-        this.placeCard(player, card, destination);
-        this.onCardGained(player, card);
+        const recipient = this.redirectGain(player, card.id);
+        this.placeCard(recipient, card, recipient === player ? destination : 'discard');
+        this.onCardGained(recipient, card);
         return card;
+    }
+
+    // 支配のターン中なら獲得するプレイヤーを支配したプレイヤーに替える（行き先は捨て札になる）
+    redirectGain(player, cardId) {
+        const recipient = this.getGainRecipient(player);
+        if (recipient !== player) {
+            this.log(`支配により、${recipient.name}が${player.name}の代わりに${ALL_CARDS[cardId.toUpperCase()].name}を獲得しました`);
+        }
+        return recipient;
     }
 
     // 獲得したカードをサプライに戻す（交易商で銀貨と交換するとき）
@@ -664,6 +709,11 @@ class Game {
             this.reject(`${data.name}を購入するためのコインが足りません（必要: ${cost}, 所持: ${player.coins}）`);
             return false;
         }
+        const potionCost = this.getPotionCost(data);
+        if (player.potions < potionCost) {
+            this.reject(`${data.name}を購入するにはポーションが必要です`);
+            return false;
+        }
 
         if (data.canBuy && !data.canBuy(player, this)) {
             this.reject(`今は${data.name}を購入できません`);
@@ -675,6 +725,7 @@ class Game {
         // 超過支払いの額は購入するときに決め、効果は獲得した後で起こす（獲得したカードを使う効果があるため）
         player.buys--;
         player.coins -= cost;
+        player.potions -= potionCost;
         this.log(`${player.name}は${data.name}を購入しました`);
         let overpaid = 0;
         let gained = null;
@@ -733,6 +784,10 @@ class Game {
         this.phase = 'cleanup';
         this.runNext(
             () => this.promptScheme(player),
+            // 場から捨て札にするときの効果（錬金術師・薬草商）。持続で場に残るカードには起きない
+            ...player.playArea.filter(card => card.onCleanup).map(card => () => {
+                if (player.playArea.includes(card) && !player.hasPendingDuration(card)) card.onCleanup(player, this, card);
+            }),
             () => this.finishTurn(player)
         );
         this.processEffects();
@@ -796,6 +851,12 @@ class Game {
             player.drawCards(this.turnState.farrierDraw);
             this.log(`${player.name}は蹄鉄工の効果でカードを${this.turnState.farrierDraw}枚引きました`);
         }
+        // 支配のターンの終わりに、脇に置いた（廃棄された）カードを捨て札に戻す
+        if (this.possessor) {
+            player.discard.push(...this.possessionTrash);
+            this.possessionTrash = [];
+            this.possessor = null;
+        }
         this.log(`${player.name}のターンが終了しました`);
 
         // ゲーム終了条件はターン終了時にチェックする
@@ -804,16 +865,34 @@ class Game {
             return;
         }
 
-        // 次のプレイヤーに切り替え（前哨地なら同じプレイヤーがもう1ターン）
+        // 次の手番：前哨地の追加のターン → 支配のターン → ふつうの手番（最後のふつうの手番のプレイヤーの左隣）
         this.isExtraTurn = takesExtraTurn;
         if (takesExtraTurn) {
             this.log(`${player.name}は前哨地の効果で追加のターンを行います`);
+            this.startTurn(player);
+            return;
         }
-        this.startTurn(takesExtraTurn ? player : this.nextPlayer());
+        const possession = this.possessions.shift();
+        if (possession) {
+            this.possessor = possession.possessor;
+            this.currentPlayerIndex = this.players.indexOf(possession.target);
+            this.log(`${possession.possessor.name}が${possession.target.name}の追加のターンを支配します`);
+            this.startTurn(possession.target);
+            return;
+        }
+        this.currentPlayerIndex = this.players.indexOf(this.regularTurnPlayer ?? player);
+        this.startTurn(this.nextPlayer(), { regular: true });
+    }
+
+    // 支配：左隣のプレイヤーは、このターンの後に追加のターンを行い、その間はこのプレイヤーが操作する
+    queuePossession(player) {
+        this.possessions.push({ possessor: player, target: this.getPlayerToLeft(player) });
     }
 
     // ターンを始める（持続カード・農場労働者・書記の効果をここで処理する）
-    startTurn(player) {
+    // regular はふつうの手番（追加のターンでない）か
+    startTurn(player, { regular = false } = {}) {
+        if (regular) this.regularTurnPlayer = player;
         player.actions = 1;
         player.buys = 1;
         player.gainedThisTurn = [];
@@ -996,7 +1075,12 @@ class Game {
 
     // カードを廃棄する（遊牧民・小道など、廃棄したときの効果も起こす）
     trashCard(player, card) {
-        this.trash.push(card);
+        // 支配のターン中に廃棄された手番のプレイヤーのカードは、脇に置いてターンの終わりに捨て札に戻す
+        if (this.possessor && player === this.getCurrentPlayer()) {
+            this.possessionTrash.push(card);
+        } else {
+            this.trash.push(card);
+        }
         if (card.onTrash) {
             this.runNext(() => card.onTrash(player, this, card));
         }
@@ -1074,23 +1158,32 @@ class Game {
     }
 
     // 獲得できるサプライのカードデータ（今のコストで条件に合うもの。コストの高い順）
-    getGainableCards({ maxCost = Infinity, minCost = 0, exactCost = null, filter = () => true } = {}) {
+    // potion はコストのポーションの数：「コスト○以下」ならそれ以下、「ちょうど○」なら同じ数のカードだけを選ぶ
+    // lessThan を渡すと、そのカードより安いカードだけを選ぶ（ポーションも比べる）
+    getGainableCards({ maxCost = Infinity, minCost = 0, exactCost = null, potion = 0, lessThan = null, filter = () => true } = {}) {
         return Object.keys(this.supply)
             .filter(cardId => this.supply[cardId] > 0)
             .map(cardId => ALL_CARDS[cardId.toUpperCase()])
             .filter(data => {
                 if (!data) return false;
                 const cost = this.getCost(data);
-                if (exactCost !== null ? cost !== exactCost : (cost > maxCost || cost < minCost)) return false;
+                const potionCost = this.getPotionCost(data);
+                if (lessThan) {
+                    if (!this.costsLessThan(data, lessThan)) return false;
+                } else if (exactCost !== null) {
+                    if (cost !== exactCost || potionCost !== potion) return false;
+                } else if (cost > maxCost || cost < minCost || potionCost > potion) {
+                    return false;
+                }
                 return filter(data);
             })
-            .sort((a, b) => this.getCost(b) - this.getCost(a));
+            .sort((a, b) => this.getCost(b) - this.getCost(a) || this.getPotionCost(b) - this.getPotionCost(a));
     }
 
     // サプライから条件に合うカードを1枚選んで獲得させる（filter でカードの種類を絞れる。optional なら選ばなくてもよい）
     // onGained には獲得したカードが渡る
-    promptGain({ player, maxCost = Infinity, minCost = 0, exactCost = null, filter = () => true, destination = 'discard', optional = false, title, message, purpose = 'gain', onGained }) {
-        const candidates = this.getGainableCards({ maxCost, minCost, exactCost, filter });
+    promptGain({ player, maxCost = Infinity, minCost = 0, exactCost = null, potion = 0, lessThan = null, filter = () => true, destination = 'discard', optional = false, title, message, purpose = 'gain', onGained }) {
+        const candidates = this.getGainableCards({ maxCost, minCost, exactCost, potion, lessThan, filter });
 
         if (candidates.length === 0) {
             this.log(`${player.name}が獲得できるカードはありませんでした`);

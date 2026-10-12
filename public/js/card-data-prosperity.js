@@ -526,7 +526,7 @@ export const PROSPERITY_CARDS = {
                 callback: ([trashed]) => {
                     if (!trashed) return;
                     const maxCost = game.getCost(trashed) + 3;
-                    game.promptGain({ player, maxCost, title: '拡張', message: `コスト${maxCost}以下のカードを1枚獲得してください。` });
+                    game.promptGain({ player, maxCost, potion: game.getPotionCost(trashed), title: '拡張', message: `コスト${maxCost}以下のカードを1枚獲得してください。` });
                 }
             });
         }
@@ -541,7 +541,8 @@ export const PROSPERITY_CARDS = {
         onPlay: (player, game) => {
             const gain = (trashed) => {
                 const cost = trashed.reduce((sum, card) => sum + game.getCost(card), 0);
-                game.promptGain({ player, exactCost: cost, title: '鍛造', message: `コストがちょうど${cost}のカードを1枚獲得してください。` });
+                const potion = trashed.reduce((sum, card) => sum + game.getPotionCost(card), 0);
+                game.promptGain({ player, exactCost: cost, potion, title: '鍛造', message: `コストがちょうど${cost}のカードを1枚獲得してください。` });
             };
             if (player.hand.length === 0) {
                 gain([]);

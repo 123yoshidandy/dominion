@@ -104,13 +104,15 @@ class UIEventHandler {
         // 返事を待っている購入の分も差し引いて、購入回数とコインが足りなければ何もしない
         // （アニメーション中の連打や、オンライン対戦で結果が届く前のタップで二重に買わないように）
         // コストは橋・街道などで下がることがあるので、ビューの今のコストで判断する
-        const pending = this.pendingPurchases ?? { count: 0, cost: 0 };
+        const pending = this.pendingPurchases ?? { count: 0, cost: 0, potions: 0 };
         const cost = view.costs?.[cardId] ?? card?.cost;
+        const potionCost = view.potionCosts?.[cardId] ?? card?.potionCost ?? 0;
         if (!card || (view.supply[cardId] ?? 0) <= 0 || view.prompt ||
-            currentPlayer.buys - pending.count <= 0 || currentPlayer.coins - pending.cost < cost) {
+            currentPlayer.buys - pending.count <= 0 || currentPlayer.coins - pending.cost < cost ||
+            (currentPlayer.potions ?? 0) - (pending.potions ?? 0) < potionCost) {
             return;
         }
-        this.pendingPurchases = { count: pending.count + 1, cost: pending.cost + cost };
+        this.pendingPurchases = { count: pending.count + 1, cost: pending.cost + cost, potions: (pending.potions ?? 0) + potionCost };
         
         // 購入回数を使い切ったときのターン終了は、描き直すときに endTurnIfNoBuysLeft で判定する
         const purchase = () => {

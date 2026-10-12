@@ -107,6 +107,7 @@ export const HINTERLANDS_CARDS = {
                     game.promptGain({
                         player,
                         exactCost: cost + 1,
+                        potion: game.getPotionCost(trashed),
                         destination: 'deck',
                         title: '開発',
                         message: `コストがちょうど${cost + 1}のカードを1枚獲得してください（山札の上に置きます）。`
@@ -114,6 +115,7 @@ export const HINTERLANDS_CARDS = {
                     game.runNext(() => game.promptGain({
                         player,
                         exactCost: cost - 1,
+                        potion: game.getPotionCost(trashed),
                         destination: 'deck',
                         title: '開発',
                         message: `コストがちょうど${cost - 1}のカードを1枚獲得してください（山札の上に置きます）。`
@@ -379,7 +381,7 @@ export const HINTERLANDS_CARDS = {
         count: 10,
         onPlay: (player, game, card) => {
             const maxCost = game.getCost(card) - 1;
-            game.promptGain({ player, maxCost, title: '狂戦士', message: `コスト${maxCost}以下のカードを1枚獲得してください。` });
+            game.promptGain({ player, lessThan: card, title: '狂戦士', message: `コスト${maxCost}以下のカードを1枚獲得してください。` });
             game.attackOtherPlayers(player, (target) => discardDownTo(game, target, 3, '狂戦士'));
         },
         onGain: (player, game, card) => {
@@ -435,10 +437,10 @@ export const HINTERLANDS_CARDS = {
         onPlay: (player, game) => gainBenefits(player, game, { coins: 2 }),
         onBuyWhileInPlay: (player, game, haggler, bought) => {
             const maxCost = game.getCost(bought) - 1;
-            if (maxCost < 0) return;
+            if (maxCost < 0 && !game.getPotionCost(bought)) return;
             game.promptGain({
                 player,
-                maxCost,
+                lessThan: bought,
                 filter: (data) => !data.types.includes(CARD_TYPES.VICTORY),
                 title: '値切り屋',
                 message: `コスト${maxCost}以下の勝利点以外のカードを1枚獲得してください。`
@@ -570,6 +572,7 @@ export const HINTERLANDS_CARDS = {
                     game.promptGain({
                         player,
                         maxCost,
+                        potion: game.getPotionCost(card),
                         filter: (data) => data.types.includes(CARD_TYPES.ACTION),
                         title: '車大工',
                         message: `コスト${maxCost}以下のアクションカードを1枚獲得してください。`
@@ -610,7 +613,7 @@ export const HINTERLANDS_CARDS = {
         onPlay: (player, game) => gainBenefits(player, game, { cards: 1, actions: 2 }),
         onGain: (player, game, card) => {
             const maxCost = game.getCost(card) - 1;
-            game.promptGain({ player, maxCost, title: '国境の村', message: `コスト${maxCost}以下のカードを1枚獲得してください。` });
+            game.promptGain({ player, lessThan: card, title: '国境の村', message: `コスト${maxCost}以下のカードを1枚獲得してください。` });
         }
     },
     FARMLAND: {
@@ -628,7 +631,7 @@ export const HINTERLANDS_CARDS = {
                 callback: ([trashed]) => {
                     if (!trashed) return;
                     const cost = game.getCost(trashed) + 2;
-                    game.promptGain({ player, exactCost: cost, title: '肥沃な土地', message: `コストがちょうど${cost}のカードを1枚獲得してください。` });
+                    game.promptGain({ player, exactCost: cost, potion: game.getPotionCost(trashed), title: '肥沃な土地', message: `コストがちょうど${cost}のカードを1枚獲得してください。` });
                 }
             });
         }

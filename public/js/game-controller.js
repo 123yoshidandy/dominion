@@ -6,7 +6,7 @@
 
 import Game from './game.js';
 import { createGameView, hydrateGameView } from './game-view.js';
-import { runCpuStep, hasCpuPrompt } from './cpu-player.js';
+import { runCpuStep, isCpuToMove } from './cpu-player.js';
 
 class GameController {
     constructor() {
@@ -44,10 +44,13 @@ class GameController {
         const prompt = game.pendingPrompt;
         const current = game.getCurrentPlayer();
 
-        if (prompt && !prompt.player.isCPU) {
-            this.viewerId = prompt.player.id;
-        } else if (!current.isCPU) {
-            this.viewerId = current.id;
+        // 支配のターン中は、支配したプレイヤーが手番のプレイヤーを操作する
+        const promptController = prompt ? game.getController(prompt.player) : null;
+        const currentController = game.getController(current);
+        if (promptController && !promptController.isCPU) {
+            this.viewerId = promptController.id;
+        } else if (!currentController.isCPU) {
+            this.viewerId = currentController.id;
         } else if (this.viewerId === null) {
             this.viewerId = (game.players.find(player => !player.isCPU) ?? game.players[0]).id;
         }
@@ -69,9 +72,7 @@ class GameController {
     // CPUがやることがあるか（CPUの手番、または人間の手番中にCPUが答える選択待ちがある）
     // 人間の選択待ちのあいだは、答えが出るまでCPUは待つ
     hasCpuWork() {
-        if (!this.game || this.game.phase === 'end') return false;
-        if (this.game.pendingPrompt) return hasCpuPrompt(this.game);
-        return this.game.getCurrentPlayer().isCPU;
+        return Boolean(this.game) && isCpuToMove(this.game);
     }
 
     // CPUの手番を1手進める

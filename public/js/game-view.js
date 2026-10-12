@@ -9,12 +9,13 @@ import { ALL_CARDS } from './card-data.js';
 
 const cardIds = (cards) => cards.map(card => card.id);
 
-// 選択待ちのビュー。答えるプレイヤーにだけ中身を見せ、他のプレイヤーには誰が選択中かだけを伝える
-function createPromptView(prompt, viewerId) {
+// 選択待ちのビュー。答えるプレイヤー（支配のターン中は支配したプレイヤー）にだけ中身を見せ、他のプレイヤーには誰が選択中かだけを伝える
+function createPromptView(game, prompt, viewerId) {
     if (!prompt) return null;
     
-    const base = { id: prompt.id, playerId: prompt.player.id, playerName: prompt.player.name };
-    if (prompt.player.id !== viewerId) {
+    const controller = game.getController(prompt.player);
+    const base = { id: prompt.id, playerId: prompt.player.id, playerName: controller.name };
+    if (controller.id !== viewerId) {
         return { ...base, waiting: true };
     }
     
@@ -45,16 +46,20 @@ export function createGameView(game, viewerId, { logsFrom = 0 } = {}) {
         viewerId,
         phase: game.phase,
         currentPlayerId: game.getCurrentPlayer().id,
+        // 手番のプレイヤーを操作するプレイヤー（支配のターン中は支配したプレイヤー）
+        controllerId: game.getController(game.getCurrentPlayer()).id,
         isExtraTurn: game.isExtraTurn,
         supply: { ...game.supply },
         // 今のコスト（橋・街道などで変わる）
         costs: Object.fromEntries(Object.keys(game.supply).map(cardId => [cardId, game.getCost(cardId)])),
+        potionCosts: Object.fromEntries(Object.keys(game.supply).map(cardId => [cardId, game.getPotionCost(cardId)])),
         bane: game.bane,
         ferrymanPile: game.ferrymanPile,
         nonSupply: { ...game.nonSupply },
         trashCount: game.trash.length,
         players: game.players.map(player => {
-            const isViewer = player.id === viewerId;
+            // 支配のターン中は、支配したプレイヤーにも手番のプレイヤーの手札が見える
+            const isViewer = player.id === viewerId || game.getController(player).id === viewerId;
             const topDiscard = player.discard[player.discard.length - 1];
             return {
                 id: player.id,
@@ -64,6 +69,7 @@ export function createGameView(game, viewerId, { logsFrom = 0 } = {}) {
                 actions: player.actions,
                 buys: player.buys,
                 coins: player.coins,
+                potions: player.potions,
                 coffers: player.coffers,
                 vpTokens: player.vpTokens,
                 handCount: player.hand.length,
@@ -79,7 +85,7 @@ export function createGameView(game, viewerId, { logsFrom = 0 } = {}) {
                 nativeVillage: isViewer ? cardIds(player.mats.nativeVillage) : null
             };
         }),
-        prompt: createPromptView(game.pendingPrompt, viewerId),
+        prompt: createPromptView(game, game.pendingPrompt, viewerId),
         logsFrom,
         logs: game.logs.slice(logsFrom).map(entry => entry.message),
         result: game.result ?? null
@@ -103,15 +109,17 @@ export function hydrateGameView(view) {
         ? { ...view.prompt, cards: toCards(view.prompt.cards), card: toCard(view.prompt.card) }
         : view.prompt;
     
-    const me = players.find(player => player.id === view.viewerId) ?? null;
     const current = players.find(player => player.id === view.currentPlayerId);
+    // 支配のターン中に支配しているなら、手番のプレイヤーを自分として表示する（手札を見てプレイできるように）
+    const controlsCurrent = view.controllerId === view.viewerId;
+    const me = controlsCurrent ? current : (players.find(player => player.id === view.viewerId) ?? null);
     return {
         ...view,
         players,
         prompt,
         me,
         current,
-        // 自分の手番で、まだゲームが続いているか
-        isMyTurn: Boolean(me) && me === current && view.phase !== 'end'
+        // 自分が操作する手番で、まだゲームが続いているか
+        isMyTurn: Boolean(me) && controlsCurrent && view.phase !== 'end'
     };
 }

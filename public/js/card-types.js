@@ -21,7 +21,8 @@ export const CARD_SETS = {
     SEASIDE: 'seaside',
     PROSPERITY: 'prosperity',
     HINTERLANDS: 'hinterlands',
-    CORNUCOPIA_GUILDS: 'cornucopia_guilds'
+    CORNUCOPIA_GUILDS: 'cornucopia_guilds',
+    ALCHEMY: 'alchemy'
 };
 
 // 収録セットの表示名（開始画面とロビーで使う）
@@ -31,5 +32,6 @@ export const CARD_SET_LABELS = {
     seaside: '海辺',
     prosperity: '繁栄',
     hinterlands: '異郷',
-    cornucopia_guilds: '収穫祭＆ギルド'
+    cornucopia_guilds: '収穫祭＆ギルド',
+    alchemy: '錬金術'
 };

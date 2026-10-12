@@ -18,6 +18,7 @@ class Player {
         this.actions = 0;    // アクション数
         this.buys = 0;       // 購入数
         this.coins = 0;      // コイン数
+        this.potions = 0;    // ポーション（錬金術。ポーションのコストのカードを購入するのに使う）
         this.random = Math.random; // シャッフルに使う乱数（Game がシード付きの乱数に差し替える）
         this.merchantBonus = 0;      // このターンにプレイした商人の数（最初の銀貨で財宝+1ずつ）
         this.hasPlayedSilver = false; // このターンに銀貨をプレイしたか
@@ -186,6 +187,7 @@ class Player {
         this.actions = 1;
         this.buys = 1;
         this.coins = 0;
+        this.potions = 0;
         this.merchantBonus = 0;
         this.hasPlayedSilver = false;
         this.sailorUses = 0;

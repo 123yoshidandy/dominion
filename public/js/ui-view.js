@@ -10,7 +10,7 @@ import cardAnimator, { STAGGER_MS } from './card-animations.js';
 
 // サプライの基本カードの並び順（左から勝利点の列、財宝の列、その右にアクション）
 const VICTORY_SUPPLY_ORDER = ['estate', 'duchy', 'province', 'colony', 'curse'];
-const TREASURE_SUPPLY_ORDER = ['copper', 'silver', 'gold', 'platinum'];
+const TREASURE_SUPPLY_ORDER = ['copper', 'silver', 'gold', 'platinum', 'potion'];
 const BASIC_SUPPLY_ORDER = [...VICTORY_SUPPLY_ORDER, ...TREASURE_SUPPLY_ORDER];
 
 // 手札の表示順（種類）。同じ種類の中ではコストの高い順に並べる
@@ -53,8 +53,12 @@ class UIView {
         }
 
         const cpuLabel = currentPlayer.isCPU ? '（CPU）' : '';
+        // 支配のターン中は、誰が操作しているかを出す
+        const controller = view.controllerId !== undefined && view.controllerId !== view.currentPlayerId
+            ? view.players.find(player => player.id === view.controllerId) : null;
         this.elements.gameStatus.innerHTML = `
             <span class="status-player">${currentPlayer.name}${cpuLabel}</span>
+            ${controller ? `<span class="status-waiting">${controller.name}が支配中</span>` : ''}
             <span class="status-phase phase-${view.phase}">${this.getPhaseText(view.phase)}</span>
             ${view.prompt?.waiting ? `<span class="status-waiting">${view.prompt.playerName}が選択中</span>` : ''}
         `;
@@ -70,6 +74,7 @@ class UIView {
             stat('アクション', currentPlayer.actions, view.phase !== 'action') +
             stat('購入', currentPlayer.buys, false) +
             stat('コイン', currentPlayer.coins, false) +
+            (currentPlayer.potions > 0 ? stat('ポーション', currentPlayer.potions, false) : '') +
             (currentPlayer.coffers > 0 ? stat('財源', currentPlayer.coffers, view.phase !== 'buy') : '');
     }
 
@@ -93,13 +98,15 @@ class UIView {
         // コストは橋・街道などで下がることがあるので、ビューの今のコストを表示する
         const isBuying = view.isMyTurn && view.phase === 'buy' && currentPlayer.buys > 0;
         const costOf = (cardId) => view.costs?.[cardId] ?? ALL_CARDS[cardId.toUpperCase()].cost;
+        const potionCostOf = (cardId) => view.potionCosts?.[cardId] ?? ALL_CARDS[cardId.toUpperCase()].potionCost ?? 0;
 
         const tilesHtml = (cardIds) => cardIds
             .filter(cardId => supply[cardId] !== undefined)
             .map(cardId => {
                 const card = ALL_CARDS[cardId.toUpperCase()];
                 const cost = costOf(cardId);
-                return this.createSupplyCardHtml(card, supply[cardId], isBuying && currentPlayer.coins < cost, {
+                const unaffordable = currentPlayer.coins < cost || (currentPlayer.potions ?? 0) < potionCostOf(cardId);
+                return this.createSupplyCardHtml(card, supply[cardId], isBuying && unaffordable, {
                     cost,
                     isBane: cardId === view.bane
                 });
@@ -180,7 +187,7 @@ class UIView {
 
         return `
             <div class="card supply-tile ${this.getCardTypeClass(card)} ${stateClass} ${nonSupply ? 'non-supply' : ''}" data-card-id="${cardId}">
-                <span class="card-cost ${cost < card.cost ? 'reduced' : ''}">${cost}</span>
+                <span class="card-cost ${cost < card.cost ? 'reduced' : ''} ${card.potionCost ? 'has-potion' : ''}">${cost}</span>
                 ${isBane ? '<span class="bane-badge">災い</span>' : ''}
                 <span class="tile-art">${getCardArt(card.id)}</span>
                 <span class="card-title">${card.name}</span>
@@ -196,7 +203,7 @@ class UIView {
             <div class="card ${this.getCardTypeClass(card)} ${extraClass} ${stacked ? 'stacked' : ''}" ${attributes}>
                 ${stacked ? `<span class="stack-count">×${stackCount}</span>` : ''}
                 <div class="card-head">
-                    <span class="card-cost">${card.cost}</span>
+                    <span class="card-cost ${card.potionCost ? 'has-potion' : ''}">${card.cost}</span>
                     <span class="card-title">${card.name}</span>
                 </div>
                 <div class="card-art">${getCardArt(card.id)}</div>
