@@ -257,6 +257,7 @@ describe('帝国', () => {
         });
 
         it('城：崩れかけの城は獲得で勝利点と銀貨、王の城は城1枚につき勝利点2', () => {
+            const before = player.calculateVictoryPoints();
             game.pileCards.castles.shift();
             game.supply.castles--;
             game.gainCardFromSupply(player, 'castles');
@@ -266,7 +267,8 @@ describe('帝国', () => {
             player.discard.push(...makeCards(['KINGS_CASTLE']));
             const castles = player.getAllCards().filter(card => card.types.includes('castle')).length;
             expect(castles).toBe(2);
-            expect(player.calculateVictoryPoints()).toBe(3 + 1 + 1 + 2 * castles);
+            // 崩れかけの城 1 ＋ 勝利点トークン 1 ＋ 王の城（城2枚で4）
+            expect(player.calculateVictoryPoints()).toBe(before + 1 + 1 + 2 * castles);
         });
 
         it('小さい城はこれを廃棄して城を獲得する', () => {

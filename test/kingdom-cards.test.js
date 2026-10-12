@@ -395,7 +395,7 @@ describe('全カードでのCPU同士の試合', () => {
         const played = new Set();
         
         for (let round = 0; round < 10; round++) {
-            const game = createGame([{ name: 'CPU1', isCPU: true }, { name: 'CPU2', isCPU: true }], ALL_KINGDOM);
+            const game = createGame([{ name: 'CPU1', isCPU: true }, { name: 'CPU2', isCPU: true }], ALL_KINGDOM, { seed: 800 + round });
             game.players.forEach(p => {
                 p.deck.push(...makeCards(actionIds));
                 p.shuffleDeck();

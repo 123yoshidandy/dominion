@@ -12,8 +12,9 @@ export const DEFAULT_KINGDOM = [
 export const makeCards = (ids) => ids.map(id => new Card(ALL_CARDS[id]));
 
 // 王国カードを指定してゲームを始める（ランダムに選ばれると結果が変わるテストのため）
+// シードを決めておき、最初のプレイヤーや山札の並びもテストのたびに同じにする
 export function createGame(players, kingdom = DEFAULT_KINGDOM, options = {}) {
-    const game = new Game(players, { kingdom, ...options });
+    const game = new Game(players, { kingdom, seed: 1, ...options });
     game.setup();
     return game;
 }
