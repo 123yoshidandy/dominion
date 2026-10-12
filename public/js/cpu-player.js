@@ -6,27 +6,43 @@
 
 import { CARD_TYPES } from './card-data.js';
 
+// 何度もプレイさせるカード（他のアクションカードがあるときに最優先でプレイする）
+const MULTIPLIER_PRIORITY = ['kings_court', 'throne_room', 'coronet'];
+
 // アクションを増やすカード（何枚プレイしても他のアクションを妨げない）の優先順
 const NON_TERMINAL_PRIORITY = [
-    'village', 'bazaar', 'fishing_village', 'festival', 'native_village', 'laboratory', 'market', 'treasury',
-    'caravan', 'tide_pools', 'sea_chart', 'sentry', 'poacher', 'lighthouse', 'sailor', 'harbinger', 'merchant',
-    'haven', 'lookout', 'warehouse', 'cellar'
+    // アクションが2つ以上増える村
+    'village', 'bazaar', 'fishing_village', 'festival', 'native_village', 'workers_village', 'city', 'shanty_town',
+    'mining_village', 'border_village', 'farmhands', 'plaza', 'crossroads', 'inn', 'candlestick_maker', 'demesne',
+    // アクションが1つ増えるカード
+    'grand_market', 'peddler', 'laboratory', 'market', 'treasury', 'highway', 'caravan', 'tide_pools', 'sea_chart',
+    'sentry', 'poacher', 'lighthouse', 'sailor', 'hunting_party', 'baker', 'cartographer', 'ferryman', 'herald',
+    'advisor', 'joust', 'menagerie', 'wishing_well', 'mill', 'secret_passage', 'upgrade', 'oasis', 'scheme', 'trail',
+    'stables', 'wheelwright', 'farrier', 'hamlet', 'lurker', 'pawn', 'harbinger', 'merchant', 'haven', 'lookout', 'warehouse',
+    'cellar'
 ];
 
 // アクションを増やさないカード（ターミナル）の優先順
 const TERMINAL_PRIORITY = [
-    'witch', 'sea_witch', 'artisan', 'wharf', 'council_room', 'library', 'bandit', 'corsair', 'merchant_ship',
-    'pirate', 'outpost', 'smithy', 'militia', 'cutpurse', 'blockade', 'monkey', 'salvager', 'mine', 'moneylender',
-    'remodel', 'bureaucrat', 'vassal', 'smugglers', 'workshop', 'treasure_map', 'island', 'moat', 'chapel',
-    'tactician'
+    'witch', 'sea_witch', 'soothsayer', 'torturer', 'young_witch', 'charlatan', 'witchs_hut', 'margrave', 'minion',
+    'artisan', 'wharf', 'council_room', 'library', 'patrol', 'courtier', 'nobles', 'rabble', 'jester', 'bandit', 'corsair',
+    'merchant_ship', 'pirate', 'outpost', 'smithy', 'diplomat', 'guard_dog', 'journeyman', 'carnival', 'vault',
+    'magnate', 'housecarl', 'courser', 'renown', 'militia', 'footpad', 'berserker', 'mint', 'cutpurse', 'blockade',
+    'monkey', 'monument', 'bridge', 'nomads', 'conspirator', 'merchant_guild', 'haggler', 'souk', 'baron', 'clerk',
+    'swindler', 'ironworks', 'weaver', 'jack_of_all_trades', 'butcher', 'watchtower', 'steward', 'courtyard', 'shop',
+    'masquerade', 'salvager', 'mine', 'moneylender', 'spice_merchant', 'bishop', 'trading_post', 'replace', 'expand',
+    'forge', 'remake', 'develop', 'trader', 'stonemason', 'infirmary', 'remodel', 'bureaucrat', 'vassal', 'smugglers',
+    'workshop', 'treasure_map', 'island', 'moat', 'chapel', 'tactician'
 ];
 
-// 玉座の間は他のアクションカードがあるときに最優先でプレイする
-const PLAY_PRIORITY = ['throne_room', ...NON_TERMINAL_PRIORITY, ...TERMINAL_PRIORITY];
+const PLAY_PRIORITY = [...MULTIPLIER_PRIORITY, ...NON_TERMINAL_PRIORITY, ...TERMINAL_PRIORITY];
 
 // 不要なカード（地下室で捨てる・礼拝堂で廃棄する対象）かどうか（島のようなアクションの勝利点は除く）
 const isJunk = (card) =>
-    card.isType(CARD_TYPES.CURSE) || (card.isType(CARD_TYPES.VICTORY) && !card.isType(CARD_TYPES.ACTION));
+    card.isType(CARD_TYPES.CURSE) || (card.isType(CARD_TYPES.VICTORY) && !card.isType(CARD_TYPES.ACTION) && !card.isType(CARD_TYPES.TREASURE));
+
+// 廃棄したいカード（呪いと屋敷）
+const isTrashTarget = (card) => ['curse', 'estate'].includes(card.id);
 
 // プレイヤーが持つすべてのカード
 const allCardsOf = (player) => [...player.hand, ...player.deck, ...player.discard, ...player.playArea];
@@ -37,12 +53,21 @@ const playRank = (card) => {
     return rank < 0 ? PLAY_PRIORITY.length : rank;
 };
 
+// 条件に合うカードのインデックス
+const indicesWhere = (cards, predicate) => cards.map((card, index) => (predicate(card) ? index : -1)).filter(index => index >= 0);
+
 // アクションカードをプレイする価値があるか（効果が空振りするならプレイしない）
 function isWorthPlaying(card, player, game) {
     const others = player.hand.filter(c => c !== card);
+    const hasTrashFodder = others.some(c => isTrashTarget(c) || c.id === 'copper');
     switch (card.id) {
         case 'salvager':
         case 'island':
+        case 'remodel':
+        case 'replace':
+        case 'expand':
+        case 'courtier':
+        case 'stonemason':
             return others.length > 0;
         case 'treasure_map':
             return others.some(c => c.id === 'treasure_map');
@@ -50,19 +75,32 @@ function isWorthPlaying(card, player, game) {
             return !game?.isExtraTurn;
         case 'tactician': {
             // 手札の財宝が少ないときだけ、手札を捨てて次のターンに備える
-            const coins = others.filter(c => c.isType(CARD_TYPES.TREASURE)).reduce((sum, c) => sum + c.value, 0);
+            const coins = others.filter(c => c.isType(CARD_TYPES.TREASURE)).reduce((sum, c) => sum + (c.value ?? 0), 0);
             return others.length > 0 && coins <= 2;
         }
         case 'chapel':
-            return others.some(c => c.id === 'curse' || c.id === 'estate');
+            return others.some(isTrashTarget);
         case 'moneylender':
             return others.some(c => c.id === 'copper');
-        case 'remodel':
-            return others.length > 0;
         case 'mine':
             return others.some(c => c.id === 'copper' || c.id === 'silver');
         case 'throne_room':
+        case 'kings_court':
+        case 'coronet':
             return others.some(c => c.isType(CARD_TYPES.ACTION));
+        case 'trading_post':
+            return others.filter(c => isTrashTarget(c) || c.id === 'copper').length >= 2;
+        case 'upgrade':
+        case 'remake':
+        case 'bishop':
+        case 'trader':
+        case 'develop':
+        case 'forge':
+            return hasTrashFodder;
+        case 'mint':
+        case 'stables':
+        case 'spice_merchant':
+            return others.some(c => c.isType(CARD_TYPES.TREASURE));
         default:
             return true;
     }
@@ -85,16 +123,23 @@ export function chooseActionCard(player, game) {
 export function chooseCardToBuy(player, game) {
     const coins = player.coins;
     const supply = game.supply;
-    const provincesLeft = supply.province ?? 0;
+    const provincesLeft = supply.colony ?? supply.province ?? 0;
     const available = (cardId) => (supply[cardId] ?? 0) > 0;
 
     // ターミナルのアクションは、デッキ12枚あたり1枚程度に抑える
     const cards = allCardsOf(player);
     const terminalCount = cards.filter(card => TERMINAL_PRIORITY.includes(card.id)).length;
     const canAddTerminal = terminalCount < 1 + Math.floor(cards.length / 12);
+    const cursesLeft = available('curse');
 
     const pick = (candidates) => candidates.find(available) ?? null;
 
+    if (coins >= 11 && available('colony')) {
+        return pick(['colony']);
+    }
+    if (coins >= 9 && available('platinum')) {
+        return provincesLeft <= 4 ? pick(['province', 'platinum']) : pick(['platinum']);
+    }
     if (coins >= 8) {
         return pick(['province', 'gold']);
     }
@@ -104,16 +149,18 @@ export function chooseCardToBuy(player, game) {
     if (coins >= 5) {
         if (provincesLeft <= 5) return pick(['duchy', 'silver']);
 
-        const actions = ['laboratory', 'bazaar', 'market', 'festival'];
+        const actions = ['laboratory', 'bazaar', 'market', 'festival', 'city', 'highway', 'hunting_party', 'baker', 'cartographer'];
         if (canAddTerminal) {
-            if (available('curse')) actions.unshift('witch', 'sea_witch');
-            actions.push('wharf', 'council_room', 'library', 'bandit', 'merchant_ship');
+            if (cursesLeft) actions.unshift('witch', 'sea_witch', 'soothsayer', 'torturer', 'charlatan');
+            actions.push('margrave', 'wharf', 'council_room', 'library', 'courtier', 'bandit', 'merchant_ship', 'rabble');
         }
         return pick([...actions, 'silver']);
     }
     if (coins >= 3) {
         if (provincesLeft <= 2) return pick(['estate', 'silver']);
-        if (coins === 4 && canAddTerminal) return pick(['smithy', 'militia', 'cutpurse', 'moneylender', 'silver']);
+        if (coins === 4 && canAddTerminal) {
+            return pick([...(cursesLeft ? ['young_witch'] : []), 'smithy', 'militia', 'monument', 'cutpurse', 'moneylender', 'silver']);
+        }
         return pick(['silver']);
     }
     if (coins >= 2 && provincesLeft <= 2) {
@@ -123,17 +170,37 @@ export function chooseCardToBuy(player, game) {
     return null;
 }
 
+// 購入の前に財源を使う額（あと少しで欲しいカードに届くときだけ使う）
+export function chooseCoffersToUse(player, game) {
+    if (player.coffers <= 0 || player.buys <= 0) return 0;
+    const thresholds = [...(game.supply.colony > 0 ? [11] : []), ...(game.supply.platinum > 0 ? [9] : []), 8, 6, 5];
+    const target = thresholds.find(threshold => player.coins < threshold && player.coins + player.coffers >= threshold);
+    return target ? target - player.coins : 0;
+}
+
 // カードを手元に残す価値の目安
 function keepValue(card) {
     if (card.isType(CARD_TYPES.CURSE)) return -2;
-    if (card.isType(CARD_TYPES.VICTORY) && !card.isType(CARD_TYPES.ACTION)) return -1;
-    if (card.isType(CARD_TYPES.TREASURE)) return card.value * 2;
+    if (card.isType(CARD_TYPES.VICTORY) && !card.isType(CARD_TYPES.ACTION) && !card.isType(CARD_TYPES.TREASURE)) return -1;
+    if (card.isType(CARD_TYPES.TREASURE) && !card.isType(CARD_TYPES.ACTION)) return Math.max(card.value ?? 0, card.cost / 3) * 2;
     return card.cost; // アクションはコストを価値の目安にする
 }
 
 // 手札を残す価値の低い順に並べたインデックス（民兵で捨てるカードを選ぶのに使う）
 function indicesByKeepValue(cards) {
     return cards.map((card, index) => index).sort((a, b) => keepValue(cards[a]) - keepValue(cards[b]));
+}
+
+const lowest = (cards) => indicesByKeepValue(cards)[0];
+const highest = (cards) => indicesByKeepValue(cards).reverse()[0];
+
+// 廃棄する順（呪い・屋敷・銅貨、なければ一番価値の低いカード）
+function trashOrder(cards, { includeCopper = true, mandatory = true } = {}) {
+    for (const cardId of ['curse', 'estate', ...(includeCopper ? ['copper'] : [])]) {
+        const index = cards.findIndex(card => card.id === cardId);
+        if (index >= 0) return [index];
+    }
+    return mandatory ? [lowest(cards)] : [];
 }
 
 // 獲得するカードを選ぶ（購入と同じ判断を使い、合うものがなければ一番高いカード）
@@ -149,24 +216,38 @@ function chooseGain(prompt, game) {
     return fallback >= 0 ? fallback : 0;
 }
 
+// デッキで一番多いカードのインデックス（願いの井戸で指定する）
+function mostCommonIndex(cards, ownCards, predicate = () => true) {
+    const counts = new Map();
+    ownCards.filter(predicate).forEach(card => counts.set(card.id, (counts.get(card.id) ?? 0) + 1));
+    let best = -1;
+    cards.forEach((card, index) => {
+        if ((counts.get(card.id) ?? 0) > (counts.get(cards[best]?.id) ?? 0)) best = index;
+    });
+    return best >= 0 ? best : 0;
+}
+
 // 選択（手札などからカードを選ぶ）に対する答え：選んだインデックスの配列
 function chooseSelection(prompt, game) {
-    const { cards, min, max } = prompt;
+    const { cards, min, max, player } = prompt;
     const indexOf = (predicate) => cards.findIndex(predicate);
+    const optionalOne = (predicate) => {
+        const index = indexOf(predicate);
+        return index >= 0 ? [index] : [];
+    };
 
     switch (prompt.purpose) {
         case 'cellar-discard':
+        case 'vault-discard':
             // 勝利点と呪いをすべて捨てて引き直す
-            return cards.map((card, index) => (isJunk(card) ? index : -1)).filter(index => index >= 0);
+            return indicesWhere(cards, isJunk);
 
         case 'chapel-trash':
             // 勝利点は終盤に必要なので、廃棄するのは呪いと屋敷だけにする
-            return cards
-                .map((card, index) => (['curse', 'estate'].includes(card.id) ? index : -1))
-                .filter(index => index >= 0)
-                .slice(0, max);
+            return indicesWhere(cards, isTrashTarget).slice(0, max);
 
         case 'discard-down':
+        case 'witchs-hut':
             return indicesByKeepValue(cards).slice(0, min);
 
         case 'remodel-trash': {
@@ -177,23 +258,60 @@ function chooseSelection(prompt, game) {
                 const index = indexOf(card => card.id === cardId);
                 if (index >= 0) return [index];
             }
-            return [indicesByKeepValue(cards)[0]];
+            return [lowest(cards)];
         }
+
+        case 'upgrade-trash':
+        case 'develop-trash':
+        case 'stonemason-trash':
+        case 'bishop-trash':
+        case 'investment-trash':
+        case 'trader-trash':
+        case 'steward-trash':
+        case 'trading-post':
+            return min <= 1 ? trashOrder(cards) : indicesByKeepValue(cards).slice(0, min);
+
+        case 'optional-trash':
+        case 'sailor-trash':
+        case 'butcher-trash':
+            return indicesWhere(cards, isTrashTarget).slice(0, 1);
+
+        case 'souk-trash':
+            return indicesWhere(cards, isTrashTarget).slice(0, max);
+
+        case 'forge':
+            return indicesWhere(cards, card => isTrashTarget(card) || card.id === 'copper');
 
         case 'mine-trash': {
             // 銀貨→金貨、銅貨→銀貨の順に優先する（金貨しかなければ廃棄しない）
             const silver = indexOf(card => card.id === 'silver');
             if (silver >= 0) return [silver];
-            const copper = indexOf(card => card.id === 'copper');
-            return copper >= 0 ? [copper] : [];
+            return optionalOne(card => card.id === 'copper');
         }
+
+        case 'spice-merchant-trash':
+        case 'anvil':
+        case 'plaza':
+        case 'stables':
+            return optionalOne(card => card.id === 'copper');
 
         case 'throne-room': {
             const best = cards.map((card, index) => index).sort((a, b) => playRank(cards[a]) - playRank(cards[b]));
             // 玉座の間で玉座の間を選ぶのは、他にないときだけ
-            const notThrone = best.find(index => cards[index].id !== 'throne_room');
+            const notThrone = best.find(index => !MULTIPLIER_PRIORITY.includes(cards[index].id));
             return [notThrone ?? best[0]];
         }
+
+        case 'shop':
+        case 'scheme': {
+            const best = cards.map((card, index) => index).sort((a, b) => playRank(cards[a]) - playRank(cards[b]));
+            return best.slice(0, max);
+        }
+
+        case 'tiara':
+        case 'mint':
+        case 'farmhands':
+            return [highest(cards)];
 
         case 'bandit-trash': {
             // 攻撃を受けた側なので、失って痛くない安い方を廃棄する
@@ -203,53 +321,103 @@ function chooseSelection(prompt, game) {
 
         case 'harbinger': {
             // 捨て札の中で一番価値の高いカードを山札に戻す（銅貨以下なら戻さない）
-            const best = indicesByKeepValue(cards).reverse()[0];
+            const best = highest(cards);
             const COPPER_VALUE = 2;
-            return keepValue(cards[best]) > COPPER_VALUE ? [best] : [];
+            return keepValue(cards[best]) > COPPER_VALUE || min > 0 ? [best] : [];
         }
 
         case 'sentry-trash':
-            return cards.map((card, index) => (['curse', 'estate'].includes(card.id) ? index : -1)).filter(index => index >= 0);
+            return indicesWhere(cards, isTrashTarget);
 
         case 'sentry-discard':
+        case 'cartographer':
             // 勝利点と銅貨は引きたくないので捨てる
-            return cards.map((card, index) => (isJunk(card) || card.id === 'copper' ? index : -1)).filter(index => index >= 0);
+            return indicesWhere(cards, card => isJunk(card) || card.id === 'copper');
 
         case 'sentry-top':
-            return [indicesByKeepValue(cards).reverse()[0]];
+        case 'put-back':
+            return [highest(cards)];
 
         case 'lookout-trash':
         case 'lookout-discard':
         case 'island':
-            return [indicesByKeepValue(cards)[0]];
+        case 'masquerade-pass':
+        case 'topdeck-from-hand':
+        case 'secret-passage-card':
+        case 'courtier-reveal-cheap':
+            return [lowest(cards)];
+
+        case 'courtier-reveal': {
+            // 種類の多いカードを公開する
+            const most = cards.map((card, index) => index).sort((a, b) => cards[b].types.length - cards[a].types.length);
+            return [most[0]];
+        }
 
         case 'haven':
             // 次のターンに一番使いたいカードを脇に置く
-            return [indicesByKeepValue(cards).reverse()[0]];
+            return [highest(cards)];
 
-        case 'sailor-trash':
-            return cards.map((card, index) => (['curse', 'estate'].includes(card.id) ? index : -1))
-                .filter(index => index >= 0).slice(0, 1);
-
-        case 'salvager-trash': {
-            for (const cardId of ['curse', 'estate', 'copper']) {
-                const index = indexOf(card => card.id === cardId);
-                if (index >= 0) return [index];
-            }
-            return [indicesByKeepValue(cards)[0]];
-        }
+        case 'salvager-trash':
+            return trashOrder(cards);
 
         case 'artisan-topdeck': {
             // アクションが残っていなければ、手札のアクションカードを次のターンに回す
-            if (prompt.player.actions <= 0) {
+            if (player.actions <= 0) {
                 const action = indexOf(card => card.isType(CARD_TYPES.ACTION));
                 if (action >= 0) return [action];
             }
-            return [indicesByKeepValue(cards)[0]];
+            return [lowest(cards)];
+        }
+
+        case 'mill-discard':
+        case 'vault-other': {
+            const junk = indicesWhere(cards, isJunk);
+            return junk.length >= 2 ? junk.slice(0, 2) : [];
+        }
+
+        case 'hamlet-action':
+        case 'hamlet-buy':
+            return indicesWhere(cards, isJunk).slice(0, 1);
+
+        case 'inn':
+            return cards.map((card, index) => index);
+
+        case 'lurker-trash':
+        case 'gain-from-trash': {
+            const byCost = cards.map((card, index) => index).sort((a, b) => cards[b].cost - cards[a].cost);
+            return [byCost[0]];
+        }
+
+        case 'swindler':
+            // 攻撃を受けるプレイヤーには、価値の低いカードを獲得させる
+            return [lowest(cards)];
+
+        case 'advisor':
+            // 相手の手札に入れたくない、一番良いカードを捨て札にさせる
+            return [highest(cards)];
+
+        case 'name-card':
+            return [mostCommonIndex(cards, allCardsOf(player))];
+
+        case 'journeyman-name':
+            return [mostCommonIndex(cards, allCardsOf(player), card => isJunk(card) || card.id === 'copper')];
+
+        case 'war-chest-name': {
+            // 相手が欲しそうな、コスト5以下で一番高いカードを指定する
+            const byCost = cards.map((card, index) => index)
+                .filter(index => cards[index].cost <= 5 && (game.supply[cards[index].id] ?? 0) > 0)
+                .sort((a, b) => cards[b].cost - cards[a].cost);
+            return [byCost[0] ?? 0];
+        }
+
+        case 'joust': {
+            const order = ['courser', 'demesne', 'renown', 'housecarl', 'huge_turnip', 'coronet'];
+            const index = order.map(cardId => indexOf(card => card.id === cardId)).find(i => i >= 0);
+            return [index ?? 0];
         }
 
         case 'gain':
-            return [chooseGain(prompt, game)];
+            return min === 0 && cards.length === 0 ? [] : [chooseGain(prompt, game)];
 
         default:
             // 想定外の選択は、条件を満たす最小の枚数を先頭から選ぶ
@@ -257,15 +425,75 @@ function chooseSelection(prompt, game) {
     }
 }
 
+// 選択肢から選ぶ選択に対する答え：選んだ選択肢のインデックスの配列
+function chooseOption(prompt, game) {
+    const { options, min, player, card } = prompt;
+    const handHasJunk = (count) => player.hand.filter(isJunk).length >= count;
+    const handHasAction = player.hand.some(c => c.isType(CARD_TYPES.ACTION));
+
+    switch (prompt.purpose) {
+        case 'pawn':
+            return player.actions <= 0 && handHasAction ? [0, 1] : [0, 3];
+        case 'courser':
+            return player.actions <= 0 && handHasAction ? [0, 1] : [0, 2];
+        case 'steward':
+            return [handHasJunk(2) ? 2 : 1];
+        case 'lurker':
+            return [game.trash.some(c => c.isType(CARD_TYPES.ACTION)) ? 1 : 0];
+        case 'nobles':
+            return [player.actions <= 0 && handHasAction ? 1 : 0];
+        case 'courtier':
+            // 財宝 → 金貨 → 購入 → アクションの順に選ぶ
+            return [2, 3, 1, 0].slice(0, min);
+        case 'minion': {
+            // 手札の財宝が少なければ引き直す
+            const coins = player.hand.filter(c => c.isType(CARD_TYPES.TREASURE)).reduce((sum, c) => sum + (c.value ?? 0), 0);
+            return [coins + player.coins >= 4 ? 0 : 1];
+        }
+        case 'watchtower':
+            if (card.isType(CARD_TYPES.CURSE)) return [1];
+            if (keepValue(card) >= 4) return [2];
+            return [0];
+        case 'investment': {
+            const lateGame = (game.supply.province ?? 0) <= 4;
+            return [lateGame && options.length > 1 ? 1 : 0];
+        }
+        case 'crystal-ball':
+            if (options.length === 4) return [3];
+            if (card.isType(CARD_TYPES.CURSE)) return [1];
+            if (isJunk(card)) return [2];
+            return [0];
+        case 'jester':
+            return [card.cost >= 3 ? 1 : 0];
+        case 'spice-merchant':
+            return [player.actions <= 0 && handHasAction ? 0 : 1];
+        case 'secret-passage-position':
+            return [options.length - 1];
+        default:
+            // 想定外の選択（超過支払い・寵臣の攻撃を受けた側など）は先頭から選ぶ
+            return options.map((option, index) => index).slice(0, Math.max(min, 1));
+    }
+}
+
 // はい／いいえの選択に対する答え
 function chooseConfirm(prompt) {
-    const { player } = prompt;
+    const { player, card } = prompt;
 
     switch (prompt.purpose) {
         case 'moneylender':
         case 'vassal-play':
         case 'sailor-play':
+        case 'baron':
+        case 'reaction-play':
+        case 'diplomat-react':
+        case 'tunnel':
+        case 'fools-gold-react':
+        case 'clerk-start':
             return true;
+        case 'tiara-topdeck':
+            return Boolean(card) && !isJunk(card) && card.id !== 'copper';
+        case 'jack-discard':
+            return Boolean(card) && (isJunk(card) || card.id === 'copper');
         case 'native-village':
             // マットに3枚たまるまでは山札の上を置き、たまったら手札に加える
             return player.mats.nativeVillage.length < 3;
@@ -277,9 +505,11 @@ function chooseConfirm(prompt) {
     }
 }
 
-// 選択待ちに対する答え（select は配列、confirm は真偽値）
+// 選択待ちに対する答え（select・choose は配列、confirm は真偽値）
 export function choosePromptAnswer(prompt, game) {
-    return prompt.type === 'confirm' ? chooseConfirm(prompt) : chooseSelection(prompt, game);
+    if (prompt.type === 'confirm') return chooseConfirm(prompt);
+    if (prompt.type === 'choose') return chooseOption(prompt, game);
+    return chooseSelection(prompt, game);
 }
 
 // CPUが答えるべき選択待ちがあるか
@@ -297,7 +527,14 @@ export function runCpuStep(game) {
     if (prompt) {
         // 人間の選択待ちなら、答えが出るまで待つ
         if (hasCpuPrompt(game)) {
-            game.applyCommand(prompt.player.id, { type: 'answer', answer: choosePromptAnswer(prompt, game) });
+            // 答えが受け付けられなければ、条件を満たす最小の答えで答え直す
+            if (!game.applyCommand(prompt.player.id, { type: 'answer', answer: choosePromptAnswer(prompt, game) })) {
+                const count = prompt.min ?? 0;
+                game.applyCommand(prompt.player.id, {
+                    type: 'answer',
+                    answer: prompt.type === 'confirm' ? false : Array.from({ length: count }, (_, i) => i)
+                });
+            }
         }
         return;
     }
@@ -315,6 +552,8 @@ export function runCpuStep(game) {
     }
 
     if (game.phase === 'buy') {
+        const coffers = chooseCoffersToUse(player, game);
+        if (coffers > 0 && apply({ type: 'coffers', amount: coffers })) return;
         const cardId = player.buys > 0 ? chooseCardToBuy(player, game) : null;
         if (!cardId || !apply({ type: 'buy', cardId })) {
             apply({ type: 'endTurn' });

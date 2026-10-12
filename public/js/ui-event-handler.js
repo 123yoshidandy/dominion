@@ -32,7 +32,7 @@ class UIEventHandler {
 
         const card = view.me?.hand[cardIndex];
         const canPlay = view.isMyTurn && view.phase === 'action' && view.me.actions > 0 &&
-            card && card.isType(CARD_TYPES.ACTION);
+            card && card.isType(CARD_TYPES.ACTION) && !view.prompt;
 
         // 今プレイできないカードはタップしても何もしない（説明は長押しで表示する）
         // アニメーション中や返事を待つ間の連打で、別のカードまでプレイしないようにする
@@ -103,12 +103,14 @@ class UIEventHandler {
         
         // 返事を待っている購入の分も差し引いて、購入回数とコインが足りなければ何もしない
         // （アニメーション中の連打や、オンライン対戦で結果が届く前のタップで二重に買わないように）
+        // コストは橋・街道などで下がることがあるので、ビューの今のコストで判断する
         const pending = this.pendingPurchases ?? { count: 0, cost: 0 };
-        if (!card || (view.supply[cardId] ?? 0) <= 0 ||
-            currentPlayer.buys - pending.count <= 0 || currentPlayer.coins - pending.cost < card.cost) {
+        const cost = view.costs?.[cardId] ?? card?.cost;
+        if (!card || (view.supply[cardId] ?? 0) <= 0 || view.prompt ||
+            currentPlayer.buys - pending.count <= 0 || currentPlayer.coins - pending.cost < cost) {
             return;
         }
-        this.pendingPurchases = { count: pending.count + 1, cost: pending.cost + card.cost };
+        this.pendingPurchases = { count: pending.count + 1, cost: pending.cost + cost };
         
         // 購入回数を使い切ったときのターン終了は、描き直すときに endTurnIfNoBuysLeft で判定する
         const purchase = () => {
@@ -129,6 +131,14 @@ class UIEventHandler {
             // 要素が見つからない場合は直接購入処理
             purchase();
         }
+    }
+    
+    // 財源を1つ使って財宝+1を得る
+    handleUseCoffers() {
+        const view = this.gameController.getView();
+        if (!view || !view.isMyTurn || view.phase !== 'buy' || view.me.coffers <= 0 || this.isActionPending) return;
+        this.isActionPending = true;
+        if (!this.gameController.send({ type: 'coffers', amount: 1 })) this.clearPendingActions();
     }
     
     // 場札の着地点を決める関数を返す。同じカードが場にあればその位置、なければ右端の次（空なら左端）

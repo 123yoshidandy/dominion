@@ -27,6 +27,7 @@
     --type-victory: #3f8a4c;
     --type-curse: #85549f;
     --type-duration: #d17a22;
+    --type-reaction: #3a9bb5;
 
     --radius: 12px;
     --safe-top: env(safe-area-inset-top, 0px);
@@ -174,7 +175,8 @@ button.primary {
 
 #turn-stats {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
     gap: 6px;
     margin-top: 8px;
 }
@@ -322,6 +324,7 @@ button.primary {
 }
 
 .action-card { --type: var(--type-action); --type-tint: #dce8f5; }
+.reaction-card { --type: var(--type-reaction); --type-tint: #d8eef3; }
 .treasure-card { --type: var(--type-treasure); --type-tint: #f7ecd0; }
 .victory-card { --type: var(--type-victory); --type-tint: #e2f0dc; }
 .curse-card { --type: var(--type-curse); --type-tint: #ece2f3; }
@@ -444,6 +447,36 @@ button.primary {
 .supply-tile.unaffordable {
     opacity: 0.5;
     filter: grayscale(0.85);
+}
+
+/* 橋・街道などでコストが下がっているときは色を変える */
+.card-cost.reduced {
+    color: #fff;
+    background: var(--primary);
+}
+
+/* 魔女娘の災いカード */
+.bane-badge {
+    position: absolute;
+    top: 3px;
+    left: 50%;
+    transform: translateX(-50%);
+    line-height: 15px;
+    padding: 0 3px;
+    border-radius: 4px;
+    font-size: 8.5px;
+    font-weight: 700;
+    color: #fff;
+    background: var(--type-curse);
+}
+
+/* サプライ外の山（褒賞・渡し守の山）は横一列に並べる */
+.supply-extra {
+    grid-column: 1 / -1;
+}
+
+.supply-extra .supply-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 
 /* 売り切れは、買えないカードよりさらに薄くして区別する */
@@ -1029,6 +1062,54 @@ button.primary.secondary {
     background: var(--paper-dim);
 }
 
+/* 文字の選択肢から選ぶ選択 */
+.prompt-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.prompt-option.selected {
+    color: #fff;
+    background: var(--primary);
+    box-shadow: 0 0 0 2px var(--gold) inset;
+}
+
+/* 使うカードのセット */
+.card-set-checks {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin: 12px 0 0;
+    padding: 0;
+    border: none;
+}
+
+.card-set-checks legend {
+    margin-bottom: 6px;
+    padding: 0;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.card-set-check {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    background: var(--paper-dim);
+    cursor: pointer;
+}
+
+.card-set-check input {
+    width: 18px;
+    height: 18px;
+}
+
 /* 設定のスイッチ */
 .setting-toggle {
     display: flex;
@@ -1287,7 +1368,7 @@ button.primary.secondary {
 
     #turn-stats {
         flex: none;
-        grid-template-columns: repeat(3, auto);
+        grid-auto-columns: auto;
         max-width: none;
         margin-top: 0;
     }

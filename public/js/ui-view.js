@@ -9,8 +9,8 @@ import { getCardArt, CARD_BACK } from './card-art.js';
 import cardAnimator, { STAGGER_MS } from './card-animations.js';
 
 // サプライの基本カードの並び順（左から勝利点の列、財宝の列、その右にアクション）
-const VICTORY_SUPPLY_ORDER = ['estate', 'duchy', 'province', 'curse'];
-const TREASURE_SUPPLY_ORDER = ['copper', 'silver', 'gold'];
+const VICTORY_SUPPLY_ORDER = ['estate', 'duchy', 'province', 'colony', 'curse'];
+const TREASURE_SUPPLY_ORDER = ['copper', 'silver', 'gold', 'platinum'];
 const BASIC_SUPPLY_ORDER = [...VICTORY_SUPPLY_ORDER, ...TREASURE_SUPPLY_ORDER];
 
 // 手札の表示順（種類）。同じ種類の中ではコストの高い順に並べる
@@ -69,7 +69,8 @@ class UIView {
         this.elements.turnStats.innerHTML =
             stat('アクション', currentPlayer.actions, view.phase !== 'action') +
             stat('購入', currentPlayer.buys, false) +
-            stat('コイン', currentPlayer.coins, false);
+            stat('コイン', currentPlayer.coins, false) +
+            (currentPlayer.coffers > 0 ? stat('財源', currentPlayer.coffers, view.phase !== 'buy') : '');
     }
 
     // フェーズの日本語テキストを取得
@@ -89,21 +90,33 @@ class UIView {
 
         // 自分の購入フェーズでは、コインが足りず買えないカードをグレーアウトする
         // （アクションフェーズや他のプレイヤーの手番では、すべて通常の表示にする）
+        // コストは橋・街道などで下がることがあるので、ビューの今のコストを表示する
         const isBuying = view.isMyTurn && view.phase === 'buy' && currentPlayer.buys > 0;
-        const isUnaffordable = (card) => isBuying && currentPlayer.coins < card.cost;
+        const costOf = (cardId) => view.costs?.[cardId] ?? ALL_CARDS[cardId.toUpperCase()].cost;
 
         const tilesHtml = (cardIds) => cardIds
             .filter(cardId => supply[cardId] !== undefined)
             .map(cardId => {
                 const card = ALL_CARDS[cardId.toUpperCase()];
-                return this.createSupplyCardHtml(card, supply[cardId], isUnaffordable(card));
+                const cost = costOf(cardId);
+                return this.createSupplyCardHtml(card, supply[cardId], isBuying && currentPlayer.coins < cost, {
+                    cost,
+                    isBane: cardId === view.bane
+                });
             })
             .join('');
+        
+        // サプライ外の山（褒賞・渡し守の山）は買えないので、説明を見るためだけに並べる
+        const nonSupplyIds = Object.keys(view.nonSupply ?? {});
+        const nonSupplyHtml = nonSupplyIds.map(cardId =>
+            this.createSupplyCardHtml(ALL_CARDS[cardId.toUpperCase()], view.nonSupply[cardId], false, { nonSupply: true })
+        ).join('');
 
         // 王国カードはサプライのキーから基本カード以外を取り出し、コスト順に並べる
         const kingdomCardIds = Object.keys(supply)
             .filter(cardId => !BASIC_SUPPLY_ORDER.includes(cardId) && ALL_CARDS[cardId.toUpperCase()])
-            .sort((a, b) => ALL_CARDS[a.toUpperCase()].cost - ALL_CARDS[b.toUpperCase()].cost);
+            .sort((a, b) => ALL_CARDS[a.toUpperCase()].cost - ALL_CARDS[b.toUpperCase()].cost ||
+                ALL_CARDS[a.toUpperCase()].name.localeCompare(ALL_CARDS[b.toUpperCase()].name, 'ja'));
 
         this.elements.supplyPiles.innerHTML = `
             <div class="supply-group supply-victory">
@@ -118,17 +131,24 @@ class UIView {
                 <h3>アクション</h3>
                 <div class="supply-grid">${tilesHtml(kingdomCardIds)}</div>
             </div>
+            ${nonSupplyIds.length > 0 ? `
+                <div class="supply-group supply-extra">
+                    <h3>サプライ外（購入できない）</h3>
+                    <div class="supply-grid">${nonSupplyHtml}</div>
+                </div>
+            ` : ''}
         `;
 
         this.fitSupplyTitles();
 
-        // タップで購入、長押しで説明を表示する
+        // タップで購入、長押しで説明を表示する（サプライ外の山はタップでも説明を表示する）
         const supplyCards = this.elements.supplyPiles.querySelectorAll('.card');
         supplyCards.forEach(card => {
             const cardId = card.getAttribute('data-card-id');
+            const showDetail = () => this.uiController.showSupplyCardDetail(cardId);
             onPress(card, {
-                onTap: () => this.uiController.handleCardPurchase(cardId),
-                onLongPress: () => this.uiController.showSupplyCardDetail(cardId)
+                onTap: card.classList.contains('non-supply') ? showDetail : () => this.uiController.handleCardPurchase(cardId),
+                onLongPress: showDetail
             });
         });
     }
@@ -152,15 +172,16 @@ class UIView {
         });
     }
 
-    createSupplyCardHtml(card, count, unaffordable) {
+    createSupplyCardHtml(card, count, unaffordable, { cost = card.cost, isBane = false, nonSupply = false } = {}) {
         const stateClass = count <= 0 ? 'empty' : (unaffordable ? 'unaffordable' : '');
 
         // カードIDは小文字に変換して一貫性を保つ
         const cardId = card.id.toLowerCase();
 
         return `
-            <div class="card supply-tile ${this.getCardTypeClass(card)} ${stateClass}" data-card-id="${cardId}">
-                <span class="card-cost">${card.cost}</span>
+            <div class="card supply-tile ${this.getCardTypeClass(card)} ${stateClass} ${nonSupply ? 'non-supply' : ''}" data-card-id="${cardId}">
+                <span class="card-cost ${cost < card.cost ? 'reduced' : ''}">${cost}</span>
+                ${isBane ? '<span class="bane-badge">災い</span>' : ''}
                 <span class="tile-art">${getCardArt(card.id)}</span>
                 <span class="card-title">${card.name}</span>
                 <span class="card-count">${count}</span>
@@ -197,7 +218,10 @@ class UIView {
             [CARD_TYPES.VICTORY]: '勝利点',
             [CARD_TYPES.ACTION]: 'アクション',
             [CARD_TYPES.CURSE]: '呪い',
-            [CARD_TYPES.DURATION]: '持続'
+            [CARD_TYPES.DURATION]: '持続',
+            [CARD_TYPES.REACTION]: 'リアクション',
+            [CARD_TYPES.ATTACK]: 'アタック',
+            [CARD_TYPES.REWARD]: '褒賞'
         };
 
         return types.map(type => typeMap[type] || type).join(' - ');
@@ -214,7 +238,8 @@ class UIView {
                         ${player.name}${player.isCPU ? '<span class="cpu-badge">CPU</span>' : ''}
                     </div>
                     <div class="player-meta">
-                        <span>勝利点 <b>${player.victoryPoints}</b></span>
+                        <span>勝利点 <b>${player.victoryPoints}</b>${player.vpTokens > 0 ? `（トークン${player.vpTokens}）` : ''}</span>
+                        ${player.coffers > 0 ? `<span>財源 ${player.coffers}</span>` : ''}
                         <span>山札 ${player.deckCount}</span>
                         <span>手札 ${player.handCount}</span>
                         <span>捨て札 ${player.discardCount}</span>
@@ -397,8 +422,17 @@ class UIView {
                 <button id="buy-phase-btn" ${view.me.actions <= 0 ? 'class="highlight"' : ''}>購入へ</button>
             `;
         }
+        
+        // 財源は購入フェーズに1つずつ使える
+        if (view.phase === 'buy' && view.isMyTurn && view.me.coffers > 0) {
+            actionButtonsHtml += `<button id="coffers-btn">財源を使う（残り${view.me.coffers}）</button>`;
+        }
 
         this.elements.actionButtons.innerHTML = actionButtonsHtml;
+        
+        document.getElementById('coffers-btn')?.addEventListener('click', () => {
+            this.uiController.handleUseCoffers();
+        });
 
         // 購入フェーズボタンのイベント
         const buyPhaseBtn = document.getElementById('buy-phase-btn');

@@ -6,7 +6,7 @@
 import UIView from './ui-view.js';
 import UIModal from './ui-modal.js';
 import UIEventHandler from './ui-event-handler.js';
-import { ALL_CARDS } from './card-data.js';
+import { ALL_CARDS, CARD_SETS } from './card-data.js';
 import OnlineGameController from './online-controller.js';
 import { getServerUrl } from './online-config.js';
 
@@ -14,7 +14,7 @@ import { getServerUrl } from './online-config.js';
 const SETTINGS_KEY = 'dominion.settings';
 const DEFAULT_SETTINGS = {
     stackHand: false, // 手札の同じカードを重ねて表示する
-    cardSets: 'base+seaside', // 王国カードを選ぶセット（'base' / 'seaside' / 'base+seaside'）
+    cardSets: Object.values(CARD_SETS).join('+'), // 王国カードを選ぶセットを + でつないだもの（'base+seaside' など）
     playerCount: 2,           // ローカル対戦の人数
     localPlayers: [],         // ローカル対戦の各席の { name, isCPU }
     onlineName: ''            // オンライン対戦で使う名前
@@ -293,7 +293,10 @@ class UIController {
         if (!view) return;
         
         const card = ALL_CARDS[cardId.toUpperCase()];
-        this.modal.showCardDetail(card, { count: view.supply[cardId] ?? 0 });
+        this.modal.showCardDetail(card, {
+            count: view.supply[cardId] ?? view.nonSupply?.[cardId] ?? 0,
+            cost: view.costs?.[cardId]
+        });
     }
     
     // 手札・場札のカードの説明を表示する（長押し時）
@@ -304,6 +307,11 @@ class UIController {
     // カード購入処理
     handleCardPurchase(cardId) {
         this.eventHandler.handleCardPurchase(cardId);
+    }
+    
+    // 財源を1つ使う
+    handleUseCoffers() {
+        this.eventHandler.handleUseCoffers();
     }
 }
 

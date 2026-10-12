@@ -3,7 +3,11 @@
  */
 
 import { CARD_TYPES, CARD_SETS } from './card-types.js';
+import { INTRIGUE_CARDS } from './card-data-intrigue.js';
 import { SEASIDE_CARDS } from './card-data-seaside.js';
+import { PROSPERITY_CARDS, PROSPERITY_BASIC_CARDS } from './card-data-prosperity.js';
+import { HINTERLANDS_CARDS } from './card-data-hinterlands.js';
+import { CORNUCOPIA_GUILDS_CARDS, REWARD_CARDS } from './card-data-cornucopia-guilds.js';
 
 export { CARD_TYPES, CARD_SETS };
 
@@ -413,11 +417,12 @@ const BASE_KINGDOM_CARDS = {
                 callback: ([index]) => {
                     const [trashed] = game.trashFromHand(player, [index]);
                     game.log(`${player.name}は${trashed.name}を廃棄しました`);
+                    const maxCost = game.getCost(trashed) + 2;
                     game.promptGain({
                         player,
-                        maxCost: trashed.cost + 2,
+                        maxCost,
                         title: '改築',
-                        message: `コスト${trashed.cost + 2}以下のカードを1枚獲得してください。`
+                        message: `コスト${maxCost}以下のカードを1枚獲得してください。`
                     });
                 }
             });
@@ -500,9 +505,9 @@ const BASE_KINGDOM_CARDS = {
                 game.log(`${target.name}は${revealed.map(card => card.name).join('と')}を公開しました`);
                 
                 const trashTreasure = (trashed) => {
-                    revealed.filter(card => card !== trashed).forEach(card => target.discard.push(card));
+                    game.discardCards(target, revealed.filter(card => card !== trashed));
                     if (!trashed) return;
-                    game.trash.push(trashed);
+                    game.trashCard(target, trashed);
                     game.log(`${target.name}は${trashed.name}を廃棄しました`);
                 };
                 
@@ -582,7 +587,7 @@ const BASE_KINGDOM_CARDS = {
             
             const finish = () => {
                 if (setAside.length > 0) {
-                    player.discard.push(...setAside);
+                    game.discardCards(player, setAside);
                     game.log(`${player.name}は脇に置いた${setAside.map(card => card.name).join('・')}を捨て札にしました`);
                 }
                 game.log(`${player.name}は手札が${player.hand.length}枚になるまで引きました`);
@@ -662,13 +667,14 @@ const BASE_KINGDOM_CARDS = {
                     const trashed = treasures[index];
                     game.trashFromHand(player, [player.hand.indexOf(trashed)]);
                     game.log(`${player.name}は${trashed.name}を廃棄しました`);
+                    const maxCost = game.getCost(trashed) + 3;
                     game.promptGain({
                         player,
-                        maxCost: trashed.cost + 3,
+                        maxCost,
                         filter: (data) => data.types.includes(CARD_TYPES.TREASURE),
                         destination: 'hand',
                         title: '鉱山',
-                        message: `コスト${trashed.cost + 3}以下の財宝を1枚選んでください。手札に加えます。`
+                        message: `コスト${maxCost}以下の財宝を1枚選んでください。手札に加えます。`
                     });
                 }
             });
@@ -725,7 +731,7 @@ const BASE_KINGDOM_CARDS = {
                     confirmLabel: '捨て札にする',
                     purpose: 'sentry-discard',
                     callback: (indices) => {
-                        indices.forEach(index => player.discard.push(cards[index]));
+                        game.discardCards(player, indices.map(index => cards[index]));
                         if (indices.length > 0) {
                             game.log(`${player.name}は${indices.map(index => cards[index].name).join('と')}を捨て札にしました`);
                         }
@@ -742,7 +748,7 @@ const BASE_KINGDOM_CARDS = {
                 confirmLabel: '廃棄する',
                 purpose: 'sentry-trash',
                 callback: (indices) => {
-                    indices.forEach(index => game.trash.push(revealed[index]));
+                    indices.forEach(index => game.trashCard(player, revealed[index]));
                     if (indices.length > 0) {
                         game.log(`${player.name}は${indices.map(index => revealed[index].name).join('と')}を廃棄しました`);
                     }
@@ -762,13 +768,7 @@ const BASE_KINGDOM_CARDS = {
         onPlay: (player, game) => {
             player.drawCards(2);
             game.log(`${player.name}はカードを2枚引きました`);
-            game.attackOtherPlayers(player, (target) => {
-                if (game.gainCardFromSupply(target, BASIC_CARDS.CURSE.id)) {
-                    game.log(`${target.name}は呪いカードを獲得しました`);
-                } else {
-                    game.log(`呪いカードの山札がないため、${target.name}は呪いカードを獲得しませんでした`);
-                }
-            });
+            game.attackOtherPlayers(player, (target) => game.gainCurse(target));
         }
     },
 
@@ -817,11 +817,24 @@ const withSet = (cards, set) =>
 
 export const KINGDOM_CARDS = {
     ...withSet(BASE_KINGDOM_CARDS, CARD_SETS.BASE),
-    ...withSet(SEASIDE_CARDS, CARD_SETS.SEASIDE)
+    ...withSet(INTRIGUE_CARDS, CARD_SETS.INTRIGUE),
+    ...withSet(SEASIDE_CARDS, CARD_SETS.SEASIDE),
+    ...withSet(PROSPERITY_CARDS, CARD_SETS.PROSPERITY),
+    ...withSet(HINTERLANDS_CARDS, CARD_SETS.HINTERLANDS),
+    ...withSet(CORNUCOPIA_GUILDS_CARDS, CARD_SETS.CORNUCOPIA_GUILDS)
 };
 
+// 王国カード以外で、一部のゲームだけで使うカード（白金貨・植民地・褒賞）
+export const EXTRA_CARDS = {
+    ...withSet(PROSPERITY_BASIC_CARDS, CARD_SETS.PROSPERITY),
+    ...withSet(REWARD_CARDS, CARD_SETS.CORNUCOPIA_GUILDS)
+};
+
+// 褒賞のカードID（小文字）
+export const REWARD_CARD_IDS = Object.values(REWARD_CARDS).map(data => data.id);
+
 // 全カードデータの結合
-export const ALL_CARDS = { ...BASIC_CARDS, ...KINGDOM_CARDS };
+export const ALL_CARDS = { ...BASIC_CARDS, ...EXTRA_CARDS, ...KINGDOM_CARDS };
 
 // カードIDの配列を生成
 export const ALL_CARD_IDS = Object.keys(ALL_CARDS);

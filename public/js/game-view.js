@@ -26,6 +26,8 @@ function createPromptView(prompt, viewerId) {
         message: prompt.message,
         // select
         cards: prompt.cards ? cardIds(prompt.cards) : null,
+        // choose
+        options: prompt.options ?? null,
         fromHand: prompt.cards === prompt.player.hand,
         min: prompt.min,
         max: prompt.max,
@@ -45,6 +47,11 @@ export function createGameView(game, viewerId, { logsFrom = 0 } = {}) {
         currentPlayerId: game.getCurrentPlayer().id,
         isExtraTurn: game.isExtraTurn,
         supply: { ...game.supply },
+        // 今のコスト（橋・街道などで変わる）
+        costs: Object.fromEntries(Object.keys(game.supply).map(cardId => [cardId, game.getCost(cardId)])),
+        bane: game.bane,
+        ferrymanPile: game.ferrymanPile,
+        nonSupply: { ...game.nonSupply },
         trashCount: game.trash.length,
         players: game.players.map(player => {
             const isViewer = player.id === viewerId;
@@ -57,6 +64,8 @@ export function createGameView(game, viewerId, { logsFrom = 0 } = {}) {
                 actions: player.actions,
                 buys: player.buys,
                 coins: player.coins,
+                coffers: player.coffers,
+                vpTokens: player.vpTokens,
                 handCount: player.hand.length,
                 deckCount: player.deck.length,
                 discardCount: player.discard.length,

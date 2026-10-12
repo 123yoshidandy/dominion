@@ -3,7 +3,7 @@
  */
 
 import Card from './card.js';
-import { ALL_CARDS, CARD_TYPES } from './card-data.js';
+import { ALL_CARDS } from './card-data.js';
 
 // プレイヤークラス
 class Player {
@@ -35,6 +35,23 @@ class Player {
         this.blockades = [];          // 封鎖で脇に置いたカード { cardId, victims }
         this.corsairVictims = new Set();      // 私掠船の攻撃を受けているプレイヤー
         this.hasTrashedForCorsair = false;    // このターンに私掠船で財宝を廃棄したか
+        
+        // ===== 繁栄・収穫祭＆ギルドなど =====
+        this.vpTokens = 0;            // 勝利点トークン（司教・記念碑など）
+        this.coffers = 0;             // 財源（購入フェーズに使うと財宝+1ずつ）
+        this.startOfTurnPlays = [];   // 次のターンの開始時にプレイする、脇に置いたカード（農場労働者）
+    }
+    
+    // カードを手札・山札・捨て札・脇から取り除く（どこにもなければ false）
+    removeCard(card) {
+        for (const zone of [this.hand, this.deck, this.discard, this.setAside, this.playArea]) {
+            const index = zone.indexOf(card);
+            if (index >= 0) {
+                zone.splice(index, 1);
+                return true;
+            }
+        }
+        return false;
     }
     
     // 持続カードを登録し、次のターンの開始時まで場に残す（effect が null なら場に残るだけ）
@@ -154,45 +171,6 @@ class Player {
         return card;
     }
     
-    // 手札の財宝カードをすべてプレイ
-    playAllTreasures(game) {
-        const treasureIndices = [];
-        
-        // 手札から財宝カードのインデックスを見つける
-        this.hand.forEach((card, index) => {
-            if (card.isType(CARD_TYPES.TREASURE)) {
-                treasureIndices.push(index);
-            }
-        });
-        
-        // インデックスの大きい順に処理（小さいインデックスが削除されても問題ないように）
-        treasureIndices.sort((a, b) => b - a).forEach(index => {
-            const card = this.hand.splice(index, 1)[0];
-            this.playArea.push(card);
-            this.coins += card.value;
-            card.play(this, game); // アストロラーベのように効果のある財宝
-            
-            // 私掠船の攻撃を受けていれば、このターン最初の銀貨か金貨を（財宝を得た後で）廃棄する
-            if (['silver', 'gold'].includes(card.id) && !this.hasTrashedForCorsair && game?.isCorsairTarget(this)) {
-                this.hasTrashedForCorsair = true;
-                this.playArea.splice(this.playArea.indexOf(card), 1);
-                game.trash.push(card);
-                game.log(`${this.name}は私掠船の効果で${card.name}を廃棄しました`);
-            }
-            
-            // 商人：このターン最初の銀貨で、プレイした商人1枚につき財宝+1
-            if (card.id === 'silver' && !this.hasPlayedSilver) {
-                this.hasPlayedSilver = true;
-                if (this.merchantBonus > 0) {
-                    this.coins += this.merchantBonus;
-                    game?.log(`${this.name}は商人の効果で財宝+${this.merchantBonus}を得ました`);
-                }
-            }
-        });
-        
-        return treasureIndices.length;
-    }
-    
     // クリーンアップフェーズ（前哨地の追加のターンの前は3枚だけ引く）
     cleanup(drawCount = 5) {
         // 手札と場のカードを捨て札にする（効果の残っている持続カードは場に残す）
@@ -224,7 +202,7 @@ class Player {
             points += card.getVictoryPoints(allCards);
         });
         
-        return points;
+        return points + this.vpTokens;
     }
 }
 

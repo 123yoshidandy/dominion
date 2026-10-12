@@ -183,9 +183,9 @@ export const SEASIDE_CARDS = {
                     confirmLabel: '捨て札にする',
                     purpose: 'lookout-discard',
                     callback: ([index]) => {
-                        player.discard.push(cards[index]);
                         game.log(`${player.name}は${cards[index].name}を捨て札にしました`);
                         player.deck.unshift(...cards.filter((card, i) => i !== index));
+                        game.discardCards(player, [cards[index]]);
                     }
                 });
             };
@@ -200,7 +200,7 @@ export const SEASIDE_CARDS = {
                 confirmLabel: '廃棄する',
                 purpose: 'lookout-trash',
                 callback: ([index]) => {
-                    game.trash.push(revealed[index]);
+                    game.trashCard(player, revealed[index]);
                     game.log(`${player.name}は${revealed[index].name}を廃棄しました`);
                     chooseDiscard(revealed.filter((card, i) => i !== index));
                 }
@@ -343,7 +343,7 @@ export const SEASIDE_CARDS = {
                     game.log(`${target.name}は手札を公開しました（銅貨はありません）`);
                     return;
                 }
-                target.discardCard(index);
+                game.discardFromHand(target, [index]);
                 game.log(`${target.name}は銅貨を1枚捨てました`);
             });
         }
@@ -421,8 +421,9 @@ export const SEASIDE_CARDS = {
                 purpose: 'salvager-trash',
                 callback: (indices) => {
                     const [trashed] = game.trashFromHand(player, indices);
-                    player.coins += trashed.cost;
-                    game.log(`${player.name}は${trashed.name}を廃棄し、財宝+${trashed.cost}を得ました`);
+                    const cost = game.getCost(trashed);
+                    player.coins += cost;
+                    game.log(`${player.name}は${trashed.name}を廃棄し、財宝+${cost}を得ました`);
                 }
             });
         }
@@ -575,11 +576,7 @@ export const SEASIDE_CARDS = {
                 game.log(`${player.name}は海の魔女の効果でカードを2枚引きました`);
                 promptDiscard(game, player, 2, '海の魔女');
             });
-            game.attackOtherPlayers(player, (target) => {
-                if (game.gainCardFromSupply(target, 'curse')) {
-                    game.log(`${target.name}は呪いカードを獲得しました`);
-                }
-            });
+            game.attackOtherPlayers(player, (target) => game.gainCurse(target));
         }
     },
     TACTICIAN: {
@@ -595,7 +592,7 @@ export const SEASIDE_CARDS = {
                 return;
             }
             game.log(`${player.name}は手札を${player.hand.length}枚すべて捨てました`);
-            player.discard.push(...player.hand.splice(0));
+            game.discardCards(player, player.hand.splice(0));
             player.addDuration(card, () => {
                 player.drawCards(5);
                 player.actions += 1;

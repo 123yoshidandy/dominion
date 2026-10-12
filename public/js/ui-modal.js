@@ -4,9 +4,10 @@
  */
 
 import { loadOnlineSession } from './online-controller.js';
+import { CARD_SETS, CARD_SET_LABELS } from './card-types.js';
 
-// 使うカードの選択肢（設定とオンラインのロビーで共通）
-const CARD_SET_OPTIONS = [['base', '基本'], ['seaside', '海辺'], ['base+seaside', '基本＋海辺']];
+// 使うカードのセットの表示名（「基本・海辺」のように並べる）
+const cardSetLabel = (sets) => Object.values(CARD_SETS).filter(set => sets.includes(set)).map(set => CARD_SET_LABELS[set]).join('・');
 
 // 利用者が入力した文字をそのまま HTML に入れないようにする
 const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (char) => ({
@@ -41,12 +42,7 @@ class UIModal {
 
                 <div id="player-names"></div>
 
-                <label class="field">
-                    <span>使うカード</span>
-                    <select id="card-sets">
-                        ${this.createCardSetOptionsHtml(this.uiController.settings.cardSets)}
-                    </select>
-                </label>
+                ${this.createCardSetChecksHtml('card-sets', this.uiController.settings.cardSets.split('+'))}
 
                 ${this.createStackHandToggleHtml('setup-stack-hand')}
 
@@ -68,9 +64,7 @@ class UIModal {
 
         this.setupStackHandToggle('setup-stack-hand');
         
-        document.getElementById('card-sets').addEventListener('change', (event) => {
-            this.uiController.updateSettings({ cardSets: event.target.value });
-        });
+        this.setupCardSetChecks('card-sets', (sets) => this.uiController.updateSettings({ cardSets: sets.join('+') }));
         
         // ゲーム開始ボタンのイベント
         const startGameBtn = document.getElementById('start-game-btn');
@@ -83,10 +77,32 @@ class UIModal {
         this.openModal({ closable: false, kind: 'setup' });
     }
     
-    createCardSetOptionsHtml(selected) {
-        return CARD_SET_OPTIONS
-            .map(([value, label]) => `<option value="${value}" ${selected === value ? 'selected' : ''}>${label}</option>`)
-            .join('');
+    // 使うカードのセットのチェックボックス（設定とオンラインのロビーで共通）
+    createCardSetChecksHtml(id, selected) {
+        return `
+            <fieldset class="field card-set-checks" id="${id}">
+                <legend>使うカード（選んだセットからランダムに10種）</legend>
+                ${Object.values(CARD_SETS).map(set => `
+                    <label class="card-set-check">
+                        <input type="checkbox" value="${set}" ${selected.includes(set) ? 'checked' : ''}>
+                        <span>${CARD_SET_LABELS[set]}</span>
+                    </label>
+                `).join('')}
+            </fieldset>
+        `;
+    }
+    
+    // チェックが変わったら、選ばれているセットを渡す。すべて外すことはできない（最後の1つは外せない）
+    setupCardSetChecks(id, onChange) {
+        const inputs = Array.from(document.querySelectorAll(`#${id} input`));
+        inputs.forEach(input => input.addEventListener('change', () => {
+            const sets = inputs.filter(other => other.checked).map(other => other.value);
+            if (sets.length === 0) {
+                input.checked = true;
+                return;
+            }
+            onChange(sets);
+        }));
     }
     
     // ===== オンライン対戦 =====
@@ -148,8 +164,6 @@ class UIModal {
     // ロビー：参加者と使うカードを確認し、部屋を作った人がゲームを始める
     showLobby(lobby, { isHost }) {
         const shareUrl = `${location.origin}${location.pathname}?room=${lobby.roomCode}`;
-        const cardSets = lobby.cardSets.join('+');
-        const cardSetLabel = CARD_SET_OPTIONS.find(([value]) => value === cardSets)?.[1] ?? cardSets;
         
         this.elements.modalTitle.textContent = 'オンライン対戦の部屋';
         this.elements.modalBody.innerHTML = `
@@ -171,14 +185,11 @@ class UIModal {
                     `).join('')}
                 </ul>
                 ${isHost ? `
-                    <label class="field">
-                        <span>使うカード</span>
-                        <select id="lobby-card-sets">${this.createCardSetOptionsHtml(cardSets)}</select>
-                    </label>
+                    ${this.createCardSetChecksHtml('lobby-card-sets', lobby.cardSets)}
                     <button id="add-cpu-btn" class="primary secondary" ${lobby.players.length >= 4 ? 'disabled' : ''}>CPUを追加</button>
                     <button id="start-online-btn" class="primary" ${lobby.players.length < 2 ? 'disabled' : ''}>ゲーム開始</button>
                 ` : `
-                    <p class="lobby-note">使うカード：${escapeHtml(cardSetLabel)}</p>
+                    <p class="lobby-note">使うカード：${escapeHtml(cardSetLabel(lobby.cardSets))}</p>
                     <p class="lobby-note">部屋を作った人がゲームを始めるのを待っています</p>
                 `}
                 <button id="leave-room-btn" class="link-button">部屋を出る</button>
@@ -189,9 +200,7 @@ class UIModal {
         document.getElementById('share-room-btn').addEventListener('click', () => this.shareRoom(shareUrl));
         document.getElementById('leave-room-btn').addEventListener('click', () => this.uiController.leaveOnline());
         if (isHost) {
-            document.getElementById('lobby-card-sets').addEventListener('change', (event) => {
-                controller.setCardSets(event.target.value.split('+'));
-            });
+            this.setupCardSetChecks('lobby-card-sets', (sets) => controller.setCardSets(sets));
             document.getElementById('add-cpu-btn').addEventListener('click', () => controller.addCpu());
             document.getElementById('start-online-btn').addEventListener('click', () => controller.startGame());
             this.elements.modalBody.querySelectorAll('[data-remove-seat]').forEach(button => {
@@ -293,14 +302,14 @@ class UIModal {
     }
     
     // カードの説明を表示する（count を渡すとサプライの残り枚数も出す）
-    showCardDetail(card, { count } = {}) {
+    showCardDetail(card, { count, cost } = {}) {
         this.elements.modalTitle.textContent = card.name;
         
         this.elements.modalBody.innerHTML = `
             <div class="card-detail">
                 ${this.view.createCardHtml(card, '', 'large')}
                 <div class="card-detail-info">
-                    <p>コスト <b>${card.cost}</b></p>
+                    <p>コスト <b>${card.cost}</b>${cost !== undefined && cost !== card.cost ? `（今は <b>${cost}</b>）` : ''}</p>
                     ${count !== undefined ? `<p>サプライ残り <b>${count}</b>枚</p>` : ''}
                 </div>
             </div>
@@ -318,6 +327,8 @@ class UIModal {
         
         if (prompt.type === 'confirm') {
             this.showConfirmPrompt(prompt);
+        } else if (prompt.type === 'choose') {
+            this.showChoosePrompt(prompt);
         } else {
             this.showSelectPrompt(prompt);
         }
@@ -346,6 +357,47 @@ class UIModal {
         
         document.getElementById('prompt-yes').addEventListener('click', () => this.answerPrompt(prompt, true));
         document.getElementById('prompt-no').addEventListener('click', () => this.answerPrompt(prompt, false));
+    }
+    
+    // 文字の選択肢から選ぶ選択。1つだけ選ぶならボタンを押すとすぐに答え、複数選ぶなら決定ボタンで答える
+    showChoosePrompt(prompt) {
+        const { options, min, max } = prompt;
+        const single = min === 1 && max === 1;
+        
+        this.elements.modalBody.innerHTML = `
+            <p class="prompt-text">${prompt.message}</p>
+            ${prompt.card ? `<div class="prompt-card">${this.view.createCardHtml(prompt.card, '', 'large')}</div>` : ''}
+            <div class="prompt-options">
+                ${options.map((label, index) => `<button class="prompt-option primary secondary" data-index="${index}">${label}</button>`).join('')}
+            </div>
+            ${single ? '' : '<div class="prompt-footer"><button id="prompt-confirm" class="primary"></button></div>'}
+        `;
+        
+        const buttons = Array.from(this.elements.modalBody.querySelectorAll('.prompt-option'));
+        const selected = () => buttons.filter(button => button.classList.contains('selected')).map(button => Number(button.dataset.index));
+        
+        if (single) {
+            buttons.forEach(button => button.addEventListener('click', () => this.answerPrompt(prompt, [Number(button.dataset.index)])));
+            return;
+        }
+        
+        const confirmBtn = document.getElementById('prompt-confirm');
+        const range = min === max ? `${min}つ` : `${min}〜${max}つ`;
+        const update = () => {
+            const count = selected().length;
+            confirmBtn.textContent = `${prompt.confirmLabel}（${count} / ${range}）`;
+            confirmBtn.disabled = count < min || count > max;
+        };
+        buttons.forEach(button => button.addEventListener('click', () => {
+            if (button.classList.contains('selected')) {
+                button.classList.remove('selected');
+            } else if (selected().length < max) {
+                button.classList.add('selected');
+            }
+            update();
+        }));
+        update();
+        confirmBtn.addEventListener('click', () => this.answerPrompt(prompt, selected()));
     }
     
     // カードを min〜max 枚選ぶ選択。枚数が条件を満たすまで決定ボタンは押せない

@@ -4,21 +4,11 @@
  * すべて viewBox 0 0 48 32 の横長の絵
  */
 
-const svg = (body) => `<svg viewBox="0 0 48 32" aria-hidden="true">${body}</svg>`;
-
-// 地面
-const ground = (color = '#8cbf73') => `<rect x="0" y="27" width="48" height="5" fill="${color}"/>`;
-
-// 海（下側の波）
-const sea = () => `<path d="M0 26 q4 -2 8 0 t8 0 t8 0 t8 0 t8 0 t8 0 V32 H0 Z" fill="#5dade2"/>`;
-
-// 財宝のコイン（色違い）
-const coin = (fill, edge, shine, sparkle = '') => svg(`
-    <circle cx="24" cy="16" r="12" fill="${fill}" stroke="${edge}" stroke-width="2"/>
-    <circle cx="24" cy="16" r="7.5" fill="none" stroke="${shine}" stroke-width="1.5"/>
-    <path d="M20 12 Q24 8 28 12" fill="none" stroke="${shine}" stroke-width="1.5" stroke-linecap="round"/>
-    ${sparkle}
-`);
+import { svg, ground, sea, coin } from './card-art-helpers.js';
+import { INTRIGUE_ART } from './card-art-intrigue.js';
+import { PROSPERITY_ART } from './card-art-prosperity.js';
+import { HINTERLANDS_ART } from './card-art-hinterlands.js';
+import { CORNUCOPIA_GUILDS_ART } from './card-art-cornucopia-guilds.js';
 
 const CARD_ART = {
     copper: coin('#c8793a', '#8a4b1f', '#eaa86b'),
@@ -514,7 +504,10 @@ export const CARD_BACK = `<svg viewBox="0 0 52 74" aria-hidden="true">
     <circle cx="34" cy="29.5" r="1.4" fill="#fff3c4"/>
 </svg>`;
 
+// 拡張のイラストは拡張ごとのファイルに分けている
+const ALL_ART = { ...CARD_ART, ...INTRIGUE_ART, ...PROSPERITY_ART, ...HINTERLANDS_ART, ...CORNUCOPIA_GUILDS_ART };
+
 // カードIDに対応するイラストのSVG（なければ空文字）
 export function getCardArt(cardId) {
-    return CARD_ART[cardId.toLowerCase()] ?? '';
+    return ALL_ART[cardId.toLowerCase()] ?? '';
 }
