@@ -58,6 +58,11 @@ class Player {
         this.states = { deluded: false, envious: false, miserable: 0 }; // 状態（妄想・羨望・不幸。不幸は2で二重の不幸）
         this.keptBoons = [];          // クリーンアップまで手元に残す祝福
         this.guarded = false;         // 次のターンまで、他のプレイヤーのアタックの影響を受けない（守護者）
+
+        // ===== ルネサンス =====
+        this.villagers = 0;           // 村人（アクションフェーズに使うとアクション+1ずつ）
+        this.projects = new Set();    // 自分のキューブを置いたプロジェクトのID
+        this.sinisterPlotTokens = 0;  // 陰謀の企てに置いたトークンの数
         this.hauntedVictims = new Set();      // 次のターンまで、購入すると手札を山札に置くプレイヤー（幽霊の森）
         this.swampHagVictims = new Map();     // 次のターンまで、購入すると呪いを獲得するプレイヤーと回数（沼の妖婆）
     }
@@ -125,6 +130,12 @@ class Player {
         for (let i = this.deck.length - 1; i > 0; i--) {
             const j = Math.floor(this.random() * (i + 1));
             [this.deck[i], this.deck[j]] = [this.deck[j], this.deck[i]];
+        }
+        // 星図：シャッフルしたとき、1枚を選んで一番上に置く（引く途中では選べないので、勝利点・呪い以外で一番高いカードを置く）
+        if (this.projects?.has('star_chart') && this.deck.length > 1) {
+            const candidates = this.deck.filter(card => !card.types.includes('victory') && !card.types.includes('curse'));
+            const best = candidates.sort((a, b) => b.cost - a.cost)[0];
+            if (best) this.deck.unshift(...this.deck.splice(this.deck.indexOf(best), 1));
         }
     }
     

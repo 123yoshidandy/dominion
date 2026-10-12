@@ -142,6 +142,8 @@ export function putBackInAnyOrder(game, player, cards, title, { chooser = player
 // 手札を公開したことをログに書く
 export function logReveal(game, player, cards, what = '手札') {
     game.log(`${player.name}は${what}を公開しました（${cards.length > 0 ? names(cards) : 'なし'}）`);
+    // 公開されたときの効果（後援者）
+    cards.filter(card => card.onReveal).forEach(card => card.onReveal(player, game, card));
 }
 
 // 手札が条件を満たさないときに他のプレイヤーへの攻撃を書くための、呪いを獲得させる攻撃

@@ -17,6 +17,7 @@ import { EMPIRES_CARDS, EMPIRES_PILE_CARDS, CASTLE_CARDS, EMPIRES_EVENTS, EMPIRE
 import {
     NOCTURNE_CARDS, HEIRLOOM_CARDS, NOCTURNE_NON_SUPPLY_CARDS, BOONS as NOCTURNE_BOONS, HEXES as NOCTURNE_HEXES, ZOMBIE_IDS
 } from './card-data-nocturne.js';
+import { RENAISSANCE_CARDS, RENAISSANCE_PROJECTS } from './card-data-renaissance.js';
 
 export { CARD_TYPES, CARD_SETS };
 
@@ -837,7 +838,8 @@ export const KINGDOM_CARDS = {
     ...withSet(DARK_AGES_CARDS, CARD_SETS.DARK_AGES),
     ...withSet(ADVENTURES_CARDS, CARD_SETS.ADVENTURES),
     ...withSet(EMPIRES_CARDS, CARD_SETS.EMPIRES),
-    ...withSet(NOCTURNE_CARDS, CARD_SETS.NOCTURNE)
+    ...withSet(NOCTURNE_CARDS, CARD_SETS.NOCTURNE),
+    ...withSet(RENAISSANCE_CARDS, CARD_SETS.RENAISSANCE)
 };
 
 // 王国カード以外で、一部のゲームだけで使うカード（白金貨・植民地・ポーション・褒賞・騎士・廃墟・避難所など）
@@ -854,7 +856,8 @@ export const EXTRA_CARDS = {
 // イベントなど、カードではない横長の札（ランドスケープ）
 export const LANDSCAPES = {
     ...withSet(ADVENTURES_EVENTS, CARD_SETS.ADVENTURES),
-    ...withSet({ ...EMPIRES_EVENTS, ...EMPIRES_LANDMARKS }, CARD_SETS.EMPIRES)
+    ...withSet({ ...EMPIRES_EVENTS, ...EMPIRES_LANDMARKS }, CARD_SETS.EMPIRES),
+    ...withSet(RENAISSANCE_PROJECTS, CARD_SETS.RENAISSANCE)
 };
 
 // 夜想曲の祝福・呪詛（カードではない。山から引いて受ける）と、ゾンビのカードID

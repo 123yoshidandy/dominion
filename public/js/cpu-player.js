@@ -13,12 +13,13 @@ const MULTIPLIER_PRIORITY = ['kings_court', 'throne_room', 'coronet', 'disciple'
 const NON_TERMINAL_PRIORITY = [
     // アクションが2つ以上増える村
     'village', 'university', 'port', 'lost_city', 'bustling_village', 'villa', 'city_quarter', 'encampment', 'blessed_village',
-    'cursed_village', 'necropolis', 'bandit_camp', 'fortress', 'wandering_minstrel', 'dame_molly', 'madman',
+    'cursed_village', 'mountain_village', 'hideout', 'necropolis', 'bandit_camp', 'fortress', 'wandering_minstrel', 'dame_molly', 'madman',
     'bazaar', 'fishing_village', 'festival', 'native_village', 'workers_village', 'city', 'shanty_town',
     'mining_village', 'border_village', 'farmhands', 'plaza', 'crossroads', 'inn', 'candlestick_maker', 'demesne',
     // アクションが1つ増えるカード
     'patrician', 'emporium', 'settlers', 'chariot_race', 'groundskeeper', 'archive', 'forum',
     'will_o_wisp', 'zombie_spy', 'pixie', 'shepherd', 'secret_cave', 'wish',
+    'border_guard', 'experiment', 'seer', 'research',
     'champion', 'page', 'ratcatcher', 'guide', 'magpie', 'dungeon', 'caravan_guard', 'transmogrify', 'royal_carriage',
     'storyteller', 'raze', 'fugitive', 'treasure_hunter', 'artificer', 'peasant',
     'scrying_pool', 'familiar', 'alchemist', 'apothecary', 'apprentice', 'junk_dealer', 'ironmonger', 'market_square',
@@ -52,7 +53,10 @@ const TERMINAL_PRIORITY = [
     'catapult', 'gladiator', 'engineer', 'temple', 'wild_hunt', 'sacrifice', 'farmers_market', 'small_castle', 'opulent_castle',
     // 夜想曲
     'werewolf', 'tormentor', 'skulk', 'sacred_grove', 'bard', 'tragic_hero', 'pooka', 'necromancer', 'conclave', 'imp', 'fool',
-    'leprechaun', 'tracker', 'druid', 'faithful_hound', 'zombie_apprentice', 'zombie_mason'
+    'leprechaun', 'tracker', 'druid', 'faithful_hound', 'zombie_apprentice', 'zombie_mason',
+    // ルネサンス
+    'old_witch', 'villain', 'scholar', 'swashbuckler', 'treasurer', 'recruiter', 'sculptor', 'silk_merchant', 'patron', 'priest',
+    'inventor', 'flag_bearer', 'improve', 'cargo_ship', 'lackeys', 'acting_troupe'
 ];
 
 // 夜フェイズにプレイする夜のカードの優先順（獲得の数を見るカードは後に）
@@ -364,6 +368,26 @@ function chooseSelection(prompt, game) {
             return trashOrder(cards);
 
         case 'lost-in-the-woods':
+            return indicesWhere(cards, isJunk).slice(0, 1);
+
+        case 'hideout-trash': {
+            // 勝利点カードを廃棄すると呪いを獲得するので、呪いか銅貨を選ぶ
+            const index = ['curse', 'copper'].map(id => indexOf(card => card.id === id)).find(i => i >= 0);
+            if (index !== undefined) return [index];
+            const nonVictory = cards.map((card, i) => i).filter(i => !cards[i].isType(CARD_TYPES.VICTORY));
+            return [nonVictory.sort((a, b) => keepValue(cards[a]) - keepValue(cards[b]))[0] ?? lowest(cards)];
+        }
+
+        case 'priest-trash':
+        case 'research-trash':
+        case 'recruiter-trash':
+        case 'cathedral-trash':
+            return trashOrder(cards);
+
+        case 'silos':
+            return cards.map((card, index) => index);
+
+        case 'crop-rotation':
             return indicesWhere(cards, isJunk).slice(0, 1);
 
         case 'monastery':
@@ -739,7 +763,14 @@ function chooseOption(prompt, game) {
         case 'charm':
         case 'druid':
         case 'fool':
+        case 'border-guard-artifact':
+        case 'scepter':
             return [0];
+        case 'treasurer':
+            // 鍵を受け取る（毎ターン財宝+1）
+            return [2];
+        case 'sinister-plot':
+            return [player.sinisterPlotTokens >= 2 ? 1 : 0];
         case 'wild-hunt':
             return [(game.pileVp.wild_hunt ?? 0) >= 3 && (game.supply.estate ?? 0) > 0 ? 1 : 0];
         case 'mountain-pass':
@@ -790,6 +821,10 @@ function chooseConfirm(prompt) {
         case 'catacombs':
         case 'traveller-exchange':
         case 'encampment-reveal':
+        case 'horn':
+        case 'cargo-ship':
+        case 'pageant':
+        case 'innovation':
         case 'faithful-hound':
         case 'blessed-village':
         case 'sacred-grove':
@@ -882,6 +917,11 @@ export function runCpuStep(game) {
     const apply = (command) => game.applyCommand(controller.id, command);
 
     if (game.phase === 'action') {
+        // アクションが尽きても、手札にプレイしたいアクションがあれば村人を使う
+        if (player.actions <= 0 && player.villagers > 0 && chooseActionCard({ ...player, actions: 1, hand: player.hand }, game) >= 0 &&
+            apply({ type: 'villager', amount: 1 })) {
+            return;
+        }
         const index = chooseActionCard(player, game);
         if (index < 0 || !apply({ type: 'play', cardIndex: index })) {
             apply({ type: 'buyPhase' });

@@ -328,6 +328,11 @@ class UIController {
         this.modal.showLandscapeDetail({ ...BOONS[boonId.toUpperCase()], kind: 'boon' });
     }
 
+    // 村人を1人使う
+    handleUseVillager() {
+        this.eventHandler.handleUseVillager();
+    }
+
     // 夜フェイズに移る
     handleEnterNightPhase() {
         this.eventHandler.handleEnterNightPhase();

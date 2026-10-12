@@ -13,7 +13,8 @@ const SETS = [
     ['dark_ages', '暗黒時代'],
     ['adventures', '冒険'],
     ['empires', '帝国'],
-    ['nocturne', '夜想曲']
+    ['nocturne', '夜想曲'],
+    ['renaissance', 'ルネサンス']
 ];
 
 // CPU同士でゲームを最後まで進める

@@ -536,6 +536,17 @@ button.primary {
     border-left-color: #3f8a4c;
 }
 
+.landscape-project {
+    border-left-color: #c0392b;
+}
+
+/* プロジェクトにキューブを置いたプレイヤー */
+.landscape-cubes {
+    font-size: 9.5px;
+    font-weight: 700;
+    color: #c0392b;
+}
+
 /* 橋・街道などでコストが下がっているときは色を変える */
 .card-cost.reduced {
     color: #fff;

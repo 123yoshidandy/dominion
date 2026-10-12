@@ -66,6 +66,8 @@ export function createGameView(game, viewerId, { logsFrom = 0 } = {}) {
         druidBoons: [...(game.druidBoons ?? [])],
         lostInTheWoods: game.lostInTheWoods?.id ?? null,
         boonCount: game.boonDeck?.length ?? 0,
+        // ルネサンス：アーティファクトの持ち主（誰も持っていなければ null）
+        artifacts: Object.fromEntries(Object.entries(game.artifacts).map(([id, owner]) => [id, owner?.id ?? null])),
         hexCount: game.hexDeck?.length ?? 0,
         missionTurn: game.missionTurn,
         bane: game.bane,
@@ -102,6 +104,10 @@ export function createGameView(game, viewerId, { logsFrom = 0 } = {}) {
                 journeyFaceUp: player.journeyFaceUp,
                 inheritance: player.inheritance,
                 states: { ...player.states },
+                // ルネサンス：村人、キューブを置いたプロジェクト、陰謀の企てのトークン
+                villagers: player.villagers,
+                projects: [...player.projects],
+                sinisterPlotTokens: player.sinisterPlotTokens,
                 nativeVillageCount: player.mats.nativeVillage.length,
                 setAsideCount: player.setAside.length,
                 // 手札と原住民の村マットの中身は本人だけ

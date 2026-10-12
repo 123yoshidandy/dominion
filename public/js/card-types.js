@@ -41,7 +41,8 @@ export const CARD_SETS = {
     DARK_AGES: 'dark_ages',
     ADVENTURES: 'adventures',
     EMPIRES: 'empires',
-    NOCTURNE: 'nocturne'
+    NOCTURNE: 'nocturne',
+    RENAISSANCE: 'renaissance'
 };
 
 // 収録セットの表示名（開始画面とロビーで使う）
@@ -56,17 +57,20 @@ export const CARD_SET_LABELS = {
     dark_ages: '暗黒時代',
     adventures: '冒険',
     empires: '帝国',
-    nocturne: '夜想曲'
+    nocturne: '夜想曲',
+    renaissance: 'ルネサンス'
 };
 
 // カードではない横長の札（ランドスケープ）の種類
 export const LANDSCAPE_KINDS = {
     EVENT: 'event',      // イベント：購入して効果を使う
-    LANDMARK: 'landmark' // ランドマーク：得点や、獲得などのきっかけで効果がある（購入しない）
+    LANDMARK: 'landmark', // ランドマーク：得点や、獲得などのきっかけで効果がある（購入しない）
+    PROJECT: 'project'   // プロジェクト：購入すると自分のキューブを置き、以後ずっと効果がある（1人1回）
 };
 
 export const LANDSCAPE_KIND_LABELS = {
     event: 'イベント',
     landmark: 'ランドマーク',
+    project: 'プロジェクト',
     boon: '祝福'
 };

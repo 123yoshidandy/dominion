@@ -19,6 +19,7 @@ const COMMAND_FIELDS = {
     buyPhase: [],
     night: [],
     coffers: ['amount'],
+    villager: ['amount'],
     buy: ['cardId'],
     buyLandscape: ['landscapeId'],
     endTurn: [],

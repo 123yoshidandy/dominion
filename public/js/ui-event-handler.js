@@ -151,6 +151,14 @@ class UIEventHandler {
         if (!this.gameController.send({ type: 'buyLandscape', landscapeId })) this.clearPendingActions();
     }
 
+    // 村人を1人使ってアクション+1を得る
+    handleUseVillager() {
+        const view = this.gameController.getView();
+        if (!view || !view.isMyTurn || view.phase !== 'action' || view.me.villagers <= 0 || view.prompt || this.isActionPending) return;
+        this.isActionPending = true;
+        if (!this.gameController.send({ type: 'villager', amount: 1 })) this.clearPendingActions();
+    }
+
     // 夜フェイズに移る（購入フェーズの後に、手札の夜のカードをプレイする）
     handleEnterNightPhase() {
         const view = this.gameController.getView();

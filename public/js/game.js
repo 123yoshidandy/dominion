@@ -38,8 +38,16 @@ const createTurnState = () => ({
     riverDraw: 0,         // ターンの終わりに引く枚数（川の恵み）
     hounds: [],           // ターンの終わりに手札に戻す、脇に置いたカード { player, card }（忠犬）
     necromancerUsed: [],  // このターンに死霊術師でプレイした廃棄置き場のカード（裏向きにする）
+    priests: 0,           // 廃棄するたびに財宝+2を得る回数（司祭）
+    cargoShips: [],       // 次に獲得したカードを脇に置いてよい貨物船
+    citadelUsed: false,   // このターンに城塞でアクションをもう一度プレイしたか
+    innovationUsed: false, // このターンに革新を使ったか（最初に獲得したアクションだけ）
+    hornUsed: false,      // このターンに角笛を使ったか
     cleanupStarted: false // ターン終了の処理を始めたか
 });
+
+// アーティファクト（ルネサンス）の名前
+export const ARTIFACT_NAMES = { flag: '旗', horn: '角笛', key: '鍵', lantern: 'ランタン', treasure_chest: '宝箱' };
 
 // 財宝をまとめてプレイする順（手札の財宝を使う効果を先に、場の財宝を数える効果を後にする）
 const TREASURE_PLAY_FIRST = ['tiara', 'coronet', 'crown', 'anvil', 'investment'];
@@ -87,6 +95,8 @@ class Game {
         this.landscapeVp = {};     // ランドマークなどの札に置いた勝利点トークン
         this.pileDebt = {};        // 山に置いた負債（徴税）
         this.landscapeState = {};  // ランドマークなどが使う状態（オベリスクの山・山道の入札など）
+        this.artifacts = {};       // アーティファクト（ルネサンス）の持ち主。使うものだけキーがあり、誰も持っていなければ null
+        this.fleetQueue = null;    // 艦隊：ゲームの終わりの後の追加のターンを行うプレイヤーの列
         this.lastError = null;     // 直前に受け付けなかった操作の理由
         this.promptCount = 0;      // これまでの選択待ちの数（画面で同じ選択を出し直さないための番号）
         this.turnCount = 0;        // これまでのターンの数（追加のターンも数える）
@@ -203,11 +213,13 @@ class Game {
             const ruins = this.shuffle(RUINS_CARD_IDS.flatMap(cardId => Array(10).fill(cardId)));
             this.setupMixedPile('ruins', ruins.slice(0, (this.players.length - 1) * 10));
         }
-        // サプライ外の山（略奪品・狂人・傭兵など）
+        // サプライ外の山（略奪品・狂人・傭兵など）と、使うアーティファクト（ルネサンス）
         kingdomIds.forEach(cardId => {
-            Object.entries(ALL_CARDS[cardId.toUpperCase()]?.nonSupplyPiles ?? {}).forEach(([pileId, count]) => {
+            const data = ALL_CARDS[cardId.toUpperCase()];
+            Object.entries(data?.nonSupplyPiles ?? {}).forEach(([pileId, count]) => {
                 this.nonSupply[pileId] = count;
             });
+            (data?.artifacts ?? []).forEach(id => { this.artifacts[id] = null; });
         });
 
         // イベントなど（カードではない横長の札）
@@ -348,6 +360,8 @@ class Game {
         cost -= inPlay('highway');
         // トロルの橋：自分のターンの間、場にあるトロルの橋1枚につきコスト-1
         cost -= inPlay('bridge_troll');
+        // 運河：運河を持つプレイヤーのターンの間、コスト-1
+        if (player.projects.has('canal')) cost -= 1;
         // 渡し船：-2 コストのトークンを置いた山のカードは、そのプレイヤーのターンにコスト-2
         if (data.id && player.pileTokens.minusCost && (this.pileOf[data.id] ?? data.id) === player.pileTokens.minusCost) cost -= 2;
         if (isAction) cost -= 2 * inPlay('quarry');
@@ -385,7 +399,10 @@ class Game {
 
     // 財宝として扱うカードか（ペテン師のあるゲームでは呪いも財宝）
     isTreasure(card) {
-        return card.isType(CARD_TYPES.TREASURE) || (this.curseIsTreasure && card.id === 'curse');
+        if (card.isType(CARD_TYPES.TREASURE) || (this.curseIsTreasure && card.id === 'curse')) return true;
+        // 資本主義：持っているプレイヤーのターンには、+財宝のあるアクションも財宝
+        return this.getCurrentPlayer()?.projects.has('capitalism') && card.isType(CARD_TYPES.ACTION) &&
+            /財宝 ?\+\d/.test(card.description ?? '');
     }
 
     // 財宝をプレイしたときに得る財宝の数（効果で得る分は除く）
@@ -402,6 +419,7 @@ class Game {
     //   { type: 'buyPhase' }        購入フェーズへ
     //   { type: 'night' }           夜フェイズへ（夜のカードをプレイする）
     //   { type: 'coffers', amount } 財源を使う
+    //   { type: 'villager', amount } 村人を使う（アクション+1ずつ）
     //   { type: 'buy', cardId }     カードを購入
     //   { type: 'buyLandscape', landscapeId } イベントなどを購入
     //   { type: 'endTurn' }         ターン終了
@@ -425,6 +443,9 @@ class Game {
                 break;
             case 'coffers':
                 accepted = isCurrent && this.useCoffers(command.amount);
+                break;
+            case 'villager':
+                accepted = isCurrent && this.useVillagers(command.amount);
                 break;
             case 'buy':
                 accepted = isCurrent && this.buyCard(command.cardId);
@@ -529,6 +550,13 @@ class Game {
         player.playArea.push(card);
         this.runNext(
             () => (inherited ?? card).play(player, this),
+            // 城塞：自分のターンに最初にプレイしたアクションを、もう一度プレイする
+            () => {
+                if (!player.projects.has('citadel') || this.turnState.citadelUsed || !player.playArea.includes(card)) return;
+                this.turnState.citadelUsed = true;
+                this.log(`${player.name}は城塞で${card.name}をもう一度プレイしました`);
+                (inherited ?? card).play(player, this);
+            },
             () => this.afterActionResolved(player, card)
         );
         this.processEffects();
@@ -578,6 +606,8 @@ class Game {
         if (this.turnState.buyPhaseEnded) return [];
         this.turnState.buyPhaseEnded = true;
         return [
+            // 購入フェーズの終わりのプロジェクト（探検・野外劇）
+            () => this.runLandscapeHooks('onEndOfBuyPhase', player),
             ...player.playArea.filter(card => card.onEndOfBuyPhase).map(card => () => {
                 if (player.playArea.includes(card)) card.onEndOfBuyPhase(player, this, card);
             }),
@@ -666,6 +696,11 @@ class Game {
         // 先の財宝の効果で手札から無くなった財宝（ティアラで2回プレイしたものなど）はプレイしない
         this.runNext(
             () => this.runLandscapeHooks('onStartBuyPhase', player),
+            // 宝箱：持っていれば、購入フェーズの開始時に金貨を獲得する
+            () => {
+                if (!this.hasArtifact(player, 'treasure_chest')) return;
+                if (this.gainCardFromSupply(player, 'gold')) this.log(`${player.name}は宝箱で金貨を獲得しました`);
+            },
             ...treasures.map(card => () => {
                 if (player.hand.includes(card)) this.playTreasure(player, card);
             })
@@ -723,6 +758,36 @@ class Game {
         player.coffers -= amount;
         player.coins += amount;
         this.log(`${player.name}は財源を${amount}つ使い、財宝+${amount}を得ました`);
+        this.notifyStateChanged();
+        return true;
+    }
+
+    // アーティファクトを受け取る（前の持ち主から移る）
+    takeArtifact(player, id) {
+        if (!(id in this.artifacts) || this.artifacts[id] === player) return;
+        this.artifacts[id] = player;
+        this.log(`${player.name}は${ARTIFACT_NAMES[id]}を受け取りました`);
+    }
+
+    hasArtifact(player, id) {
+        return this.artifacts[id] === player;
+    }
+
+    // 村人を使ってアクションを得る（アクションフェーズのみ）
+    useVillagers(amount) {
+        if (this.isAwaitingPrompt()) return false;
+        const player = this.getCurrentPlayer();
+        if (this.phase !== 'action') {
+            this.reject('村人はアクションフェーズに使えます');
+            return false;
+        }
+        if (!Number.isInteger(amount) || amount <= 0 || amount > player.villagers) {
+            this.reject('使える村人がいません');
+            return false;
+        }
+        player.villagers -= amount;
+        player.actions += amount;
+        this.log(`${player.name}は村人を${amount}人使い、アクション+${amount}を得ました`);
         this.notifyStateChanged();
         return true;
     }
@@ -885,6 +950,34 @@ class Game {
                 player, exactCost: this.getCost(card), ...this.costExtras(card), optional: true, filter: (data) => data.id !== card.id,
                 title: '魔除け', message: `${card.name}と同じコストの、名前の違うカードを1枚獲得できます（選ばなくてもかまいません）。`
             }));
+        }
+
+        // 貨物船：このターンに1回、獲得したカードを脇に置き、次のターンの開始時に手札に加えてよい
+        if (isCurrent && this.turnState.cargoShips.length > 0) {
+            steps.push(() => {
+                const ship = this.turnState.cargoShips[0];
+                if (!ship || (!player.discard.includes(card) && !player.deck.includes(card) && !player.hand.includes(card))) return;
+                this.promptConfirm({
+                    player,
+                    card,
+                    title: '貨物船',
+                    message: `獲得した${card.name}を貨物船の上に脇に置き、次のターンの開始時に手札に加えますか？`,
+                    yesLabel: '脇に置く',
+                    noLabel: '置かない',
+                    purpose: 'cargo-ship',
+                    callback: (yes) => {
+                        if (!yes || !player.removeCard(card)) return;
+                        this.turnState.cargoShips.shift();
+                        player.setAside.push(card);
+                        player.addDuration(ship, () => {
+                            if (!player.setAside.includes(card)) return;
+                            player.setAside.splice(player.setAside.indexOf(card), 1);
+                            player.hand.push(card);
+                            this.log(`${player.name}は貨物船の${card.name}を手札に加えました`);
+                        });
+                    }
+                });
+            });
         }
 
         // 取り替え子：コスト3以上のカードを獲得したとき、取り替え子と交換してもよい
@@ -1221,7 +1314,8 @@ class Game {
         // クリーンアップフェーズ（前哨地の追加のターンの前は3枚だけ引く）
         const takesExtraTurn = player.outpostPending && !this.isExtraTurn;
         player.outpostPending = false;
-        player.cleanup((takesExtraTurn ? 3 : 5) + this.turnState.expeditionDraw);
+        // 旗：持っていれば、手札を引くときに1枚多く引く
+        player.cleanup((takesExtraTurn ? 3 : 5) + this.turnState.expeditionDraw + (this.hasArtifact(player, 'flag') ? 1 : 0));
         player.gainedLastTurn = player.gainedThisTurn;
         // 川の恵み：ターンの終わりにカードを引く
         if (this.turnState.riverDraw > 0) {
@@ -1299,8 +1393,29 @@ class Game {
 
     // ゲームの終わりを確かめ、次の手番に進む
     advanceTurn(player, takesExtraTurn) {
+        // 艦隊：ゲームの終わりの後、艦隊を持つプレイヤーだけが順に1回ずつターンを行う
+        if (this.fleetQueue) {
+            const next = this.fleetQueue.shift();
+            if (!next) {
+                this.endGame();
+                return;
+            }
+            this.currentPlayerIndex = this.players.indexOf(next);
+            this.log(`${next.name}は艦隊の追加のターンを行います`);
+            this.startTurn(next);
+            return;
+        }
+
         // ゲーム終了条件はターン終了時にチェックする
         if (this.checkGameEnd()) {
+            const order = this.getOtherPlayers(this.regularTurnPlayer ?? player);
+            const fleet = [...order, this.regularTurnPlayer ?? player].filter(p => p.projects.has('fleet'));
+            if (fleet.length > 0) {
+                this.fleetQueue = fleet;
+                this.log('艦隊を持つプレイヤーが、追加のターンを行います');
+                this.advanceTurn(player, false);
+                return;
+            }
             this.endGame();
             return;
         }
@@ -1370,6 +1485,14 @@ class Game {
 
         this.runNext(
             ...durations.filter(duration => duration.effect).map(duration => duration.effect),
+            // 鍵：持っていれば、ターンの開始時に財宝+1
+            () => {
+                if (!this.hasArtifact(player, 'key')) return;
+                player.coins += 1;
+                this.log(`${player.name}は鍵で財宝+1を得ました`);
+            },
+            // ターンの開始時のプロジェクト（兵舎・市・聖堂・城門など）
+            () => this.runLandscapeHooks('onStartOfTurn', player),
             // 農場労働者で脇に置いたカードをプレイする
             ...plays.map(card => () => {
                 if (!player.setAside.includes(card)) return;
@@ -1620,6 +1743,11 @@ class Game {
             this.trash.push(card);
         }
         this.runLandscapeHooks('onTrashAny', player, card);
+        // 司祭：このターンの残りの間、カードを廃棄するたびに財宝+2
+        if (player === this.getCurrentPlayer() && this.turnState.priests > 0) {
+            player.coins += 2 * this.turnState.priests;
+            this.log(`${player.name}は司祭の効果で財宝+${2 * this.turnState.priests}を得ました`);
+        }
         const steps = [];
         if (card.onTrash) steps.push(() => card.onTrash(player, this, card));
         // 自分のカードが廃棄されたときの手札のリアクション（市場広場）。同じカードは1回だけ聞く

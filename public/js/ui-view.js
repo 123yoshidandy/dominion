@@ -5,6 +5,7 @@
 
 import { CARD_TYPES, ALL_CARDS, LANDSCAPES, BOONS } from './card-data.js';
 import { LANDSCAPE_KIND_LABELS } from './card-types.js';
+import { ARTIFACT_NAMES } from './game.js';
 import { onPress } from './press-handler.js';
 import { getCardArt, CARD_BACK } from './card-art.js';
 import cardAnimator, { STAGGER_MS } from './card-animations.js';
@@ -81,7 +82,8 @@ class UIView {
             stat('コイン', currentPlayer.coins, false) +
             (currentPlayer.potions > 0 ? stat('ポーション', currentPlayer.potions, false) : '') +
             (currentPlayer.debt > 0 ? stat('負債', currentPlayer.debt, false) : '') +
-            (currentPlayer.coffers > 0 ? stat('財源', currentPlayer.coffers, view.phase !== 'buy') : '');
+            (currentPlayer.coffers > 0 ? stat('財源', currentPlayer.coffers, view.phase !== 'buy') : '') +
+            (currentPlayer.villagers > 0 ? stat('村人', currentPlayer.villagers, view.phase !== 'action') : '');
     }
 
     // フェーズの日本語テキストを取得
@@ -160,13 +162,17 @@ class UIView {
                         const data = LANDSCAPES[id.toUpperCase()];
                         // ランドマークは購入しないので、コストの代わりに置かれた勝利点トークンを出す
                         const buyable = Boolean(data.onBuy);
-                        const unaffordable = buyable && isBuying && currentPlayer.coins - (currentPlayer.debt ?? 0) < cost;
+                        // プロジェクトは、キューブを置いたプレイヤーの名前を出す（自分が置き済みなら買えない）
+                        const cubes = view.players.filter(p => p.projects?.includes(id)).map(p => p.name);
+                        const unaffordable = buyable && isBuying && (currentPlayer.coins - (currentPlayer.debt ?? 0) < cost ||
+                            currentPlayer.projects?.includes(id));
                         return `
                             <div class="landscape-tile landscape-${data.kind} ${unaffordable ? 'unaffordable' : ''}" data-landscape-id="${id}">
                                 ${buyable ? `<span class="card-cost">${cost}</span>` : ''}
                                 ${data.debtCost ? `<span class="card-debt">${data.debtCost}</span>` : ''}
                                 <span class="landscape-name">${data.name}</span>
                                 ${vp !== null ? `<span class="vp-badge">${vp}</span>` : ''}
+                                ${cubes.length > 0 ? `<span class="landscape-cubes">${cubes.join('・')}</span>` : ''}
                                 <span class="landscape-kind">${LANDSCAPE_KIND_LABELS[data.kind] ?? ''}</span>
                             </div>
                         `;
@@ -363,8 +369,13 @@ class UIView {
             ...(player.states?.miserable === 1 ? ['不幸'] : []),
             ...(player.states?.miserable === 2 ? ['二重の不幸'] : [])
         ];
+        // ルネサンス：村人・アーティファクト・陰謀の企てのトークン
+        const artifacts = Object.entries(view.artifacts ?? {}).filter(([, owner]) => owner === player.id).map(([id]) => ARTIFACT_NAMES[id]);
         return [
             ...counts,
+            ...(player.villagers > 0 ? [`<span>村人 ${player.villagers}</span>`] : []),
+            ...(artifacts.length > 0 ? [`<span>${artifacts.join('・')}</span>`] : []),
+            ...(player.sinisterPlotTokens > 0 ? [`<span>陰謀の企て ${player.sinisterPlotTokens}</span>`] : []),
             ...(tavern.length > 0 ? [`<span>酒場 ${tavern.join('・')}</span>`] : []),
             ...(tokens.length > 0 ? [`<span>トークン ${tokens.join('、')}</span>`] : []),
             ...(states.length > 0 ? [`<span>状態 ${states.join('・')}</span>`] : [])
@@ -538,6 +549,11 @@ class UIView {
             actionButtonsHtml += `<button id="coffers-btn">財源を使う（残り${view.me.coffers}）</button>`;
         }
 
+        // 村人はアクションフェーズに1人ずつ使える
+        if (view.phase === 'action' && view.isMyTurn && view.me.villagers > 0) {
+            actionButtonsHtml += `<button id="villager-btn">村人を使う（残り${view.me.villagers}）</button>`;
+        }
+
         // 夜のカードが手札にあれば、購入フェーズから夜フェイズに移れる
         if (['action', 'buy'].includes(view.phase) && view.isMyTurn && hasNightCard(view.me)) {
             actionButtonsHtml += '<button id="night-btn">夜へ</button>';
@@ -550,6 +566,9 @@ class UIView {
         });
         document.getElementById('night-btn')?.addEventListener('click', () => {
             this.uiController.handleEnterNightPhase();
+        });
+        document.getElementById('villager-btn')?.addEventListener('click', () => {
+            this.uiController.handleUseVillager();
         });
 
         // 購入フェーズボタンのイベント

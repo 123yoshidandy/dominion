@@ -94,6 +94,12 @@ const landscapeMethods = {
         return true;
     },
 
+    // プロジェクトに自分のキューブを置く（1人1回。以後ずっと効果がある）
+    takeProject(player, id) {
+        player.projects.add(id);
+        this.log(`${player.name}は${this.getLandscape(id).name}にキューブを置きました`);
+    },
+
     // 山の一番上のカードのデータ（空の中身の混ざった山は山の札のデータ）
     getPileTopData(pileId) {
         return ALL_CARDS[(this.getPileTop(pileId) ?? pileId).toUpperCase()] ?? null;
