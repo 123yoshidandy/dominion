@@ -12,6 +12,7 @@ import { CORNUCOPIA_GUILDS_ART } from './card-art-cornucopia-guilds.js';
 import { ALCHEMY_ART } from './card-art-alchemy.js';
 import { DARK_AGES_ART } from './card-art-dark-ages.js';
 import { ADVENTURES_ART } from './card-art-adventures.js';
+import { EMPIRES_ART } from './card-art-empires.js';
 
 const CARD_ART = {
     copper: coin('#c8793a', '#8a4b1f', '#eaa86b'),
@@ -508,7 +509,7 @@ export const CARD_BACK = `<svg viewBox="0 0 52 74" aria-hidden="true">
 </svg>`;
 
 // 拡張のイラストは拡張ごとのファイルに分けている
-const ALL_ART = { ...CARD_ART, ...INTRIGUE_ART, ...PROSPERITY_ART, ...HINTERLANDS_ART, ...CORNUCOPIA_GUILDS_ART, ...ALCHEMY_ART, ...DARK_AGES_ART, ...ADVENTURES_ART };
+const ALL_ART = { ...CARD_ART, ...INTRIGUE_ART, ...PROSPERITY_ART, ...HINTERLANDS_ART, ...CORNUCOPIA_GUILDS_ART, ...ALCHEMY_ART, ...DARK_AGES_ART, ...ADVENTURES_ART, ...EMPIRES_ART };
 
 // カードIDに対応するイラストのSVG（なければ空文字）
 export function getCardArt(cardId) {
