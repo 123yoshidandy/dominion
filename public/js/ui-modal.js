@@ -4,6 +4,7 @@
  */
 
 import { loadOnlineSession } from './online-controller.js';
+import NetplayClient from './netplay/netplay-client.mjs';
 import { CARD_SETS, CARD_SET_LABELS, LANDSCAPE_KIND_LABELS } from './card-types.js';
 import { ALL_CARDS } from './card-data.js';
 import { getCardArt, CARD_BACK } from './card-art.js';
@@ -260,7 +261,7 @@ class UIModal {
                 ${section('オンライン対戦', `
                     <ol>
                         <li>タイトル画面の「オンラインで遊ぶ」で名前を入れ、「部屋を作る」を押します。</li>
-                        <li>「招待URLを共有」で友人にURLを送ります（部屋番号の数字5桁でも参加できます）。</li>
+                        <li>「招待URLを共有」で友人にURLを送ります（部屋番号の数字${NetplayClient.ROOM_CODE_LENGTH}桁でも参加できます）。</li>
                         <li>部屋を作った人が、CPUの追加や拡張を選んで「ゲーム開始」を押します。</li>
                     </ol>
                     <p>接続が切れても、同じ席に戻れます。途中で抜けた人の席は、CPUが代わりに続けます。</p>
@@ -287,7 +288,7 @@ class UIModal {
                 </label>
                 <button id="create-room-btn" class="primary">部屋を作る</button>
                 <div class="online-join">
-                    <input type="text" id="room-code" maxlength="5" value="${escapeHtml(roomCode)}" placeholder="部屋番号（数字5桁）" inputmode="numeric" pattern="[0-9]*" autocomplete="off">
+                    <input type="text" id="room-code" maxlength="${NetplayClient.ROOM_CODE_LENGTH}" value="${escapeHtml(roomCode)}" placeholder="部屋番号（数字${NetplayClient.ROOM_CODE_LENGTH}桁）" inputmode="numeric" pattern="[0-9]*" autocomplete="off">
                     <button id="join-room-btn" class="primary secondary">参加する</button>
                 </div>
                 ${session && !roomCode ? `<button id="resume-room-btn" class="primary secondary">前の部屋（${escapeHtml(session.roomCode)}）に戻る</button>` : ''}
