@@ -80,6 +80,11 @@ class Player {
         this.skipTurns = 0;           // 飛ばす自分のターンの数（リッチ）
         this.highwaymanVictims = new Set(); // 次のターンまで、毎ターン最初の財宝が何もしないプレイヤー（辻強盗）
         this.warlordVictims = new Set();    // 次のターンまで、場に2枚以上あるアクションを手札からプレイできないプレイヤー（将軍）
+
+        // ===== 略奪 =====
+        this.waits = [];              // 「次に〜したとき」まで場に残るカード { card, kind, onTrigger, duration }
+        this.frigateVictims = new Set();    // 次のターンまで、アクションをプレイした後で手札を4枚にするプレイヤー（フリゲート艦）
+        this.prepared = [];           // 次のターンの開始時にプレイする、準備で脇に置いたカード
     }
 
     // アクション数。雪深い村をプレイした後は、このターンはそれ以上増えない

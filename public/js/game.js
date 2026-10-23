@@ -11,6 +11,7 @@ import { installLandscapes } from './game-landscapes.js';
 import { installNocturne } from './game-nocturne.js';
 import { installMenagerie } from './game-menagerie.js';
 import { installAllies } from './game-allies.js';
+import { installPlunder } from './game-plunder.js';
 
 // 1ターンの間だけ続く効果の記録（ターンの開始で作り直す）
 const createTurnState = () => ({
@@ -56,6 +57,20 @@ const createTurnState = () => ({
     handPlays: 0,         // このターンに手札からプレイしたカードの数（航海）
     handPlayLimit: null,  // 手札からプレイできるカードの数の上限（航海の追加のターンは3）
     highwaymanBlocked: new Set(), // このターン、辻強盗で最初の財宝が何もしなかったプレイヤー
+    taskmasters: [],      // このターンにプレイした監督（ちょうどコスト5のカードを獲得したら、次のターンにもう一度使う）
+    gained5: false,       // このターンにちょうどコスト5のカードを獲得したか（監督）
+    tricksters: 0,        // 場から捨て札にする財宝を脇に置ける回数（いたずら者）
+    miningRoads: 0,       // 獲得した財宝をプレイできる回数（鉱山道）
+    harborVillages: 0,    // 次のアクションで財宝が増えたら得る財宝（港村）
+    insignia: false,      // 獲得したカードを山札の上に置いてもよい（記章）
+    deliver: false,       // 獲得したカードを脇に置き、ターンの終わりに手札に加える（配達）
+    mirrors: 0,           // 次に獲得したアクションと同じカードを獲得する数（鏡）
+    rushes: 0,            // 次に獲得したアクションをプレイする（突進）
+    avoid: false,         // 次にシャッフルしたとき、勝利点・呪いを捨て札に置く（回避）
+    journey: false,       // クリーンアップで場のカードを捨て札にしない（旅程）
+    playedAny: false,     // このターンにカードをプレイしたか（上陸部隊：最初にプレイしたカード）
+    endOfTurnToHand: [],  // ターンの終わりに手札に加える、脇に置いたカード { player, card }（檻・からくり箱・いたずら者・配達）
+    tireless: [],         // ターンの終わりに山札の上に置く、脇に置いたカード（疲れ知らずの）
     cleanupStarted: false // ターン終了の処理を始めたか
 });
 
@@ -63,18 +78,20 @@ const createTurnState = () => ({
 export const ARTIFACT_NAMES = { flag: '旗', horn: '角笛', key: '鍵', lantern: 'ランタン', treasure_chest: '宝箱' };
 
 // 財宝をまとめてプレイする順（手札の財宝を使う効果を先に、場の財宝を数える効果を後にする）
-const TREASURE_PLAY_FIRST = ['tiara', 'coronet', 'crown', 'anvil', 'investment'];
-const TREASURE_PLAY_LAST = ['horn_of_plenty', 'bank'];
+// るつぼは手札に残った財宝でないカードを廃棄するよう、ペンダントは場の財宝を数えるよう、後にプレイする
+const TREASURE_PLAY_FIRST = ['kings_cache', 'tiara', 'coronet', 'crown', 'anvil', 'investment'];
+const TREASURE_PLAY_LAST = ['horn_of_plenty', 'bank', 'crucible', 'pendant'];
 
 // ゲームクラス
 class Game {
     // cardSets は王国カードを選ぶセット。kingdom を渡すとその王国カードで遊ぶ
     // bane（魔女娘の災いカード）・ferryman（渡し守の山）・colonies（白金貨と植民地を使うか）も指定できる（テスト用）
     // seed が同じなら、同じ操作をすれば必ず同じ結果になる
-    constructor(playerNames, { cardSets = Object.values(CARD_SETS), kingdom = null, landscapes = null, ally = undefined, bane = null, ferryman = null, colonies = null, shelters = null, seed = createSeed() } = {}) {
+    constructor(playerNames, { cardSets = Object.values(CARD_SETS), kingdom = null, landscapes = null, ally = undefined, bane = null, ferryman = null, colonies = null, shelters = null, traitPiles = null, seed = createSeed() } = {}) {
         this.cardSets = cardSets;
         this.kingdom = kingdom;
-        this.options = { landscapes, ally, bane, ferryman, colonies, shelters };
+        // traitPiles は特性を置く山（特性のID → 山のID。テスト用）
+        this.options = { landscapes, ally, bane, ferryman, colonies, shelters, traitPiles };
         this.seed = seed;
         this.random = createRandom(seed);
         this.commands = []; // 受け付けた操作の記録（Game.replay で再現できる）
@@ -134,6 +151,8 @@ class Game {
         // 各プレイヤーの初期デッキを作成して5枚引く
         this.players.forEach(player => {
             player.createInitialDeck({ shelters: this.useShelters, heirlooms: this.heirlooms });
+            // 受け継がれた（特性）：初期デッキの1枚を特性の山のカードと入れ替える
+            this.applyInheritedTrait(player);
             player.drawCards(5);
             // パン屋：各プレイヤーは財源を1つ持って始める
             if (this.isInSupply('baker')) player.coffers += 1;
@@ -243,6 +262,8 @@ class Game {
         this.landscapes = this.selectLandscapes();
         // 同盟：連絡役があれば同盟の札を1枚使い、恩恵トークンを配る
         this.setupAllies();
+        // 略奪：特性を山に置き、分捕り品の山を用意する
+        this.setupPlunder();
 
         // 夜想曲：祝福・呪詛の山、家宝、ゾンビなど
         this.setupNocturne();
@@ -395,6 +416,8 @@ class Game {
         if (isAction) cost -= 2 * inPlay('quarry');
         // 発明家の一族：山の恩恵トークン1つにつきコスト-1
         if (data.id) cost -= this.inventorTokens[this.pileOf[data.id] ?? data.id] ?? 0;
+        // 安価（特性）：この山のカードはコスト-1
+        if (this.hasTrait(data, 'cheap')) cost -= 1;
         return Math.max(0, cost);
     }
 
@@ -774,7 +797,8 @@ class Game {
             this.log(`辻強盗の効果で、${player.name}の${card.name}は何もしません`);
             return;
         }
-        player.coins += this.getTreasureValue(card);
+        // 無謀な（特性）：指示を2回行うので、財宝も2倍得る
+        player.coins += this.getTreasureValue(card) * (this.isReckless(card) ? 2 : 1);
         card.play(player, this);
 
         // 私掠船の攻撃を受けていれば、このターン最初の銀貨か金貨を（財宝を得た後で）廃棄する
@@ -882,6 +906,8 @@ class Game {
         const gainToHand = ALL_CARDS[lowerCardId.toUpperCase()]?.gainToHand && destination === 'discard';
         const card = recipient.gainCard(lowerCardId, gainToHand ? 'hand' : (recipient === player ? destination : 'discard'));
         this.onCardGained(recipient, card);
+        // 捜索：サプライの山が空になったとき
+        if (piles === this.supply) this.checkPileEmptied(pileId);
         return card;
     }
 
@@ -1005,6 +1031,9 @@ class Game {
             }));
         }
 
+        // 略奪：特性・鏡・突進・鉱山道・「次に獲得したとき」まで残るカード・密航者・地図作り・配達
+        steps.push(...this.plunderGainSteps(player, card, isCurrent));
+
         // 同盟：守備隊・ガレリア・ギルドの親方・散兵と、獲得したときの同盟の札
         steps.push(...this.alliesGainSteps(player, card, isCurrent));
 
@@ -1064,13 +1093,15 @@ class Game {
 
         // ティアラ・旅の祭り・追跡者（場にある間）：獲得したカードを山札の上に置いてもよい
         const tracker = player.playArea.some(played => played.id === 'tracker');
-        if ((isCurrent && (this.turnState.tiara || this.turnState.travellingFair || this.turnState.sealGains || this.turnState.baubleGains)) || tracker) {
+        const state = this.turnState;
+        if ((isCurrent && (state.tiara || state.travellingFair || state.sealGains || state.baubleGains || state.insignia)) || tracker) {
             steps.push(() => {
                 if (!player.discard.includes(card) && !player.hand.includes(card)) return;
                 this.promptConfirm({
                     player,
                     card,
-                    title: this.turnState.tiara ? 'ティアラ' : (this.turnState.travellingFair ? '旅の祭り' : (this.turnState.sealGains ? 'アザラシの習性' : (this.turnState.baubleGains ? '装身具' : '追跡者'))),
+                    title: state.tiara ? 'ティアラ' : (state.travellingFair ? '旅の祭り' : (state.sealGains ? 'アザラシの習性' :
+                        (state.baubleGains ? '装身具' : (state.insignia ? '記章' : '追跡者')))),
                     message: `獲得した${card.name}を山札の上に置きますか？`,
                     yesLabel: '山札の上に置く',
                     noLabel: 'そのままにする',
@@ -1329,6 +1360,8 @@ class Game {
             ...player.playArea.filter(card => card.exchangeFor).map(card => () => {
                 if (player.playArea.includes(card) && !player.hasPendingDuration(card)) this.promptExchange(player, card);
             }),
+            // 略奪：クリーンアップの開始時の効果（友好的・忍耐強い・いたずら者）
+            ...this.plunderCleanupSteps(player),
             // 同盟：手札を捨て札にする前の効果（沿岸の避難港）
             () => this.runLandscapeHooks('beforeCleanup', player),
             () => this.finishTurn(player)
@@ -1412,6 +1445,9 @@ class Game {
             if (index >= 0) player.discard.push(...player.setAside.splice(index, 1));
         });
 
+        // 略奪：監督・旅程・無謀な・疲れ知らずの（場のカードを捨て札にする直前）
+        this.plunderBeforeCleanup(player);
+
         // クリーンアップフェーズ（前哨地の追加のターンの前は3枚だけ引く）
         const takesExtraTurn = player.outpostPending && !this.isExtraTurn;
         player.outpostPending = false;
@@ -1440,6 +1476,8 @@ class Game {
                 player.hand.push(card);
             }
         });
+        // 略奪：脇に置いたカードを、ターンの終わりに手札・山札に戻す（檻・からくり箱・いたずら者・配達・疲れ知らずの）
+        this.plunderAfterCleanup(player);
 
         // 蹄鉄工：超過支払いした分だけ、ターンの終わりにカードを引く
         if (this.turnState.farrierDraw > 0) {
@@ -1602,6 +1640,7 @@ class Game {
         player.enchantedVictims.clear();
         player.highwaymanVictims.clear();
         player.warlordVictims.clear();
+        player.frigateVictims.clear();
 
         // ずっと場に残る持続カード（雇人・チャンピオン）は、効果を使った後も残す
         const durations = player.durations;
@@ -1619,6 +1658,8 @@ class Game {
             },
             // ターンの開始時のプロジェクト（兵舎・市・聖堂・城門など）
             () => this.runLandscapeHooks('onStartOfTurn', player),
+            // 略奪：準備で脇に置いたカード・シャーマン・内気な
+            ...this.plunderStartOfTurnSteps(player),
             // 農場労働者で脇に置いたカードをプレイする
             ...plays.map(card => () => {
                 if (!player.setAside.includes(card)) return;
@@ -2113,6 +2154,7 @@ function uniqueById(cards) {
 // イベントなど（カードではない横長の札）と、夜想曲の祝福・呪詛などの処理を加える
 installLandscapes(Game);
 installNocturne(Game);
+installPlunder(Game);
 installMenagerie(Game);
 installAllies(Game);
 

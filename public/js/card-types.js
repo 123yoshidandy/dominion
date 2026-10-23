@@ -33,7 +33,8 @@ export const CARD_TYPES = {
     CLASH: 'clash',       // 衝突
     FORT: 'fort',         // 砦
     ODYSSEY: 'odyssey',   // 冒険旅行
-    WIZARD: 'wizard'      // 魔法使い
+    WIZARD: 'wizard',     // 魔法使い
+    LOOT: 'loot'          // 分捕り品（略奪。サプライ外の混ぜた山から一番上を獲得する）
 };
 
 // 王国カードの収録セット
@@ -51,7 +52,8 @@ export const CARD_SETS = {
     NOCTURNE: 'nocturne',
     RENAISSANCE: 'renaissance',
     MENAGERIE: 'menagerie',
-    ALLIES: 'allies'
+    ALLIES: 'allies',
+    PLUNDER: 'plunder'
 };
 
 // 収録セットの表示名（開始画面とロビーで使う）
@@ -69,7 +71,8 @@ export const CARD_SET_LABELS = {
     nocturne: '夜想曲',
     renaissance: 'ルネサンス',
     menagerie: '移動動物園',
-    allies: '同盟'
+    allies: '同盟',
+    plunder: '略奪'
 };
 
 // カードではない横長の札（ランドスケープ）の種類
@@ -78,7 +81,8 @@ export const LANDSCAPE_KINDS = {
     LANDMARK: 'landmark', // ランドマーク：得点や、獲得などのきっかけで効果がある（購入しない）
     PROJECT: 'project',  // プロジェクト：購入すると自分のキューブを置き、以後ずっと効果がある（1人1回）
     WAY: 'way',          // 習性：アクションカードをプレイするとき、本来の効果の代わりに使ってよい
-    ALLY: 'ally'         // 同盟：連絡役のあるゲームで1枚使い、恩恵トークンを使って効果を得る
+    ALLY: 'ally',        // 同盟：連絡役のあるゲームで1枚使い、恩恵トークンを使って効果を得る
+    TRAIT: 'trait'       // 特性：準備でアクションか財宝の山に1つずつ置き、その山のカードに効果を足す
 };
 
 export const LANDSCAPE_KIND_LABELS = {
@@ -87,5 +91,6 @@ export const LANDSCAPE_KIND_LABELS = {
     project: 'プロジェクト',
     way: '習性',
     ally: '同盟',
+    trait: '特性',
     boon: '祝福'
 };

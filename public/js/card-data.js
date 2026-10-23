@@ -20,6 +20,7 @@ import {
 import { RENAISSANCE_CARDS, RENAISSANCE_PROJECTS } from './card-data-renaissance.js';
 import { MENAGERIE_CARDS, HORSE_CARDS, MENAGERIE_EVENTS, MENAGERIE_WAYS } from './card-data-menagerie.js';
 import { ALLIES_CARDS, ALLIES_PILE_CARDS, ALLIES_ALLIES } from './card-data-allies.js';
+import { PLUNDER_CARDS, PLUNDER_LOOT, PLUNDER_PILE_CARDS, PLUNDER_EVENTS, PLUNDER_TRAITS } from './card-data-plunder.js';
 
 export { CARD_TYPES, CARD_SETS };
 
@@ -843,7 +844,8 @@ export const KINGDOM_CARDS = {
     ...withSet(NOCTURNE_CARDS, CARD_SETS.NOCTURNE),
     ...withSet(RENAISSANCE_CARDS, CARD_SETS.RENAISSANCE),
     ...withSet(MENAGERIE_CARDS, CARD_SETS.MENAGERIE),
-    ...withSet(ALLIES_CARDS, CARD_SETS.ALLIES)
+    ...withSet(ALLIES_CARDS, CARD_SETS.ALLIES),
+    ...withSet(PLUNDER_CARDS, CARD_SETS.PLUNDER)
 };
 
 // 王国カード以外で、一部のゲームだけで使うカード（白金貨・植民地・ポーション・褒賞・騎士・廃墟・避難所など）
@@ -856,6 +858,7 @@ export const EXTRA_CARDS = {
     ...withSet({ ...HEIRLOOM_CARDS, ...NOCTURNE_NON_SUPPLY_CARDS }, CARD_SETS.NOCTURNE),
     ...withSet(HORSE_CARDS, CARD_SETS.MENAGERIE),
     ...withSet(ALLIES_PILE_CARDS, CARD_SETS.ALLIES),
+    ...withSet({ ...PLUNDER_LOOT, ...PLUNDER_PILE_CARDS }, CARD_SETS.PLUNDER),
     ...withSet(REWARD_CARDS, CARD_SETS.CORNUCOPIA_GUILDS)
 };
 
@@ -865,7 +868,8 @@ export const LANDSCAPES = {
     ...withSet({ ...EMPIRES_EVENTS, ...EMPIRES_LANDMARKS }, CARD_SETS.EMPIRES),
     ...withSet(RENAISSANCE_PROJECTS, CARD_SETS.RENAISSANCE),
     ...withSet({ ...MENAGERIE_EVENTS, ...MENAGERIE_WAYS }, CARD_SETS.MENAGERIE),
-    ...withSet(ALLIES_ALLIES, CARD_SETS.ALLIES)
+    ...withSet(ALLIES_ALLIES, CARD_SETS.ALLIES),
+    ...withSet({ ...PLUNDER_EVENTS, ...PLUNDER_TRAITS }, CARD_SETS.PLUNDER)
 };
 
 // 夜想曲の祝福・呪詛（カードではない。山から引いて受ける）と、ゾンビのカードID

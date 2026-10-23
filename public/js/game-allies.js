@@ -32,14 +32,19 @@ const alliesMethods = {
         this.players.forEach(player => { player.favors += setupFavors; });
     },
 
-    // シャッフルしたときの同盟の札（占星術師団・石工団）を、初期デッキを配った後から効かせる
+    // シャッフルしたときの効果を、初期デッキを配った後から効かせる
+    // 同盟の札（占星術師団・石工団）と、略奪の特性とイベント（宿命の・回避）
     installShuffleHooks() {
         const hooks = this.getAllies().filter(ally => ally.onShuffle);
-        if (hooks.length === 0) return;
+        const plunder = this.usesPlunderShuffleHooks();
+        if (hooks.length === 0 && !plunder) return;
         this.players.forEach(player => {
-            player.onShuffle = () => hooks.forEach(ally => {
-                if (player.favors > 0) ally.onShuffle(this, player);
-            });
+            player.onShuffle = () => {
+                hooks.forEach(ally => {
+                    if (player.favors > 0) ally.onShuffle(this, player);
+                });
+                if (plunder) this.plunderOnShuffle(player);
+            };
         });
     },
 
@@ -125,11 +130,15 @@ const alliesMethods = {
         });
     },
 
-    // カードをプレイした後に起きる同盟の札の効果（魔女の集会・書記の組合・商店主連盟）。なければ null
+    // カードをプレイした後に起きる効果。なければ null
+    // 略奪のカードの効果（上陸部隊・旗艦・港村など）と、同盟の札の効果（魔女の集会・書記の組合・商店主連盟）
     getAfterPlayStep(player, card) {
+        const steps = this.plunderAfterPlaySteps(player, card);
         const allies = this.getAllies().filter(ally => ally.afterPlay);
-        if (allies.length === 0 || player !== this.getCurrentPlayer()) return null;
-        return () => this.runNext(...allies.map(ally => () => ally.afterPlay(this, player, card)));
+        if (allies.length > 0 && player === this.getCurrentPlayer()) {
+            steps.push(...allies.map(ally => () => ally.afterPlay(this, player, card)));
+        }
+        return steps.length > 0 ? () => this.runNext(...steps) : null;
     },
 
     // カードを獲得したときの、同盟のカードと同盟の札の効果

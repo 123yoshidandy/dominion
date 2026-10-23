@@ -127,7 +127,10 @@ class UIView {
                     pileDebt: view.pileDebt?.[cardId] ?? 0,
                     favorTokens: view.inventorTokens?.[cardId] ?? 0,
                     isObelisk: cardId === view.obelisk,
-                    isBane: cardId === view.bane
+                    isBane: cardId === view.bane,
+                    // 略奪：この山に置かれた特性の名前
+                    traitNames: Object.entries(view.traits ?? {}).filter(([, pileId]) => pileId === cardId)
+                        .map(([traitId]) => LANDSCAPES[traitId.toUpperCase()]?.name ?? traitId)
                 });
             })
             .join('');
@@ -173,6 +176,7 @@ class UIView {
                                 ${buyable ? `<span class="card-cost">${cost}</span>` : ''}
                                 ${data.debtCost ? `<span class="card-debt">${data.debtCost}</span>` : ''}
                                 <span class="landscape-name">${data.name}</span>
+                                ${view.traits?.[id] ? `<span class="landscape-cubes">→ ${ALL_CARDS[(view.pileTops?.[view.traits[id]] ?? view.traits[id]).toUpperCase()]?.name ?? view.traits[id]}</span>` : ''}
                                 ${vp !== null ? `<span class="vp-badge">${vp}</span>` : ''}
                                 ${cubes.length > 0 ? `<span class="landscape-cubes">${cubes.join('・')}</span>` : ''}
                                 <span class="landscape-kind">${LANDSCAPE_KIND_LABELS[data.kind] ?? ''}</span>
@@ -244,7 +248,7 @@ class UIView {
         });
     }
 
-    createSupplyCardHtml(card, count, unaffordable, { pileId = card.id, cost = card.cost, debtCost = card.debtCost ?? 0, vp = 0, pileDebt = 0, favorTokens = 0, isObelisk = false, isBane = false, nonSupply = false } = {}) {
+    createSupplyCardHtml(card, count, unaffordable, { pileId = card.id, cost = card.cost, debtCost = card.debtCost ?? 0, vp = 0, pileDebt = 0, favorTokens = 0, isObelisk = false, isBane = false, nonSupply = false, traitNames = [] } = {}) {
         const stateClass = count <= 0 ? 'empty' : (unaffordable ? 'unaffordable' : '');
 
         // 購入や説明には山のIDを使う（中身の混ざった山では、見せているカードと山のIDが違う）
@@ -256,6 +260,7 @@ class UIView {
                 ${debtCost ? `<span class="card-debt ${cost > 0 ? 'with-coin' : ''}">${debtCost}</span>` : ''}
                 ${isBane ? '<span class="bane-badge">災い</span>' : ''}
                 ${isObelisk ? '<span class="bane-badge">オベリスク</span>' : ''}
+                ${traitNames.length > 0 ? `<span class="bane-badge trait-badge">${traitNames.join('・')}</span>` : ''}
                 ${vp > 0 || pileDebt > 0 || favorTokens > 0 ? `<span class="pile-tokens">${vp > 0 ? `<span class="vp-badge">${vp}</span>` : ''}${pileDebt > 0 ? `<span class="card-debt">${pileDebt}</span>` : ''}${favorTokens > 0 ? `<span class="favor-badge" title="恩恵トークン（コスト-${favorTokens}）">${favorTokens}</span>` : ''}</span>` : ''}
                 <span class="tile-art">${getCardArt(card.id)}</span>
                 <span class="card-title">${card.name}</span>

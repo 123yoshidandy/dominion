@@ -17,6 +17,7 @@ import { NOCTURNE_ART } from './card-art-nocturne.js';
 import { RENAISSANCE_ART } from './card-art-renaissance.js';
 import { MENAGERIE_ART } from './card-art-menagerie.js';
 import { ALLIES_ART } from './card-art-allies.js';
+import { PLUNDER_ART, LOOT_ART } from './card-art-plunder.js';
 
 const CARD_ART = {
     copper: coin('#c8793a', '#8a4b1f', '#eaa86b'),
@@ -513,7 +514,7 @@ export const CARD_BACK = `<svg viewBox="0 0 52 74" aria-hidden="true">
 </svg>`;
 
 // 拡張のイラストは拡張ごとのファイルに分けている
-const ALL_ART = { ...CARD_ART, ...INTRIGUE_ART, ...PROSPERITY_ART, ...HINTERLANDS_ART, ...CORNUCOPIA_GUILDS_ART, ...ALCHEMY_ART, ...DARK_AGES_ART, ...ADVENTURES_ART, ...EMPIRES_ART, ...NOCTURNE_ART, ...RENAISSANCE_ART, ...MENAGERIE_ART, ...ALLIES_ART };
+const ALL_ART = { ...CARD_ART, ...INTRIGUE_ART, ...PROSPERITY_ART, ...HINTERLANDS_ART, ...CORNUCOPIA_GUILDS_ART, ...ALCHEMY_ART, ...DARK_AGES_ART, ...ADVENTURES_ART, ...EMPIRES_ART, ...NOCTURNE_ART, ...RENAISSANCE_ART, ...MENAGERIE_ART, ...ALLIES_ART, ...PLUNDER_ART, ...LOOT_ART };
 
 // カードIDに対応するイラストのSVG（なければ空文字）
 export function getCardArt(cardId) {

@@ -117,6 +117,7 @@ const landscapeMethods = {
         if (!top || !(this.supply[pileId] > 0)) return false;
         this.supply[pileId]--;
         if (this.pileCards[pileId]) this.pileCards[pileId].shift();
+        this.checkPileEmptied(pileId);
         return true;
     },
 

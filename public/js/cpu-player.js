@@ -32,6 +32,9 @@ const NON_TERMINAL_PRIORITY = [
     'capital_city', 'merchant_camp', 'town', 'lich', 'underling', 'sycophant', 'hunter', 'skirmisher', 'swap',
     'innkeeper', 'warlord', 'old_map', 'voyage', 'student', 'battle_plan', 'sibyl', 'distant_shore', 'sorceress',
     'sorcerer', 'miller',
+    // 略奪
+    'harbor_village', 'wealthy_village', 'landing_party', 'longship', 'swamp_shacks', 'mining_road', 'cabin_boy', 'taskmaster',
+    'shaman', 'grotto',
     'cellar'
 ];
 
@@ -70,7 +73,10 @@ const TERMINAL_PRIORITY = [
     // 同盟
     'marquis', 'emissary', 'highwayman', 'barbarian', 'galleria', 'guildmaster', 'specialist', 'modify',
     'hill_fort', 'stronghold', 'royal_galley', 'courier', 'broker', 'carpenter', 'blacksmith', 'town_crier',
-    'conjurer', 'garrison', 'archer', 'acolyte', 'tent', 'herb_gatherer', 'sentinel', 'importer'
+    'conjurer', 'garrison', 'archer', 'acolyte', 'tent', 'herb_gatherer', 'sentinel', 'importer',
+    // 略奪（一等航海士は手札の同じアクションをまとめてプレイするので先に、旗艦は次のアクションをもう一度プレイするので早めに）
+    'first_mate', 'flagship', 'siren', 'trickster', 'cutthroat', 'frigate', 'crew', 'pilgrim', 'maroon', 'mapmaker',
+    'fortune_hunter', 'enlarge', 'quartermaster', 'stowaway', 'secluded_shrine', 'search'
 ];
 
 // 夜フェイズにプレイする夜のカードの優先順（獲得の数を見るカードは後に）
@@ -172,6 +178,8 @@ function isWorthPlaying(card, player, game) {
         case 'broker':
         case 'modify':
         case 'student':
+        case 'maroon':
+        case 'enlarge':
             // 必ず廃棄するので、不要なカードか、財宝が足りているときの銅貨があるときだけプレイする
             return others.some(c => isTrashTarget(c) || (c.id === 'copper' && canSpareCopper(player)));
         case 'specialist':
@@ -258,7 +266,9 @@ export function chooseCardToBuy(player, game) {
 
         const actions = ['laboratory', 'bazaar', 'market', 'festival', 'city', 'highway', 'hunting_party', 'baker', 'cartographer',
             'junk_dealer', 'bandit_camp', 'lost_city', 'groundskeeper', 'forum', 'archive',
-            ...fewerThan(2, ['capital_city', 'hunter', 'skirmisher', 'swap', 'sorceress', 'sorcerer', 'warlord'])];
+            ...fewerThan(2, ['capital_city', 'hunter', 'skirmisher', 'swap', 'sorceress', 'sorcerer', 'warlord']),
+            // 略奪：アクションの増えるカードと、効果のある財宝は2枚まで
+            ...fewerThan(2, ['wealthy_village', 'mining_road', 'longship', 'buried_treasure', 'figurine'])];
         if (canAddTerminal) {
             if (cursesLeft) actions.unshift('witch', 'sea_witch', 'soothsayer', 'torturer', 'charlatan');
             if (available('ruins')) actions.unshift('cultist');
@@ -266,6 +276,8 @@ export function chooseCardToBuy(player, game) {
             actions.push('knights', 'rogue', 'legionary');
             actions.push('margrave', 'wharf', 'council_room', 'library', 'courtier', 'bandit', 'merchant_ship', 'rabble');
             actions.push('elder', 'barbarian', 'highwayman', 'galleria', 'guildmaster', 'emissary', 'modify', 'specialist', 'hill_fort', 'contract');
+            if (cursesLeft) actions.unshift('trickster');
+            actions.push('cutthroat', 'frigate', 'crew', 'pilgrim', 'first_mate');
         }
         return pick([...actions, 'silver']);
     }
@@ -274,13 +286,18 @@ export function chooseCardToBuy(player, game) {
         // 同盟：アクションの増えるカードは2枚まで
         const allies = pick(fewerThan(2, coins >= 4 ? ['town', 'innkeeper', 'voyage', 'miller'] : ['merchant_camp', 'underling', 'old_map', 'student', 'battle_plan']));
         if (allies) return allies;
+        // 略奪：アクションの増えるカードと、効果のある財宝は2枚まで
+        const plunder = pick(fewerThan(2, coins >= 4
+            ? ['harbor_village', 'landing_party', 'swamp_shacks', 'cabin_boy', 'rope', 'gondola', 'abundance']
+            : ['taskmaster']));
+        if (plunder) return plunder;
         if (coins === 4 && canAddTerminal) {
             return pick([...(cursesLeft ? ['young_witch'] : []), ...(available('ruins') ? ['marauder'] : []), 'villa', 'smithy', 'militia',
                 'monument', 'cutpurse', 'moneylender', 'courier', 'carpenter', 'broker', 'royal_galley', 'conjurer', 'garrison',
-                'archer', 'acolyte', 'silver']);
+                'archer', 'acolyte', 'flagship', 'fortune_hunter', 'mapmaker', 'silver']);
         }
         if (canAddTerminal) {
-            const terminal = pick(fewerThan(1, ['sentinel', 'importer', 'tent', 'herb_gatherer']));
+            const terminal = pick(fewerThan(1, ['sentinel', 'importer', 'tent', 'herb_gatherer', 'stowaway', 'secluded_shrine']));
             if (terminal) return terminal;
         }
         return pick(['silver']);
@@ -290,7 +307,7 @@ export function chooseCardToBuy(player, game) {
     }
     // 同盟：コスト2のカードを1枚ずつ
     if (coins === 2 && provincesLeft > 2) {
-        const cheap = pick(fewerThan(1, ['town_crier', 'sycophant', 'bauble']));
+        const cheap = pick(fewerThan(1, ['town_crier', 'sycophant', 'bauble', 'shaman', 'search']));
         if (cheap) return cheap;
     }
 
@@ -830,6 +847,46 @@ function chooseSelection(prompt, game) {
         case 'peaceful-cult':
             return indicesWhere(cards, isTrashTarget).slice(0, max);
 
+        // ===== 略奪 =====
+        case 'grotto-set-aside':
+            // 勝利点と呪いを脇に置いて、次のターンに引き直す
+            return indicesWhere(cards, isJunk).slice(0, max);
+        case 'crucible-trash':
+        case 'maroon-trash':
+        case 'pickaxe-trash':
+            return trashOrder(cards);
+        case 'fortune-hunter':
+        case 'kings-cache':
+        case 'orb-play':
+        case 'bury':
+        case 'take-from-quartermaster':
+            return cards.length > 0 ? [highest(cards)] : [];
+        case 'mapmaker':
+            return indicesByKeepValue(cards).reverse().slice(0, min);
+        case 'figurine-discard': {
+            // 購入フェーズなのでアクションは使えない。一番価値の低いアクションを捨てて購入と財宝を得る
+            const actions = indicesWhere(cards, card => card.isType(CARD_TYPES.ACTION));
+            return actions.length > 0 ? [actions.sort((a, b) => keepValue(cards[a]) - keepValue(cards[b]))[0]] : [];
+        }
+        case 'first-mate': {
+            // 手札に一番多いアクション（同じ数ならプレイの優先順の高いもの）
+            const actions = indicesWhere(cards, card => card.isType(CARD_TYPES.ACTION));
+            const count = (card) => cards.filter(other => other.id === card.id).length;
+            actions.sort((a, b) => count(cards[b]) - count(cards[a]) || playRank(cards[a]) - playRank(cards[b]));
+            return actions.slice(0, 1);
+        }
+        case 'maelstrom-trash':
+            return indicesByKeepValue(cards).slice(0, min);
+        case 'maelstrom-other':
+            return [lowest(cards)];
+        case 'prosper':
+            return indicesWhere(cards, card => card.id !== 'copper');
+        case 'friendly':
+        case 'shy':
+            return cards.length > 0 ? [0] : [];
+        case 'trickster':
+            return indicesByKeepValue(cards).reverse().slice(0, max);
+
         default:
             // 想定外の選択は、条件を満たす最小の枚数を先頭から選ぶ
             return cards.map((card, index) => index).slice(0, min);
@@ -957,6 +1014,14 @@ function chooseOption(prompt, game) {
             return [player.coins >= 2 ? 3 : 0];
         case 'rotate-any':
             return [0];
+        // ===== 略奪 =====
+        case 'orb':
+            // 捨て札のカードを探すより、購入 +1 と財宝 +3 を選ぶ（最後の選択肢）
+            return [options.length - 1];
+        case 'quartermaster':
+            // 補給係の上にカードがあれば手札に加え、なければ獲得して置く
+            return [options.length > 1 ? 1 : 0];
+
         default:
             // 想定外の選択（超過支払い・寵臣の攻撃を受けた側など）は先頭から選ぶ
             return options.map((option, index) => index).slice(0, Math.max(min, 1));
@@ -973,6 +1038,7 @@ function chooseConfirm(prompt, game) {
         case 'sailor-play':
         case 'baron':
         case 'reaction-play':
+        case 'play-gained':
         case 'diplomat-react':
         case 'tunnel':
         case 'fools-gold-react':

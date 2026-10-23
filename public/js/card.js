@@ -39,7 +39,10 @@ class Card {
             return;
         }
         // 効果を使う。習性（移動動物園）があるゲームでは、アクションカードは代わりに習性を使ってもよい
-        const original = () => this.onPlay?.(player, game, this);
+        // 無謀な（特性）の山のカードは、指示を2回行う
+        const original = game?.isReckless?.(this)
+            ? () => game.runNext(() => this.onPlay?.(player, game, this), () => this.onPlay?.(player, game, this))
+            : () => this.onPlay?.(player, game, this);
         const useWays = this.isType(CARD_TYPES.ACTION) && (game?.getWays?.().length ?? 0) > 0;
         const resolve = useWays ? () => game.promptWay(player, this, original) : original;
         // プレイする前に起きる効果（浮浪児・窯）があれば、それを先に処理してから効果を使う

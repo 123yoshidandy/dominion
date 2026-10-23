@@ -57,6 +57,8 @@ export function createGameView(game, viewerId, { logsFrom = 0 } = {}) {
         pileTops: Object.fromEntries(Object.keys(game.pileCards).map(pileId => [pileId, game.getPileTop(pileId)])),
         // イベントなど（カードではない横長の札）と、そのコスト
         landscapes: game.landscapes.map(id => ({ id, cost: game.getLandscapeCost(id), vp: game.landscapeVp[id] ?? null })),
+        // 略奪：特性を置いた山（特性のID → 山のID）
+        traits: { ...(game.traits ?? {}) },
         // 帝国：コストの負債、山に置いた勝利点トークンと負債、オベリスクの山
         debtCosts: Object.fromEntries(Object.keys(game.supply).map(cardId => [cardId, game.getDebtCost(cardId)])),
         pileVp: { ...game.pileVp },

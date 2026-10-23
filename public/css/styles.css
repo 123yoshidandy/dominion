@@ -648,6 +648,15 @@ button.primary {
     background: var(--type-curse);
 }
 
+/* 特性（略奪）は、その山のタイルに名前を出す。名前が長いので、はみ出さないように縮める */
+.bane-badge.trait-badge {
+    max-width: calc(100% - 6px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: #2a7f86;
+}
+
 /* サプライ外の山（褒賞・渡し守の山）は横一列に並べる */
 .supply-extra {
     grid-column: 1 / -1;
