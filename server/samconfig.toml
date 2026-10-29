@@ -5,4 +5,6 @@ stack_name = "dominion-online"
 region = "ap-northeast-1"
 capabilities = "CAPABILITY_IAM"
 resolve_s3 = true
+# デプロイ用ロール（GitHub Actions 用にゲームごとに作るもの）が読めるのは、共有のバケットのこの下だけ
+s3_prefix = "dominion-online"
 confirm_changeset = true
