@@ -153,4 +153,33 @@ describe('オンライン対戦の部屋（ドミニオン）', () => {
         await b.send('backToLobby');
         expect(a.last('lobby').status).toBe('lobby');
     });
+
+    it('ロビーでリアルタイムモードを切り替えられ、正しくない指定は受け付けない', async () => {
+        const server = createTestServer(game);
+        const [a, b] = await server.createRoom(['あき', 'はる']);
+        expect(a.last('lobby').settings.realtime).toBe(false);
+        await a.send('setSettings', { settings: { realtime: true } });
+        expect(b.last('lobby').settings.realtime).toBe(true);
+        expect(b.last('lobby').settings.cardSets).toEqual(Object.values(CARD_SETS));
+        await a.send('setSettings', { settings: { realtime: 'yes' } });
+        expect(a.last('error').message).toBe('リアルタイムモードの指定が正しくありません');
+    });
+
+    it('リアルタイムモードでは、2人とも同時に自分の番を操作でき、全員が終えたら次の番に進む', async () => {
+        const server = createTestServer(game);
+        const [a, b] = await server.createRoom(['あき', 'はる']);
+        await a.send('setSettings', { settings: { realtime: true } });
+        await a.send('start');
+        expect(a.last('state').view.currentPlayerId).toBe(0);
+        expect(b.last('state').view.currentPlayerId).toBe(1);
+
+        await b.send('command', { command: { type: 'endTurn' } });
+        expect(b.last('state').view.realtime.waiting).toBe(true);
+        expect(a.last('state').view.realtime.status).toEqual({ 0: 'playing', 1: 'done' });
+        await a.send('command', { command: { type: 'buyPhase' } });
+        expect(a.last('state').view.phase).toBe('buy');
+        await a.send('command', { command: { type: 'endTurn' } });
+        expect(a.last('state').view.realtime.round).toBe(2);
+        expect(b.last('state').view.phase).toBe('action');
+    });
 });

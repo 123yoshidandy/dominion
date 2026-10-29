@@ -23,7 +23,8 @@ const COMMAND_FIELDS = {
     buy: ['cardId'],
     buyLandscape: ['landscapeId'],
     endTurn: [],
-    answer: ['answer']
+    // リアルタイムモードでは1人に同時に2つの選択が出ることがあるので、どの選択への答えかを promptId で示す
+    answer: ['answer', 'promptId']
 };
 
 export default {
@@ -32,21 +33,29 @@ export default {
     allowCpu: true,
     maxCpuSteps: 5000, // CPUだけが残った部屋でも、ゲームの終わりまで進められるように
 
+    // cardSets：使うカードのセット、realtime：全員が同時に自分の番を進めるか
     settings: {
-        defaults: () => ({ cardSets: Object.values(CARD_SETS) }),
+        defaults: () => ({ cardSets: Object.values(CARD_SETS), realtime: false }),
         validate(patch, current) {
-            if (patch.cardSets === undefined) return current;
-            const valid = Object.values(CARD_SETS);
-            const { cardSets } = patch;
-            if (!Array.isArray(cardSets) || cardSets.length === 0 || cardSets.some(set => !valid.includes(set))) {
-                throw new GameError('使うカードの指定が正しくありません');
+            let next = current;
+            if (patch.cardSets !== undefined) {
+                const valid = Object.values(CARD_SETS);
+                const { cardSets } = patch;
+                if (!Array.isArray(cardSets) || cardSets.length === 0 || cardSets.some(set => !valid.includes(set))) {
+                    throw new GameError('使うカードの指定が正しくありません');
+                }
+                next = { ...next, cardSets: [...new Set(cardSets)] };
             }
-            return { ...current, cardSets: [...new Set(cardSets)] };
+            if (patch.realtime !== undefined) {
+                if (typeof patch.realtime !== 'boolean') throw new GameError('リアルタイムモードの指定が正しくありません');
+                next = { ...next, realtime: patch.realtime };
+            }
+            return next;
         }
     },
 
     create({ players, settings, random }) {
-        const options = { cardSets: settings.cardSets, seed: Math.floor(random() * 2 ** 32) };
+        const options = { cardSets: settings.cardSets, realtime: Boolean(settings.realtime), seed: Math.floor(random() * 2 ** 32) };
         return startGame(players.map(({ name, isCPU }) => ({ name, isCPU })), options, []);
     },
 

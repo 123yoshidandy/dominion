@@ -17,6 +17,7 @@ const DEFAULT_SETTINGS = {
     cardSets: Object.values(CARD_SETS).join('+'), // 王国カードを選ぶセットを + でつないだもの（'base+seaside' など）
     playerCount: 2,           // ローカル対戦の人数
     localPlayers: [],         // ローカル対戦の各席の { name, isCPU }
+    realtime: false,          // ローカル対戦をリアルタイムモードで遊ぶ（CPUが同時に番を進める。人間が1人のときだけ）
     onlineName: ''            // オンライン対戦で使う名前
 };
 
@@ -323,7 +324,7 @@ class UIController {
             this.gameController.runCpuStep();
             // 画面が更新されない手でも止まらないよう、次の手を予約し直す
             this.scheduleCpuStep();
-        }, UIController.CPU_STEP_DELAY_MS);
+        }, this.gameController.cpuStepDelayMs?.() ?? UIController.CPU_STEP_DELAY_MS);
     }
     
     // カードプレイ処理

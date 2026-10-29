@@ -56,6 +56,7 @@ class OnlineGameController {
     addCpu() { this.net.addCpu(); }
     removePlayer(seat) { this.net.removeCpu(seat); }
     setCardSets(cardSets) { this.net.setSettings({ cardSets }); }
+    setRealtime(realtime) { this.net.setSettings({ realtime }); }
     startGame() { this.net.start(); }
     backToLobby() { this.net.backToLobby(); }
 
@@ -94,8 +95,11 @@ class OnlineGameController {
         this.lobby = {
             ...lobby,
             cardSets: lobby.settings?.cardSets ?? [],
+            realtime: Boolean(lobby.settings?.realtime),
             players: lobby.players.filter(player => !player.left)
         };
+        // リアルタイムモードでは、CPUの手を待たせると自分の操作の結果が後ろに並んで遅れるので、すぐ見せる
+        this.net.cpuStepDelayMs = this.lobby.realtime ? 0 : CPU_STEP_DELAY_MS;
         if (lobby.status === 'lobby') {
             // ロビーに戻ったら、前のゲームの表示を消す
             this.view = null;

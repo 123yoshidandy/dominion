@@ -293,9 +293,15 @@ class UIEventHandler {
         this.uiController.updateSettings({ playerCount, localPlayers });
         
         // ゲームを初期化（使うカードのセットは設定から）
+        // リアルタイムモードは、同じ端末で人間が交代で遊ぶときは使えない（人間が1人のときだけ）
         const cardSets = this.uiController.settings.cardSets.split('+');
+        const humans = playerNames.filter(player => !player.isCPU).length;
+        const realtime = this.uiController.settings.realtime && humans <= 1;
         this.uiController.resetForNewGame();
-        this.gameController.initGame(playerNames, { cardSets });
+        this.gameController.initGame(playerNames, { cardSets, realtime });
+        if (this.uiController.settings.realtime && !realtime) {
+            this.uiController.showToast('人間が2人以上のときは、リアルタイムモードは使えないため、順番に進めます');
+        }
         
         // モーダルを閉じる
         this.uiController.modal.closeModal();

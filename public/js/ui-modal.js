@@ -78,7 +78,10 @@ class UIModal {
 
                     <div id="player-names"></div>
 
-                    ${this.createStackHandToggleHtml('setup-stack-hand')}
+                    <div class="title-toggles">
+                        ${this.createStackHandToggleHtml('setup-stack-hand')}
+                        ${this.createRealtimeToggleHtml('setup-realtime', this.uiController.settings.realtime, 'リアルタイム（同時に進める）')}
+                    </div>
 
                     <div class="title-buttons">
                         <button id="start-game-btn" class="primary">ゲーム開始</button>
@@ -100,6 +103,9 @@ class UIModal {
         });
 
         this.setupStackHandToggle('setup-stack-hand');
+        document.getElementById('setup-realtime').addEventListener('change', (event) => {
+            this.uiController.updateSettings({ realtime: event.target.checked });
+        });
 
         // 拡張は別の画面で選び、決定したらタイトル画面に戻る
         document.getElementById('card-sets-btn').addEventListener('click', () => this.showCardSetPicker({
@@ -267,6 +273,16 @@ class UIModal {
                     </ol>
                     <p>接続が切れても、同じ席に戻れます。途中で抜けた人の席は、CPUが代わりに続けます。</p>
                 `)}
+                ${section('リアルタイムモード', `
+                    <p>全員が同時に自分の番を進め、全員が番を終えたら次の番に進みます。部屋を作った人がロビーで、CPU対戦ではタイトル画面で選べます（CPU対戦は人間が1人のときだけ）。</p>
+                    <ul>
+                        <li>アタックや「他のプレイヤーは1枚引く」など、他の人への効果は、相手の次の番の開始時（手札を引いた後）に効きます。</li>
+                        <li>相談役の「左隣が選ぶ」など、他の人が選ぶ選択はその人に出ます。答えが出るまで、手番の人は待ちます。</li>
+                        <li>前哨地・支配などの追加のターンは、全員が番を終えた後の「追加の番」で行います。</li>
+                        <li>サプライは早い者勝ちです。属州が空になっても、その番は全員が最後までプレイしてから終わります。</li>
+                        <li>仮面舞踏会は使いません。</li>
+                    </ul>
+                `)}
                 <button id="help-close-btn" class="primary">閉じる</button>
             </div>
         `;
@@ -356,10 +372,12 @@ class UIModal {
                 </ul>
                 ${isHost ? `
                     ${this.createCardSetButtonHtml('lobby-card-sets-btn', lobby.cardSets)}
+                    ${this.createRealtimeToggleHtml('lobby-realtime', lobby.realtime)}
                     <button id="add-cpu-btn" class="primary secondary" ${lobby.players.length >= 4 ? 'disabled' : ''}>CPUを追加</button>
                     <button id="start-online-btn" class="primary" ${lobby.players.length < 2 ? 'disabled' : ''}>ゲーム開始</button>
                 ` : `
                     <p class="lobby-note">使うカード：${escapeHtml(cardSetLabel(lobby.cardSets))}</p>
+                    <p class="lobby-note">進め方：${lobby.realtime ? 'リアルタイム（全員が同時に自分の番を進める）' : '順番（1人ずつ手番を進める）'}</p>
                     <p class="lobby-note">部屋を作った人がゲームを始めるのを待っています</p>
                 `}
                 <button id="leave-room-btn" class="link-button">部屋を出る</button>
@@ -378,6 +396,7 @@ class UIModal {
                     this.uiController.showLatestLobby();
                 }
             }));
+            document.getElementById('lobby-realtime').addEventListener('change', (event) => controller.setRealtime(event.target.checked));
             document.getElementById('add-cpu-btn').addEventListener('click', () => controller.addCpu());
             document.getElementById('start-online-btn').addEventListener('click', () => controller.startGame());
             this.elements.modalBody.querySelectorAll('[data-remove-seat]').forEach(button => {
@@ -441,6 +460,16 @@ class UIModal {
     }
 
     // 「手札の同じカードを重ねる」設定のチェックボックス
+    // リアルタイムモードの切り替え（タイトル画面とロビーで共通）
+    createRealtimeToggleHtml(id, checked, label = 'リアルタイム（全員が同時に番を進める）') {
+        return `
+            <label class="setting-toggle realtime-toggle" for="${id}">
+                <span>${label}</span>
+                <input type="checkbox" id="${id}" ${checked ? 'checked' : ''}>
+            </label>
+        `;
+    }
+
     createStackHandToggleHtml(id) {
         return `
             <label class="setting-toggle" for="${id}">
@@ -543,7 +572,8 @@ class UIModal {
     // 選択待ちの画面。必ず答える必要があるので×は出さない
     showPrompt(prompt, view) {
         // 手番ではないプレイヤーが答える選択（民兵の攻撃など）は、誰が答えるのかを明示する
-        const who = prompt.playerId !== view.currentPlayerId ? `${prompt.playerName}：` : '';
+        // リアルタイムモードで、他のプレイヤーの番から来た選択は、誰の番からかを明示する
+        const who = prompt.fromPlayerName ? `${prompt.fromPlayerName}の番：` : (prompt.playerId !== view.currentPlayerId ? `${prompt.playerName}：` : '');
         this.elements.modalTitle.textContent = `${who}${prompt.title}`;
         this.currentPromptView = view;
         
@@ -561,7 +591,7 @@ class UIModal {
     // 答えをゲームに渡す。受け付けられなかったときは同じ選択を出し直して、ゲームが止まらないようにする
     answerPrompt(prompt, answer) {
         this.closeModal();
-        if (!this.uiController.gameController.send({ type: 'answer', answer })) {
+        if (!this.uiController.gameController.send({ type: 'answer', answer, promptId: prompt.id })) {
             this.showPrompt(prompt, this.currentPromptView);
         }
     }

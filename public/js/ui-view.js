@@ -67,6 +67,7 @@ class UIView {
             ${view.missionTurn ? '<span class="status-waiting">伝道のターン（カードは購入できない）</span>' : ''}
             <span class="status-phase phase-${view.phase}">${this.getPhaseText(view.phase)}</span>
             ${view.prompt?.waiting ? `<span class="status-waiting">${view.prompt.playerName}が選択中</span>` : ''}
+            ${view.realtime?.waiting ? `<span class="status-waiting">あと${Object.values(view.realtime.status).filter(status => status === 'playing').length}人</span>` : ''}
         `;
 
         const stat = (label, value, dim) => `
@@ -94,6 +95,7 @@ class UIView {
             case 'buy': return '購入';
             case 'night': return '夜';
             case 'cleanup': return 'クリーンアップ';
+            case 'waiting': return '待機';
             default: return phase;
         }
     }
@@ -332,13 +334,17 @@ class UIView {
 
     // プレイヤー情報を更新
     updatePlayersInfo(view) {
+        // リアルタイムモードでは、番を進めている人を強調し、各人の状況を出す
+        const realtimeLabels = { playing: '進行中', done: '番を終えた', idle: 'この番は休み' };
         const html = view.players.map(player => {
-            const isCurrentPlayer = player === view.current;
+            const status = view.realtime?.status?.[player.id];
+            const isCurrentPlayer = status ? status === 'playing' : player === view.current;
 
             return `
                 <div class="player-stats ${isCurrentPlayer ? 'active-player' : ''}">
                     <div class="player-name">
                         ${player.name}${player.isCPU ? '<span class="cpu-badge">CPU</span>' : ''}
+                        ${status ? `<span class="realtime-badge realtime-${status}">${realtimeLabels[status]}</span>` : ''}
                     </div>
                     <div class="player-meta">
                         <span>勝利点 <b>${player.victoryPoints}</b>${player.vpTokens > 0 ? `（トークン${player.vpTokens}）` : ''}</span>

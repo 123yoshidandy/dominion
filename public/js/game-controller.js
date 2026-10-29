@@ -45,8 +45,13 @@ class GameController {
 
     // 画面に表示するプレイヤー。人間の選択待ちならその人、人間の手番ならその人
     // CPUの手番中は、直前に表示していた人間のままにする（同じ端末で人間が交代で遊ぶときにも使える）
+    // リアルタイムモードは人間が1人のときだけ使うので、いつもその人を表示する
     getViewerId() {
         const game = this.game;
+        if (game.isRealtime()) {
+            this.viewerId = (game.players.find(player => !player.isCPU) ?? game.players[0]).id;
+            return this.viewerId;
+        }
         const prompt = game.pendingPrompt;
         const current = game.getCurrentPlayer();
 
@@ -79,6 +84,11 @@ class GameController {
     // 人間の選択待ちのあいだは、答えが出るまでCPUは待つ
     hasCpuWork() {
         return Boolean(this.game) && isCpuToMove(this.game);
+    }
+
+    // CPUが1手進めるまでの待ち時間（リアルタイムモードは人間と同時に進めるので短くする。null なら画面の既定）
+    cpuStepDelayMs() {
+        return this.game?.isRealtime() ? 150 : null;
     }
 
     // CPUの手番を1手進める

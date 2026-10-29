@@ -309,6 +309,26 @@ button.primary {
     color: var(--on-felt-muted);
 }
 
+/* リアルタイムモードの各人の状況（進行中・番を終えた・この番は休み） */
+.realtime-badge {
+    margin-left: 4px;
+    padding: 0 6px;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.realtime-playing {
+    background: var(--gold);
+    color: #3a2a10;
+}
+
+.realtime-done,
+.realtime-idle {
+    background: var(--felt-light);
+    color: var(--on-felt-muted);
+}
+
 .player-meta {
     display: flex;
     flex-wrap: wrap;
@@ -2059,6 +2079,21 @@ button.primary.secondary {
     margin-top: 8px;
     padding: 9px 12px;
     font-size: 14px;
+}
+
+/* タイトル画面の切り替え（手札を重ねる・リアルタイム）は2列に並べて、高さを抑える */
+.title-toggles {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.title-panel .title-toggles .setting-toggle {
+    margin-top: 0;
+    gap: 8px;
+    font-size: 13px;
+    line-height: 1.3;
 }
 
 .title-buttons {
