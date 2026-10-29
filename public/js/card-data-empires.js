@@ -308,15 +308,18 @@ export const CASTLE_CARDS = {
         onGain: (player, game) => {
             if (player !== game.getCurrentPlayer()) return;
             gainAndLog(game, player, 'gold');
-            game.getOtherPlayers(player).filter(other => other.hand.length >= 5).forEach(other => game.runNext(() => game.promptSelect({
-                player: other, cards: other.hand, min: 2, max: 2,
-                title: '幽霊城', message: '山札の上に置くカードを2枚選んでください。', confirmLabel: '山札の上に置く', purpose: 'haunted-castle',
-                callback: (indices) => {
-                    const cards = indices.map(index => other.hand[index]);
-                    cards.forEach(card => other.hand.splice(other.hand.indexOf(card), 1));
-                    other.deck.unshift(...cards);
-                    game.log(`${other.name}は手札を2枚山札の上に置きました`);
-                }
+            game.getOtherPlayers(player).forEach(other => game.runNext(() => game.affectPlayer(other, () => {
+                if (other.hand.length < 5) return;
+                game.promptSelect({
+                    player: other, cards: other.hand, min: 2, max: 2,
+                    title: '幽霊城', message: '山札の上に置くカードを2枚選んでください。', confirmLabel: '山札の上に置く', purpose: 'haunted-castle',
+                    callback: (indices) => {
+                        const cards = indices.map(index => other.hand[index]);
+                        cards.forEach(card => other.hand.splice(other.hand.indexOf(card), 1));
+                        other.deck.unshift(...cards);
+                        game.log(`${other.name}は手札を2枚山札の上に置きました`);
+                    }
+                });
             })));
         }
     },

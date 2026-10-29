@@ -652,7 +652,7 @@ export const MENAGERIE_EVENTS = {
         description: 'コスト5以下の勝利点以外のカードを1枚獲得する。他のプレイヤーは馬を1枚獲得する',
         onBuy: (player, game) => {
             game.promptGain({ player, maxCost: 5, filter: (data) => !data.types.includes(CARD_TYPES.VICTORY), title: '取引', message: 'コスト5以下の勝利点以外のカードを1枚獲得してください。' });
-            game.runNext(() => game.getOtherPlayers(player).forEach(other => gainHorses(game, other, 1)));
+            game.runNext(() => game.getOtherPlayers(player).forEach(other => game.affectPlayer(other, () => gainHorses(game, other, 1))));
         }
     }),
     ...event('INVEST', {
@@ -664,7 +664,7 @@ export const MENAGERIE_EVENTS = {
                 const card = game.exileFromSupply(player, pileId);
                 if (!card) return;
                 // 他のプレイヤーで、同じカードに出資して追放マットに置いている人はカードを2枚引く
-                game.getOtherPlayers(player).filter(other => other.mats.exile.some(c => c.id === card.id && c.invested)).forEach(other => gainBenefits(other, game, { cards: 2 }, '出資'));
+                game.getOtherPlayers(player).filter(other => other.mats.exile.some(c => c.id === card.id && c.invested)).forEach(other => game.affectPlayer(other, () => gainBenefits(other, game, { cards: 2 }, '出資')));
                 card.invested = true;
             }
         })

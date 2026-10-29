@@ -41,7 +41,31 @@ function createPromptView(game, prompt, viewerId) {
 }
 
 // viewerId のプレイヤーから見たゲームの状態（logsFrom 番目以降のログだけを入れる）
-export function createGameView(game, viewerId, { logsFrom = 0 } = {}) {
+// リアルタイムモードでは、見ている人の番の状態（コンテキスト）で作る
+export function createGameView(game, viewerId, options = {}) {
+    if (!game.isRealtime?.() || !game.contexts) return buildGameView(game, viewerId, options);
+    return game.withContext(game.viewContextFor(viewerId), () => {
+        const view = buildGameView(game, viewerId, options);
+        // 選択は、見ている人が答えるものを1つ出す（他のプレイヤーの番から来た選択が先）
+        const found = game.promptsFor(viewerId);
+        if (found) {
+            view.prompt = game.withContext(found.ctx, () => createPromptView(game, found.prompt, viewerId));
+            if (found.ctx.owner.id !== viewerId) view.prompt.fromPlayerName = found.ctx.owner.name;
+        }
+        const own = game.activeContext;
+        view.realtime = {
+            round: game.roundNumber,
+            extraRound: Boolean(game.extraRound),
+            // 自分の番を終えて、他のプレイヤーを待っているか
+            waiting: own.done && view.phase !== 'end',
+            // 各プレイヤーの状況：playing（番を進めている）・done（番を終えた）・idle（この番はターンを行わない）
+            status: Object.fromEntries(game.contexts.map(ctx => [ctx.owner.id, !ctx.taking ? 'idle' : (ctx.done ? 'done' : 'playing')]))
+        };
+        return view;
+    });
+}
+
+function buildGameView(game, viewerId, { logsFrom = 0 } = {}) {
     return {
         viewerId,
         phase: game.phase,
@@ -158,6 +182,7 @@ export function hydrateGameView(view) {
         me,
         current,
         // 自分が操作する手番で、まだゲームが続いているか
-        isMyTurn: Boolean(me) && controlsCurrent && view.phase !== 'end'
+        // リアルタイムモードで自分の番を終えたら、他のプレイヤーを待つ間は操作しない
+        isMyTurn: Boolean(me) && controlsCurrent && view.phase !== 'end' && view.phase !== 'waiting' && !view.realtime?.waiting
     };
 }

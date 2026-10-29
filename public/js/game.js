@@ -12,6 +12,7 @@ import { installNocturne } from './game-nocturne.js';
 import { installMenagerie } from './game-menagerie.js';
 import { installAllies } from './game-allies.js';
 import { installPlunder } from './game-plunder.js';
+import { installRealtime, REALTIME_EXCLUDED_CARDS } from './game-realtime.js';
 
 // 1ターンの間だけ続く効果の記録（ターンの開始で作り直す）
 const createTurnState = () => ({
@@ -87,11 +88,12 @@ class Game {
     // cardSets は王国カードを選ぶセット。kingdom を渡すとその王国カードで遊ぶ
     // bane（魔女娘の災いカード）・ferryman（渡し守の山）・colonies（白金貨と植民地を使うか）も指定できる（テスト用）
     // seed が同じなら、同じ操作をすれば必ず同じ結果になる
-    constructor(playerNames, { cardSets = Object.values(CARD_SETS), kingdom = null, landscapes = null, ally = undefined, bane = null, ferryman = null, colonies = null, shelters = null, traitPiles = null, seed = createSeed() } = {}) {
+    constructor(playerNames, { cardSets = Object.values(CARD_SETS), kingdom = null, landscapes = null, ally = undefined, bane = null, ferryman = null, colonies = null, shelters = null, traitPiles = null, realtime = false, seed = createSeed() } = {}) {
         this.cardSets = cardSets;
         this.kingdom = kingdom;
         // traitPiles は特性を置く山（特性のID → 山のID。テスト用）
-        this.options = { landscapes, ally, bane, ferryman, colonies, shelters, traitPiles };
+        // realtime なら、各プレイヤーが同時に自分の番を進める（game-realtime.js）
+        this.options = { landscapes, ally, bane, ferryman, colonies, shelters, traitPiles, realtime };
         this.seed = seed;
         this.random = createRandom(seed);
         this.commands = []; // 受け付けた操作の記録（Game.replay で再現できる）
@@ -168,6 +170,11 @@ class Game {
         if (this.useShelters) this.log('屋敷の代わりに避難所を使います');
         if (this.bane) this.log(`魔女娘の災いカードは${ALL_CARDS[this.bane.toUpperCase()].name}です`);
         if (this.ferrymanPile) this.log(`渡し守で獲得するカードは${ALL_CARDS[this.ferrymanPile.toUpperCase()].name}です`);
+        if (this.isRealtime()) {
+            this.log('リアルタイムモード：全員が同時に自分の番を進めます');
+            this.setupRealtime();
+            return;
+        }
         this.startTurn(this.getCurrentPlayer(), { regular: true });
     }
 
@@ -328,7 +335,8 @@ class Game {
 
     // 使っていない王国カードから、条件に合うものをランダムに1種選ぶ（なければ null）
     pickUnusedKingdomCard(condition) {
-        const isCandidate = (id) => !this.isInSupply(id.toLowerCase()) && condition(KINGDOM_CARDS[id]);
+        const isCandidate = (id) => !this.isInSupply(id.toLowerCase()) && condition(KINGDOM_CARDS[id]) &&
+            !(this.isRealtime() && REALTIME_EXCLUDED_CARDS.includes(id.toLowerCase()));
         let candidates = getKingdomCardIds(this.cardSets).filter(isCandidate);
         if (candidates.length === 0) candidates = Object.keys(KINGDOM_CARDS).filter(isCandidate);
         if (candidates.length === 0) return null;
@@ -337,7 +345,8 @@ class Game {
 
     // 王国カードをランダムに選ぶ
     selectRandomKingdomCards(count) {
-        const kingdomCardIds = getKingdomCardIds(this.cardSets);
+        const kingdomCardIds = getKingdomCardIds(this.cardSets)
+            .filter(id => !this.isRealtime() || !REALTIME_EXCLUDED_CARDS.includes(id.toLowerCase()));
         const selectedCards = [];
 
         for (let i = 0; i < count; i++) {
@@ -478,8 +487,21 @@ class Game {
     //   { type: 'endTurn' }         ターン終了
     //   { type: 'answer', answer }  選択に答える（select・choose はインデックスの配列、confirm は真偽値）
     //   { type: 'proxy' }           部屋を出たプレイヤーを、以後CPUが代わりに操作する（オンライン対戦のサーバーだけが送る）
+    //   answer には、どの選択への答えかを示す promptId を付けてよい（リアルタイムモードでは、1人に同時に2つの選択が出ることがある）
     applyCommand(playerId, command) {
         this.lastError = null;
+        const accepted = this.isRealtime() ? this.applyRealtimeCommand(playerId, command) : this.applyTurnCommand(playerId, command);
+
+        if (accepted) {
+            this.commands.push({ playerId, ...command });
+        } else if (!this.lastError) {
+            this.reject('今はその操作はできません');
+        }
+        return accepted;
+    }
+
+    // 手番のプレイヤーのターンの中で操作を処理する（リアルタイムモードでは、操作したプレイヤーのコンテキストで呼ぶ）
+    applyTurnCommand(playerId, command) {
         // 支配のターン中は、支配したプレイヤーが手番のプレイヤーの操作と選択をすべて行う
         const isCurrent = this.getController(this.getCurrentPlayer()).id === playerId;
         let accepted = false;
@@ -515,14 +537,9 @@ class Game {
             case 'answer':
                 // 選択はそれを求められたプレイヤーだけが答えられる（民兵の攻撃は手番ではない人が答える）
                 accepted = Boolean(this.pendingPrompt) && this.getController(this.pendingPrompt.player).id === playerId &&
+                    (command.promptId === undefined || command.promptId === null || command.promptId === this.pendingPrompt.id) &&
                     this.resolvePrompt(command.answer);
                 break;
-        }
-
-        if (accepted) {
-            this.commands.push({ playerId, ...command });
-        } else if (!this.lastError) {
-            this.reject('今はその操作はできません');
         }
         return accepted;
     }
@@ -552,7 +569,10 @@ class Game {
     // 選択待ちの間は他の操作を受け付けない
     isAwaitingPrompt() {
         if (this.pendingPrompt) {
-            this.reject('カードの選択を完了してください');
+            const chooser = this.getController(this.pendingPrompt.player);
+            this.reject(chooser === this.getController(this.getCurrentPlayer())
+                ? 'カードの選択を完了してください'
+                : `${chooser.name}の選択を待っています`);
             return true;
         }
         return false;
@@ -973,9 +993,13 @@ class Game {
             }
 
             // 猿：右隣のプレイヤーが獲得するたびにカードを引く
+            // （リアルタイムモードでは、猿の持ち主の次の番の開始時に引く）
             if (owner.monkeys > 0 && this.getPlayerToRight(owner) === player) {
-                owner.drawCards(owner.monkeys);
-                this.log(`${owner.name}は猿の効果でカードを${owner.monkeys}枚引きました`);
+                const count = owner.monkeys;
+                this.affectPlayer(owner, () => {
+                    owner.drawCards(count);
+                    this.log(`${owner.name}は猿の効果でカードを${count}枚引きました`);
+                });
             }
         });
 
@@ -1501,7 +1525,16 @@ class Game {
             ...this.landscapes.map(id => this.getLandscape(id)?.afterTurn).filter(Boolean).map(hook => () => hook(this, player))
         ];
         if (afterTurn.length > 0) {
-            this.runNext(...afterTurn, () => this.advanceTurn(player, takesExtraTurn));
+            this.runNext(...afterTurn, () => this.continueAfterTurn(player, takesExtraTurn));
+            return;
+        }
+        this.continueAfterTurn(player, takesExtraTurn);
+    }
+
+    // ターンを終えた後：ふつうのモードは次の手番に進む。リアルタイムモードは、全員が番を終えるのを待つ
+    continueAfterTurn(player, takesExtraTurn) {
+        if (this.isRealtime()) {
+            this.finishRealtimeTurn(player, takesExtraTurn);
             return;
         }
         this.advanceTurn(player, takesExtraTurn);
@@ -1612,7 +1645,8 @@ class Game {
 
     // ターンを始める（持続カード・農場労働者・書記の効果をここで処理する）
     // regular はふつうの手番（追加のターンでない）か
-    startTurn(player, { regular = false, handPlayLimit = null } = {}) {
+    // skipLingering なら、前のターンから続く効果を終わらせない（リアルタイムモードは、番の始めに全員分を先に終わらせる）
+    startTurn(player, { regular = false, handPlayLimit = null, skipLingering = false } = {}) {
         if (regular) this.regularTurnPlayer = player;
         this.turnCount++;
         this.previousTurnPlayer = this.currentTurnPlayer;
@@ -1622,7 +1656,6 @@ class Game {
         player.buys = 1;
         player.gainedThisTurn = [];
         player.trashedThisTurn = 0;
-        player.gatekeeperVictims.clear();
         player.gainedVictoryInBuyPhase = false;
         player.hasTrashedForCorsair = false;
         this.turnState = createTurnState();
@@ -1631,24 +1664,18 @@ class Game {
         this.log(`${player.name}のターンです`);
         if (handPlayLimit !== null) this.log(`このターンは、手札からカードを${handPlayLimit}枚までしかプレイできません`);
 
-        // 前のターンからの効果（猿・私掠船・封鎖）は、このターンの開始で終わる
-        player.monkeys = 0;
-        player.corsairVictims.clear();
-        player.blockades = [];
-        player.hauntedVictims.clear();
-        player.swampHagVictims.clear();
-        player.enchantedVictims.clear();
-        player.highwaymanVictims.clear();
-        player.warlordVictims.clear();
-        player.frigateVictims.clear();
+        if (!skipLingering) this.clearLingeringEffects(player);
 
         // ずっと場に残る持続カード（雇人・チャンピオン）は、効果を使った後も残す
         const durations = player.durations;
         player.durations = durations.filter(duration => duration.permanent);
         const plays = player.startOfTurnPlays;
         player.startOfTurnPlays = [];
+        // リアルタイムモード：他のプレイヤーの番に受けた効果（攻撃など）を、持続カードより先に受ける
+        const deferred = player.deferredEffects.splice(0);
 
         this.runNext(
+            ...deferred,
             ...durations.filter(duration => duration.effect).map(duration => duration.effect),
             // 鍵：持っていれば、ターンの開始時に財宝+1
             () => {
@@ -1682,6 +1709,20 @@ class Game {
             })
         );
         this.processEffects();
+    }
+
+    // 前のターンからの効果（猿・私掠船・封鎖・門番など）は、そのプレイヤーの次のターンの開始で終わる
+    clearLingeringEffects(player) {
+        player.monkeys = 0;
+        player.corsairVictims.clear();
+        player.blockades = [];
+        player.gatekeeperVictims.clear();
+        player.hauntedVictims.clear();
+        player.swampHagVictims.clear();
+        player.enchantedVictims.clear();
+        player.highwaymanVictims.clear();
+        player.warlordVictims.clear();
+        player.frigateVictims.clear();
     }
 
     // プレイヤーの勝利点（カード・勝利点トークンに、ランドマークの得点を足す）
@@ -1848,8 +1889,11 @@ class Game {
 
     // 他のプレイヤーに攻撃効果を適用する（1人ずつ順番に。選択待ちになればそこで止まる）
     // 攻撃を受ける前に、外交官・番犬などのリアクションを使えるか聞く
+    // リアルタイムモードでは、相手の次の番の開始時（手札を引いた後）に攻撃を受ける（リアクションもそのときの手札で使う）
     attackOtherPlayers(attacker, attackEffect) {
-        this.runNext(...this.getOtherPlayers(attacker).map(target => () => {
+        const targets = this.getOtherPlayers(attacker);
+        if (this.isRealtime() && targets.length > 0) this.log(`${targets.map(target => target.name).join('・')}は次の番の開始時に攻撃を受けます`);
+        this.runNext(...targets.map(target => () => this.affectPlayer(target, () => {
             const reactions = uniqueById(target.hand.filter(card => card.onAttackReaction)).map(card => () => {
                 if (target.hand.includes(card)) card.onAttackReaction(target, this, card, attacker);
             });
@@ -1858,7 +1902,7 @@ class Game {
                     attackEffect(target);
                 }
             });
-        }));
+        })));
     }
 
     // 灯台が場にあるか、お堀などのリアクションで攻撃を防げるか（リアクションカードを持っていれば常に公開する）
@@ -2155,6 +2199,7 @@ function uniqueById(cards) {
 installLandscapes(Game);
 installNocturne(Game);
 installPlunder(Game);
+installRealtime(Game);
 installMenagerie(Game);
 installAllies(Game);
 

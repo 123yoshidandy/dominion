@@ -976,10 +976,10 @@ export const PLUNDER_EVENTS = {
             () => promptTrashFromHand(game, player, {
                 min: Math.min(3, player.hand.length), max: 3, title: '大渦', message: '廃棄するカードを3枚選んでください。', purpose: 'maelstrom-trash'
             }),
-            ...game.getOtherPlayers(player).map(other => () => {
+            ...game.getOtherPlayers(player).map(other => () => game.affectPlayer(other, () => {
                 if (other.hand.length < 5) return;
                 promptTrashFromHand(game, other, { title: '大渦', message: '廃棄するカードを1枚選んでください。', purpose: 'maelstrom-other' });
-            })
+            }))
         )
     },
     MIRROR: {

@@ -113,12 +113,12 @@ export const PROSPERITY_CARDS = {
                     if (vp > 0) gainBenefits(player, game, { vp });
                 }
             });
-            game.runNext(...game.getOtherPlayers(player).map(other => () => promptTrashFromHand(game, other, {
+            game.runNext(...game.getOtherPlayers(player).map(other => () => game.affectPlayer(other, () => promptTrashFromHand(game, other, {
                 min: 0,
                 title: '司教',
                 message: '廃棄するカードを1枚選んでください（選ばなくてもかまいません）。',
                 purpose: 'optional-trash'
-            })));
+            }))));
         }
     },
     CLERK: {
@@ -422,7 +422,7 @@ export const PROSPERITY_CARDS = {
                     }
                 }
             });
-            game.runNext(...game.getOtherPlayers(player).map(other => () => {
+            game.runNext(...game.getOtherPlayers(player).map(other => () => game.affectPlayer(other, () => {
                 if (other.hand.length === 0) return;
                 game.promptSelect({
                     player: other,
@@ -439,7 +439,7 @@ export const PROSPERITY_CARDS = {
                         if (discarded.length === 2) gainBenefits(other, game, { cards: 1 });
                     }
                 });
-            }));
+            })));
         }
     },
     WAR_CHEST: {

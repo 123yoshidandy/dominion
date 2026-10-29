@@ -703,13 +703,13 @@ export const NOCTURNE_CARDS = {
             gainBenefits(player, game, { buys: 1, coins: 3 });
             const boonId = game.receiveBoon(player);
             if (!boonId || ['the_fields_gift', 'the_forests_gift'].includes(boonId)) return;
-            game.runNext(...game.getOtherPlayers(player).map(other => () => game.promptConfirm({
+            game.runNext(...game.getOtherPlayers(player).map(other => () => game.affectPlayer(other, () => game.promptConfirm({
                 player: other, title: '聖なる木立', message: `${game.getBoon(boonId).name}を受けますか？`,
                 yesLabel: '受ける', noLabel: '受けない', purpose: 'sacred-grove',
                 callback: (yes) => {
                     if (yes) game.receiveBoon(other, boonId, { discard: false });
                 }
-            })));
+            }))));
         }
     },
     TORMENTOR: {

@@ -428,7 +428,7 @@ export const ADVENTURES_CARDS = {
             if (game.turnState.cardsBought !== 1) return;
             game.promptGain({
                 player, maxCost: 4, title: '使者', message: 'コスト4以下のカードを1枚獲得してください。他のプレイヤーも1枚ずつ獲得します。',
-                onGained: (card) => game.getOtherPlayers(player).forEach(other => gainAndLog(game, other, card.id))
+                onGained: (card) => game.getOtherPlayers(player).forEach(other => game.affectPlayer(other, () => gainAndLog(game, other, card.id)))
             });
         }
     },
@@ -586,7 +586,7 @@ export const ADVENTURES_CARDS = {
         description: 'カードを2枚引く。アクション +2。これを獲得したとき、他のプレイヤーはカードを1枚引く',
         count: 10,
         onPlay: (player, game) => gainBenefits(player, game, { cards: 2, actions: 2 }),
-        onGain: (player, game) => game.getOtherPlayers(player).forEach(other => gainBenefits(other, game, { cards: 1 }, '失われし都市'))
+        onGain: (player, game) => game.getOtherPlayers(player).forEach(other => game.affectPlayer(other, () => gainBenefits(other, game, { cards: 1 }, '失われし都市')))
     },
     RELIC: {
         id: 'relic', name: '聖遺物', cost: 5, types: [CARD_TYPES.TREASURE],
@@ -904,10 +904,10 @@ export const ADVENTURES_EVENTS = {
             const silvers = player.playArea.filter(card => card.id === 'silver').length;
             const gained = Array.from({ length: silvers }).filter(() => game.gainCardFromSupply(player, 'silver')).length;
             game.log(`${player.name}は銀貨を${gained}枚獲得しました`);
-            game.getOtherPlayers(player).forEach(other => {
+            game.getOtherPlayers(player).forEach(other => game.affectPlayer(other, () => {
                 other.minusCardToken = true;
                 game.log(`${other.name}は -1 カードのトークンを山札の上に置きました`);
-            });
+            }));
         }
     }),
     ...event('SEAWAY', {

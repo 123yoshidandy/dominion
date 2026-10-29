@@ -1042,7 +1042,7 @@ export const ALLIES_ALLIES = {
                 callback: (yes) => {
                     if (!yes) return;
                     game.spendFavors(player, 3, '魔女の集会');
-                    game.getOtherPlayers(player).forEach(target => game.gainCurse(target));
+                    game.getOtherPlayers(player).forEach(target => game.affectPlayer(target, () => game.gainCurse(target)));
                 }
             });
         }

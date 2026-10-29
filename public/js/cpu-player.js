@@ -1137,15 +1137,35 @@ export function hasCpuPrompt(game) {
 
 // CPUが動く番か（CPUへの選択待ちがあるか、選択待ちがなくCPUが手番を操作するか）
 export function isCpuToMove(game) {
+    if (game.isRealtime?.() && game.contexts) return cpuContextToMove(game) !== null;
     if (game.phase === 'end') return false;
     if (game.pendingPrompt) return hasCpuPrompt(game);
     return game.getController(game.getCurrentPlayer()).isCPU;
+}
+
+// リアルタイムモードで、CPUが動くコンテキスト（CPUが答える選択を先に。複数のCPUのターンは記録の数で順に回す）
+function cpuContextToMove(game) {
+    game.saveContext();
+    if (game.contexts.some(ctx => ctx.phase === 'end')) return null;
+    const answering = game.contexts.find(ctx => ctx.pendingPrompt && game.getControllerIn(ctx, ctx.pendingPrompt.player).isCPU);
+    if (answering) return answering;
+    const playing = game.contexts.filter(ctx => ctx.taking && !ctx.done && !ctx.pendingPrompt && (ctx.possessor ?? ctx.owner).isCPU);
+    return playing.length > 0 ? playing[game.commands.length % playing.length] : null;
 }
 
 // CPUの手番を1手だけ進める（CPUへの選択待ちがあれば、手番に関係なくそれに答える）
 // 操作は人間と同じく game.applyCommand で行い、記録に残す
 // 選んだ操作が受け付けられなくても、次の段階へ進めることで必ずゲームを前進させる
 export function runCpuStep(game) {
+    if (game.isRealtime?.() && game.contexts) {
+        const ctx = cpuContextToMove(game);
+        if (ctx) game.withContext(ctx, () => runCpuStepInContext(game));
+        return;
+    }
+    runCpuStepInContext(game);
+}
+
+function runCpuStepInContext(game) {
     if (game.phase === 'end') return;
 
     const prompt = game.pendingPrompt;
@@ -1154,11 +1174,12 @@ export function runCpuStep(game) {
         if (hasCpuPrompt(game)) {
             const controllerId = game.getController(prompt.player).id;
             // 答えが受け付けられなければ、条件を満たす最小の答えで答え直す
-            if (!game.applyCommand(controllerId, { type: 'answer', answer: choosePromptAnswer(prompt, game) })) {
+            if (!game.applyCommand(controllerId, { type: 'answer', answer: choosePromptAnswer(prompt, game), promptId: prompt.id })) {
                 const count = prompt.min ?? 0;
                 game.applyCommand(controllerId, {
                     type: 'answer',
-                    answer: prompt.type === 'confirm' ? false : Array.from({ length: count }, (_, i) => i)
+                    answer: prompt.type === 'confirm' ? false : Array.from({ length: count }, (_, i) => i),
+                    promptId: prompt.id
                 });
             }
         }

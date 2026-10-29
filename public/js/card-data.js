@@ -556,10 +556,10 @@ const BASE_KINGDOM_CARDS = {
             player.drawCards(4);
             player.buys += 1;
             game.log(`${player.name}はカードを4枚引き、購入+1を得ました`);
-            game.getOtherPlayers(player).forEach(other => {
+            game.getOtherPlayers(player).forEach(other => game.affectPlayer(other, () => {
                 other.drawCards(1);
                 game.log(`${other.name}はカードを1枚引きました`);
-            });
+            }));
         }
     },
     FESTIVAL: {
