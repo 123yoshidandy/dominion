@@ -106,6 +106,8 @@ const realtimeMethods = {
                 this.startTurn(entry.player, { regular: !extra, handPlayLimit: entry.handPlayLimit ?? null, skipLingering: true });
             });
         });
+        // 番は操作を処理し終えた後で始まるので、画面にも描き直しを知らせる
+        this.notifyStateChanged();
     },
 
     // ターンを終えた（finishTurn から呼ぶ。ふつうのモードの advanceTurn の代わり）
@@ -177,6 +179,7 @@ const realtimeMethods = {
     endRealtimeGame() {
         this.endGame();
         this.contexts.forEach(ctx => { ctx.phase = 'end'; });
+        this.notifyStateChanged();
     },
 
     // 他のプレイヤーに作用する効果。リアルタイムモードでは、相手の次の番の開始時に効かせる

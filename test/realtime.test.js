@@ -236,6 +236,19 @@ describe('リアルタイムモード', () => {
             expect(game.roundNumber).toBe(2);
         });
 
+        it('CPU同士で、全セットを混ぜた試合を最後まで進められ、操作の記録から再現できる', () => {
+            for (let seed = 1; seed <= 6; seed++) {
+                const players = Array.from({ length: 2 + (seed % 3) }, (_, i) => ({ name: `CPU${i + 1}`, isCPU: true }));
+                const options = { seed: 7000 + seed, realtime: true };
+                const g = new Game(players, options);
+                g.setup();
+                let steps = 0;
+                while (g.phase !== 'end' && isCpuToMove(g) && steps < 60000) { runCpuStep(g); steps++; }
+                expect(g.result).toBeTruthy();
+                expect(Game.replay(players, options, g.commands).result).toEqual(g.result);
+            }
+        });
+
         it('CPUは、他のプレイヤーの番から来た選択にも答える', () => {
             setup(['A', { name: 'C', isCPU: true }]);
             a.hand = makeCards(['ADVISOR']);
