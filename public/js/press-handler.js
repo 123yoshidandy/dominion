@@ -9,6 +9,27 @@ const LONG_PRESS_MS = 450;
 // この距離以上指が動いたらスクロールとみなして長押しを取り消す（px）
 const MOVE_TOLERANCE_PX = 10;
 
+// 指を離してから、ブラウザが click を送ってくるまでの猶予（ミリ秒）
+const GHOST_CLICK_MS = 400;
+
+// 長押しで開いた説明のダイアログの上で指を離すと、ブラウザによっては、指の下のボタン（×など）に click が届いて押されてしまう
+// 指を離した直後の click を、文書全体で1回だけ捨てる
+function swallowClickAfterRelease() {
+    const swallow = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+    };
+    const onUp = () => {
+        document.removeEventListener('pointercancel', onCancel, true);
+        document.addEventListener('click', swallow, { capture: true, once: true });
+        setTimeout(() => document.removeEventListener('click', swallow, true), GHOST_CLICK_MS);
+    };
+    // スクロールなどで取り消されたときは click が来ないので、待つのをやめる（後のふつうの click を捨てないように）
+    const onCancel = () => document.removeEventListener('pointerup', onUp, true);
+    document.addEventListener('pointerup', onUp, { capture: true, once: true });
+    document.addEventListener('pointercancel', onCancel, { capture: true, once: true });
+}
+
 export function onPress(element, { onTap, onLongPress }) {
     let timer = null;
     let startX = 0;
@@ -28,6 +49,7 @@ export function onPress(element, { onTap, onLongPress }) {
         timer = setTimeout(() => {
             timer = null;
             longPressed = true;
+            swallowClickAfterRelease();
             onLongPress();
         }, LONG_PRESS_MS);
     });
