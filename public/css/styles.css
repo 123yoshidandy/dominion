@@ -1540,10 +1540,13 @@ button.primary.secondary {
     }
 
     /* サプライと右の列（プレイヤー・ログ）は、それぞれ別にスクロールする */
+    /* スクロールバーは細く、緑の地になじむ色にする（標準の白く太いバーは目立つ） */
     #supply-section {
         grid-area: supply;
         max-height: 100%;
         overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
     }
 
     #table-side {
