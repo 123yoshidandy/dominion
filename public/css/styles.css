@@ -244,6 +244,11 @@ button.primary {
     white-space: nowrap;
 }
 
+/* 1〜2文字しか見えない幅のときは出さない（幅は JS で見る） */
+#latest-log.too-narrow {
+    visibility: hidden;
+}
+
 /* ===== テーブル（スクロール領域） ===== */
 
 #table {

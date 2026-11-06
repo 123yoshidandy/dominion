@@ -71,6 +71,12 @@ class UIController {
             this.modal.handleCloseButton();
         });
 
+        // 上部バーの直近のログは、読める幅がないとき（低い横画面で数字が多いときなど）は隠す
+        // visibility で隠すので大きさは変わらず、ほかの部品を押し出さない
+        new ResizeObserver(([entry]) => {
+            this.elements.latestLog.classList.toggle('too-narrow', entry.contentRect.width < 100);
+        }).observe(this.elements.latestLog);
+
         // ホームに戻る（すぐにタイトル画面へ）・遊び方を見る（閉じたらゲーム画面と選択を出し直す）
         this.elements.homeBtn.addEventListener('click', () => this.goHome());
         this.elements.helpBtn.addEventListener('click', () => {
