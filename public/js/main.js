@@ -14,6 +14,10 @@ document.addEventListener('contextmenu', (event) => {
     }
 });
 
+// 画面を拡大させない（ふつうは styles.css の touch-action で止まる。iOS は2本指の操作をここで止める）
+// touchmove は止めない（passive でない touchmove があると、スクロールの始まりが遅れるため）
+document.addEventListener('gesturestart', (event) => event.preventDefault());
+
 // DOMの読み込みが完了したら実行
 document.addEventListener('DOMContentLoaded', () => {
     // ゲームコントローラーを初期化
