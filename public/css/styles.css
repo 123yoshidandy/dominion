@@ -1604,8 +1604,10 @@ button.primary.secondary {
         padding: 6px var(--safe-right) 6px var(--safe-left);
     }
 
+    /* 手番の数字（アクション・購入・コイン…）は切らさない。足りなければ、こちらの名前を省略して縮める */
     .topbar-row {
-        flex: none;
+        flex: 0 1 auto;
+        min-width: 0;
         gap: 10px;
     }
 
@@ -1797,6 +1799,13 @@ button.primary.secondary {
     #hand-cards .card {
         width: 72px;
         height: 88px;
+    }
+}
+
+/* 狭い横画面で数字が4つ以上（恩恵・村人など）のときは、ロゴの文字を外して数字の幅を空ける */
+@media (orientation: landscape) and (max-height: 500px) and (max-width: 760px) {
+    #topbar:has(#turn-stats .stat:nth-child(4)) h1 {
+        display: none;
     }
 }
 
